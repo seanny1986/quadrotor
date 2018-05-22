@@ -30,6 +30,15 @@ class Quadrotor():
         self.rpm = np.array([0.0,0.0,0.0,0.0])
         self.dt = dt
 
+    def set_state(self, xyz, zeta, uvw, pqr):
+        self.xyz = xyz
+        self.zeta = zeta
+        self. uvw = uvw
+        self.pqr = pqr
+    
+    def get_state(self):
+        return self.xyz, self.zeta, self.uvw, self.pqr
+
     def R1(self, zeta):
         phi = zeta[0,0]
         theta = zeta[1,0]
@@ -63,8 +72,8 @@ class Quadrotor():
                         [x21, x22, x23],
                         [x31, x32, x33]])
 
-    def motor_thrusts(self, RPM):
-        return self.kt*RPM**2
+    def motor_thrusts(self, rpm):
+        return self.kt*rpm**2
     
     def aero_forces(self):
         mag = np.linalg.norm(self.uvw)
@@ -89,21 +98,21 @@ class Quadrotor():
                         [f_body_y],
                         [f_body_z]])
     
-    def thrust_torques(self, thrust, RPM):
+    def thrust_torques(self, thrust, rpm):
         t_body_x = self.l*(thrust[1]-thrust[3])
         t_body_y = self.l*(thrust[2]-thrust[0])
-        motor_torques = self.kq*RPM**2
+        motor_torques = self.kq*rpm**2
         t_body_z = -motor_torques[0]+motor_torques[1]-motor_torques[2]+motor_torques[3]
         return np.array([[t_body_x],
                         [t_body_y],
                         [t_body_z]])
     
-    def step(self, RPM):
+    def step(self, rpm):
         r1 = self.R1(self.zeta)
         r2 = self.R2(self.zeta)
-        thrust = self.motor_thrusts(RPM)
+        thrust = self.motor_thrusts(rpm)
         fm = self.thrust_forces(thrust)
-        tm = self.thrust_torques(thrust, RPM)
+        tm = self.thrust_torques(thrust, rpm)
         fa = self.aero_forces()
         ta = self.aero_moments()
         Jw = self.J.dot(self.pqr)
@@ -115,6 +124,6 @@ class Quadrotor():
         zeta_dot = r2.dot(self.pqr)
         self.xyz += xyz_dot*self.dt
         self.zeta += zeta_dot*self.dt
-        return self.xyz, self.zeta, self.pqr, self.uvw
+        return self.xyz, self.zeta, self.uvw, self.pqr, xyz_dot, zeta_dot, uvw_dot, pqr_dot
 
 

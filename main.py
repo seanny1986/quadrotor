@@ -21,8 +21,8 @@ def main():
     kq = 7.5e-7
     kd1 = 9e-3
     kd2 = 9e-4
-    dt = 0.01
-    T = 5
+    dt = 0.05
+    T = 1.5
 
     time = np.linspace(0, T, T/dt)
 

@@ -50,24 +50,22 @@ class Transition(nn.Module):
 
     def transition(self, x0, state_action, dt):
         # state_action is [sin(zeta), cos(zeta), v, w, o, a]
-        x = x0.clone()
-        vw = state_action[:,6:16].clone()
+        xyz = x0.clone()
+        uvw_pqr = state_action[:,6:12].clone()
         zeta = state_action[:,0:3].asin()
-        v = vw[:,0:3]
-        w = vw[:,3:6]
-        v_dot = self.lin_accel(state_action)*self.acceleration_std[0:3]+self.acceleration_mu[0:3]
-        w_dot = self.ang_accel(state_action)*self.acceleration_std[3:6]+self.acceleration_mu[3:6]
-        v_dot = v_dot*self.v_dot_max
-        w_dot = w_dot*self.w_dot_max
-        dv, dw = v_dot*dt, w_dot*dt
-        v = v+dv
-        w = w+dw
-        x_dot = self.R1(zeta, v)
-        zeta_dot = self.R2(zeta, w)
-        dx, dzeta = x_dot*dt, zeta_dot*dt
-        x = x+dx
+        uvw = uvw_pqr[:,0:3]
+        pqr = uvw_pqr[:,3:]
+        uvw_dot = self.lin_accel(state_action)*self.uvw_dot_norm
+        pqr_dot = self.ang_accel(state_action)*self.pqr_dot_norm
+        dv, dw = uvw_dot*dt, pqr_dot*dt
+        uvw = uvw+dv
+        pqr = pqr+dw
+        xyz_dot = self.R1(zeta, uvw)
+        zeta_dot = self.R2(zeta, pqr)
+        dx, dzeta = xyz_dot*dt, zeta_dot*dt
+        xyz = xyz+dx
         zeta = zeta+dzeta
-        return x, zeta, v, w, x_dot, zeta_dot, v_dot, w_dot
+        return xyz, zeta, uvw, pqr
 
     def update(self, zeta, uvw, pqr, action, uvw_dot, pqr_dot):
         zeta = zeta.reshape((1,-1))
@@ -132,7 +130,6 @@ class Transition(nn.Module):
 
         return v_dot_loss.item(), w_dot_loss.item()
 
-
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, GPU):
         super(MLP, self).__init__()
@@ -147,8 +144,6 @@ class MLP(nn.Module):
         self.affine2 = nn.Linear(hidden_dim, hidden_dim)
         torch.nn.init.xavier_uniform_(self.affine2.weight)
 
-        self.bn1 = nn.BatchNorm1d(hidden_dim)
-
         self.output_head = nn.Linear(hidden_dim, output_dim)
         torch.nn.init.xavier_uniform_(self.output_head.weight)
 
@@ -159,6 +154,5 @@ class MLP(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
-        #x = F.relu(self.affine2(x))
         x = self.output_head(x)
         return x

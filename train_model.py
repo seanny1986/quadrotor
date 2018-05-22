@@ -31,7 +31,7 @@ def main():
     epochs = 5000
     state_dim = 12
     action_dim = 4
-    hidden_dim = 128
+    hidden_dim = 32
     dyn = model.Transition(state_dim, action_dim, hidden_dim, True)
 
     mass = 0.65
@@ -53,14 +53,13 @@ def main():
     print("HOVER RPM: ", trim)
     input("Press to continue")
     
-    
     av_vdot = []
     av_wdot = []
     data_vdot = []
     data_wdot = []
     iterations = []
     counter = 0
-    
+
     running = True
     while running:
         

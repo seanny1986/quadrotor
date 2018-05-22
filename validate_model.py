@@ -2,13 +2,19 @@ import torch
 import quad
 import math
 import numpy as np
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
+import torch.optim as optim
 
 
+cuda = True
 
 def main():
     
+    print("=> Loading model.pth.tar")
     dyn = torch.load("model.pth.tar")
 
+    print("initializing aircraft")
     mass = 0.65
     l = 0.23
     Jxx = 7.5e-3
@@ -31,11 +37,77 @@ def main():
     print("HOVER RPM: ", trim)
     input("Press to continue")
     
+    print("getting state")
     xyz, zeta, uvw, pqr = iris.get_state()
     action = trim+50
-    for i in range(steps):
-        xyz, zeta, uvw, pqr, xyz_dot, zeta_dot, uvw_dot, pqr_dot = iris.step(action)
 
+    xyz_nn = xyz.reshape((1,-1))
+    zeta_nn = zeta.reshape((1,-1))
+    uvw_nn = uvw.reshape((1,-1))
+    pqr_nn = pqr.reshape((1,-1))
+    action_nn = action.reshape((1,-1))
+
+    xyz_nn = torch.from_numpy(xyz_nn).float()
+    zeta_nn = torch.from_numpy(zeta_nn).float()/dyn.zeta_norm
+    uvw_nn = torch.from_numpy(uvw_nn).float()/dyn.uvw_norm
+    pqr_nn = torch.from_numpy(pqr_nn).float()/dyn.pqr_norm
+    action_nn = torch.from_numpy(action_nn).float()/dyn.action_norm
+    
+    if cuda:
+        xyz_nn = xyz_nn.cuda()
+        zeta_nn = zeta_nn.cuda()
+        uvw_nn = uvw_nn.cuda()
+        pqr_nn = pqr_nn.cuda()
+        action_nn = action_nn.cuda()
+
+    data_nn = []
+    data_actual = []
+    time = []
+    for j in range(1000):
+        for i in range(steps):
+            state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
+            state_action = torch.cat([state, action_nn],dim=1)
+            xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, dt)
+            xyz, zeta, uvw, pqr, _, _, _, _ = iris.step(action)
+            data_nn.append(xyz_nn.tolist()[0])
+            data_actual.append(xyz.reshape((1,-1)).tolist()[0])
+            time.append(i*dt)
+            zeta_nn = zeta_nn/dyn.zeta_norm
+            uvw_nn = uvw_nn/dyn.uvw_norm
+            pqr_nn = pqr_nn/dyn.pqr_norm
+        xyz_final = xyz.reshape((1,-1))
+        xyz = torch.from_numpy(xyz_final).float()
+        if cuda:
+            xyz = xyz.cuda()
+        loss = F.mse_loss(xyz_nn,xyz)
+        dyn.lin_accel_opt.zero_grad()
+        loss.backward()
+        dyn.lin_accel_opt.step()
+        print(loss.item())
+
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(311)
+    ax2 = fig1.add_subplot(312)
+    ax3 = fig1.add_subplot(313)
+    ax1.set_title("Position Error")
+    ax3.set_xlabel("Time (s)")
+    ax1.set_ylabel("X (m)")
+    ax2.set_ylabel("Y (m)")
+    ax3.set_ylabel("Z (m)")
+    ax1.set_ylim([-2, 2])
+    ax2.set_ylim([-2, 2])
+    ax3.set_ylim([-2, 2])
+    fig1.subplots_adjust(hspace=0.3)
+    fig1.subplots_adjust(wspace=0.3)
+
+    x_actual, y_actual, z_actual = [x[0] for x in data_nn], [x[1] for x in data_nn], [x[2] for x in data_nn]
+    x_model, y_model, z_model = [x[0] for x in data_actual], [x[1] for x in data_actual], [x[2] for x in data_actual]
+    ax1.plot(time, x_actual, time, x_model)
+    ax2.plot(time, y_actual, time, y_model)
+    ax3.plot(time, z_actual, time, z_model)
+    plt.show()
+    print("Saving figure")
+    fig1.savefig('position_error.pdf', bbox_inches='tight')
 
 
 if __name__ == "__main__":

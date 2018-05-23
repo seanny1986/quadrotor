@@ -26,7 +26,7 @@ class Quadrotor():
                             [0.0]])
         self.g = np.array([[0.0],
                             [0.0],
-                            [9.81]])
+                            [-9.81]])
         self.rpm = np.array([0.0,0.0,0.0,0.0])
         self.dt = dt
 
@@ -116,8 +116,8 @@ class Quadrotor():
         fa = self.aero_forces()
         ta = self.aero_moments()
         Jw = self.J.dot(self.pqr)
+        uvw_dot = (fm+fa)/self.mass+np.linalg.inv(r1).dot(self.g)-np.cross(self.pqr,self.uvw,axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(((tm+ta)-np.cross(self.pqr,Jw,axis=0)))
-        uvw_dot = (fm+fa)/self.mass-np.linalg.inv(r1).dot(self.g)
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt
         xyz_dot = r1.dot(self.uvw)

@@ -3,8 +3,9 @@ import quad
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-import torch.nn.functional as F
-import torch.optim as optim
+import matplotlib.style as style
+
+style.use("seaborn-deep")
 
 
 cuda = True
@@ -48,10 +49,10 @@ def main():
     action_nn = action.reshape((1,-1))
 
     xyz_nn = torch.from_numpy(xyz_nn).float()
-    zeta_nn = torch.from_numpy(zeta_nn).float()/dyn.zeta_norm
-    uvw_nn = torch.from_numpy(uvw_nn).float()/dyn.uvw_norm
-    pqr_nn = torch.from_numpy(pqr_nn).float()/dyn.pqr_norm
-    action_nn = torch.from_numpy(action_nn).float()/dyn.action_norm
+    zeta_nn = torch.from_numpy(zeta_nn).float()#/dyn.zeta_norm
+    uvw_nn = torch.from_numpy(uvw_nn).float()#/dyn.uvw_norm
+    pqr_nn = torch.from_numpy(pqr_nn).float()#/dyn.pqr_norm
+    action_nn = torch.from_numpy(action_nn).float()#/dyn.action_norm
     
     if cuda:
         xyz_nn = xyz_nn.cuda()
@@ -63,28 +64,18 @@ def main():
     data_nn = []
     data_actual = []
     time = []
-    for j in range(1000):
-        for i in range(steps):
-            state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
-            state_action = torch.cat([state, action_nn],dim=1)
-            xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, dt)
-            xyz, zeta, uvw, pqr, _, _, _, _ = iris.step(action)
-            data_nn.append(xyz_nn.tolist()[0])
-            data_actual.append(xyz.reshape((1,-1)).tolist()[0])
-            time.append(i*dt)
-            zeta_nn = zeta_nn/dyn.zeta_norm
-            uvw_nn = uvw_nn/dyn.uvw_norm
-            pqr_nn = pqr_nn/dyn.pqr_norm
-        xyz_final = xyz.reshape((1,-1))
-        xyz = torch.from_numpy(xyz_final).float()
-        if cuda:
-            xyz = xyz.cuda()
-        loss = F.mse_loss(xyz_nn,xyz)
-        dyn.lin_accel_opt.zero_grad()
-        loss.backward()
-        dyn.lin_accel_opt.step()
-        print(loss.item())
-
+    for i in range(steps):
+        state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
+        state_action = torch.cat([state, action_nn],dim=1)
+        xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, dt)
+        xyz, zeta, uvw, pqr, _, _, _, _ = iris.step(action)
+        data_nn.append(xyz_nn.tolist()[0])
+        data_actual.append(xyz.reshape((1,-1)).tolist()[0])
+        time.append(i*dt)
+        #zeta_nn = zeta_nn/dyn.zeta_norm
+        #uvw_nn = uvw_nn/dyn.uvw_norm
+        #pqr_nn = pqr_nn/dyn.pqr_norm
+    
     fig1 = plt.figure()
     ax1 = fig1.add_subplot(311)
     ax2 = fig1.add_subplot(312)
@@ -94,17 +85,18 @@ def main():
     ax1.set_ylabel("X (m)")
     ax2.set_ylabel("Y (m)")
     ax3.set_ylabel("Z (m)")
-    ax1.set_ylim([-2, 2])
-    ax2.set_ylim([-2, 2])
-    ax3.set_ylim([-2, 2])
+    ax1.set_ylim([-3, 3])
+    ax2.set_ylim([-3, 3])
+    ax3.set_ylim([-3, 3])
     fig1.subplots_adjust(hspace=0.3)
     fig1.subplots_adjust(wspace=0.3)
 
-    x_actual, y_actual, z_actual = [x[0] for x in data_nn], [x[1] for x in data_nn], [x[2] for x in data_nn]
-    x_model, y_model, z_model = [x[0] for x in data_actual], [x[1] for x in data_actual], [x[2] for x in data_actual]
-    ax1.plot(time, x_actual, time, x_model)
-    ax2.plot(time, y_actual, time, y_model)
-    ax3.plot(time, z_actual, time, z_model)
+    x_nn, y_nn, z_nn = [x[0] for x in data_nn], [x[1] for x in data_nn], [x[2] for x in data_nn]
+    x_actual, y_actual, z_actual = [x[0] for x in data_actual], [x[1] for x in data_actual], [x[2] for x in data_actual]
+    p5, p6 = ax1.plot(time, x_actual, time, x_nn)
+    ax2.plot(time, y_actual, time, y_nn)
+    ax3.plot(time, z_actual, time, z_nn)
+    fig1.legend((p5, p6), ('Actual', 'Predicted'))
     plt.show()
     print("Saving figure")
     fig1.savefig('position_error.pdf', bbox_inches='tight')

@@ -4,34 +4,17 @@ import math
 from math import pi
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.style as style
 import torch
+
+style.use("seaborn-deep")
 
 def main():
 
-    fig1 = plt.figure()
-    ax1 = fig1.add_subplot(111)
-    ax1.set_title("Linear Acceleration Loss")
-    ax1.set_xlabel(r"Iterations $\times 10^2$")
-    ax1.set_ylabel("Loss")
-    fig1.subplots_adjust(hspace=0.3)
-    fig1.subplots_adjust(wspace=0.3)
-    #self.fig1.tight_layout()
-    fig1.show()
-
-    fig2 = plt.figure()
-    ax2 = fig2.add_subplot(111)
-    ax2.set_title("Angular Acceleration Loss")
-    ax2.set_xlabel(r"Iterations $\times 10^2$")
-    ax2.set_ylabel("Loss")
-    fig2.subplots_adjust(hspace=0.3)
-    fig2.subplots_adjust(wspace=0.3)
-    #self.fig1.tight_layout()
-    fig2.show()
-
-    epochs = 5000
+    epochs = 30000
     state_dim = 12
     action_dim = 4
-    hidden_dim = 32
+    hidden_dim = 128
     dyn = model.Transition(state_dim, action_dim, hidden_dim, True)
 
     mass = 0.65
@@ -52,6 +35,24 @@ def main():
 
     print("HOVER RPM: ", trim)
     input("Press to continue")
+
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(111)
+    ax1.set_title("Linear Acceleration Loss")
+    ax1.set_xlabel(r"Iterations $\times 10^2$")
+    ax1.set_ylabel("Loss")
+    fig1.subplots_adjust(hspace=0.3)
+    fig1.subplots_adjust(wspace=0.3)
+    fig1.show()
+
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot(111)
+    ax2.set_title("Angular Acceleration Loss")
+    ax2.set_xlabel(r"Iterations $\times 10^2$")
+    ax2.set_ylabel("Loss")
+    fig2.subplots_adjust(hspace=0.3)
+    fig2.subplots_adjust(wspace=0.3)
+    fig2.show()
     
     av_vdot = []
     av_wdot = []
@@ -64,19 +65,17 @@ def main():
     while running:
         
         # generate random state
-        xy_rand = np.random.uniform(low=-15, high=15, size=(2,1))
-        z_rand = np.random.uniform(low=1, high=15, size=(1,1))
-        xyz_rand = np.vstack((xy_rand, z_rand))
-        zeta_rand = np.random.uniform(low=-pi/2,high=pi/2,size=(3,1))
-        uvw_rand = np.random.uniform(low=-15, high=15, size=(3,1))
-        pqr_rand = np.random.uniform(low=-15, high=15, size=(3,1))
+        xyz_rand = np.random.uniform(low=-15, high=15, size=(3,1))
+        zeta_rand = np.random.uniform(low=-pi,high=pi,size=(3,1))
+        uvw_rand = np.random.uniform(low=-20, high=20, size=(3,1))
+        pqr_rand = np.random.uniform(low=-6, high=6, size=(3,1))
 
         # set random state
         iris.set_state(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
 
         # generate random action, assume hover at 50%
         action = np.random.uniform(low=0, high=500, size=(4,))
-        _, _, uvw, pqr, _, _, uvw_dot, pqr_dot = iris.step(action)
+        _, _, _, _, _, _, uvw_dot, pqr_dot = iris.step(action)
 
         # update network
         v_dot_loss, w_dot_loss = dyn.update(zeta_rand, uvw_rand, pqr_rand, action, uvw_dot, pqr_dot)

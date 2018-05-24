@@ -11,27 +11,23 @@ class Transition(nn.Module):
         self.lin_accel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
         self.ang_accel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
     
-        self.lin_accel_opt = torch.optim.Adam(self.lin_accel.parameters(),lr=1e-3)
-        self.ang_accel_opt = torch.optim.Adam(self.ang_accel.parameters(),lr=1e-3)
+        self.lin_accel_opt = torch.optim.SGD(self.lin_accel.parameters(),lr=1e-4)
+        self.ang_accel_opt = torch.optim.SGD(self.ang_accel.parameters(),lr=1e-4)
         self.GPU = GPU
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
-
-        if GPU:
             self.lin_accel = self.lin_accel.cuda()
             self.ang_accel = self.ang_accel.cuda()
+        else:
+            self.Tensor = torch.Tensor
         
-        """
         self.zeta_norm = 0
         self.uvw_norm = 0
         self.pqr_norm = 0
         self.action_norm = 0
         self.uvw_dot_norm = 0
         self.pqr_dot_norm = 0
-        """
 
     def R1(self, phi, v):
         a1 = phi[:,0]
@@ -57,8 +53,8 @@ class Transition(nn.Module):
         zeta = state_action[:,0:3].asin()
         uvw = uvw_pqr[:,0:3]
         pqr = uvw_pqr[:,3:]
-        uvw_dot = self.lin_accel(state_action)#*self.uvw_dot_norm
-        pqr_dot = self.ang_accel(state_action)#*self.pqr_dot_norm
+        uvw_dot = self.lin_accel(state_action)*self.uvw_dot_norm
+        pqr_dot = self.ang_accel(state_action)*self.pqr_dot_norm
         dv, dw = uvw_dot*dt, pqr_dot*dt
         uvw = uvw+dv
         pqr = pqr+dw
@@ -77,7 +73,6 @@ class Transition(nn.Module):
         uvw_dot = uvw_dot.reshape((1,-1))
         pqr_dot = pqr_dot.reshape((1,-1))
 
-        """
         zeta_norm = np.linalg.norm(zeta)
         uvw_norm = np.linalg.norm(uvw)
         pqr_norm = np.linalg.norm(pqr)
@@ -97,13 +92,13 @@ class Transition(nn.Module):
             self.uvw_dot_norm = uvw_dot_norm
         if pqr_dot_norm>self.pqr_dot_norm:
             self.pqr_dot_norm = pqr_dot_norm
-        """
-        zeta = torch.from_numpy(zeta).float()#/self.zeta_norm
-        uvw = torch.from_numpy(uvw).float()#/self.uvw_norm
-        pqr = torch.from_numpy(pqr).float()#/self.pqr_norm
-        action = torch.from_numpy(action).float()#/self.action_norm
-        uvw_dot = torch.from_numpy(uvw_dot).float()#/self.uvw_dot_norm
-        pqr_dot = torch.from_numpy(pqr_dot).float()#/self.pqr_dot_norm
+       
+        zeta = torch.from_numpy(zeta).float()/self.zeta_norm
+        uvw = torch.from_numpy(uvw).float()/self.uvw_norm
+        pqr = torch.from_numpy(pqr).float()/self.pqr_norm
+        action = torch.from_numpy(action).float()/self.action_norm
+        uvw_dot = torch.from_numpy(uvw_dot).float()/self.uvw_dot_norm
+        pqr_dot = torch.from_numpy(pqr_dot).float()/self.pqr_dot_norm
 
         if self.GPU:
             zeta = zeta.cuda()

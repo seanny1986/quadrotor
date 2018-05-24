@@ -1,8 +1,10 @@
 import numpy as np
 from math import sin, cos, tan
 
-class Quadrotor():
-    def __init__(self, mass, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt):
+class Quadrotor:
+    def __init__(self, mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt):
+        self.prop_radius = prop_radius
+        
         self.mass = mass
         self.J = np.array([[Jxx,0.0,0.0],
                             [0.0,Jyy,0.0],
@@ -116,7 +118,7 @@ class Quadrotor():
         fa = self.aero_forces()
         ta = self.aero_moments()
         Jw = self.J.dot(self.pqr)
-        uvw_dot = (fm+fa)/self.mass+np.linalg.inv(r1).dot(self.g)-np.cross(self.pqr,self.uvw,axis=0)
+        uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr,self.uvw,axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(((tm+ta)-np.cross(self.pqr,Jw,axis=0)))
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt

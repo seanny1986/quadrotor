@@ -17,6 +17,7 @@ def main():
 
     print("initializing aircraft")
     mass = 0.65
+    prop_radius = 0.1
     l = 0.23
     Jxx = 7.5e-3
     Jyy = 7.5e-3
@@ -26,14 +27,14 @@ def main():
     kd1 = 9e-3
     kd2 = 9e-4
     dt = 0.05
-    H = 1.0
+    H = 0.5
 
     steps = int(H/dt)
 
     hover_thrust = (mass*9.81)/4.0
     hover_rpm = math.sqrt(hover_thrust/kt)
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    iris = quad.Quadrotor(mass, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
+    iris = quad.Quadrotor(mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
 
     print("HOVER RPM: ", trim)
     input("Press to continue")
@@ -41,7 +42,6 @@ def main():
     print("getting state")
     xyz, zeta, uvw, pqr = iris.get_state()
     action = trim+50
-
     xyz_nn = xyz.reshape((1,-1))
     zeta_nn = zeta.reshape((1,-1))
     uvw_nn = uvw.reshape((1,-1))
@@ -49,10 +49,10 @@ def main():
     action_nn = action.reshape((1,-1))
 
     xyz_nn = torch.from_numpy(xyz_nn).float()
-    zeta_nn = torch.from_numpy(zeta_nn).float()#/dyn.zeta_norm
-    uvw_nn = torch.from_numpy(uvw_nn).float()#/dyn.uvw_norm
-    pqr_nn = torch.from_numpy(pqr_nn).float()#/dyn.pqr_norm
-    action_nn = torch.from_numpy(action_nn).float()#/dyn.action_norm
+    zeta_nn = torch.from_numpy(zeta_nn).float()/dyn.zeta_norm
+    uvw_nn = torch.from_numpy(uvw_nn).float()/dyn.uvw_norm
+    pqr_nn = torch.from_numpy(pqr_nn).float()/dyn.pqr_norm
+    action_nn = torch.from_numpy(action_nn).float()/dyn.action_norm
     
     if cuda:
         xyz_nn = xyz_nn.cuda()
@@ -64,17 +64,18 @@ def main():
     data_nn = []
     data_actual = []
     time = []
-    for i in range(steps):
+
+    for i in range(0,steps):
+        data_nn.append(xyz_nn.tolist()[0])
+        data_actual.append(xyz.reshape((1,-1)).tolist()[0])
+        time.append(i*dt)
         state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
         state_action = torch.cat([state, action_nn],dim=1)
         xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, dt)
         xyz, zeta, uvw, pqr, _, _, _, _ = iris.step(action)
-        data_nn.append(xyz_nn.tolist()[0])
-        data_actual.append(xyz.reshape((1,-1)).tolist()[0])
-        time.append(i*dt)
-        #zeta_nn = zeta_nn/dyn.zeta_norm
-        #uvw_nn = uvw_nn/dyn.uvw_norm
-        #pqr_nn = pqr_nn/dyn.pqr_norm
+        zeta_nn = zeta_nn/dyn.zeta_norm
+        uvw_nn = uvw_nn/dyn.uvw_norm
+        pqr_nn = pqr_nn/dyn.pqr_norm
     
     fig1 = plt.figure()
     ax1 = fig1.add_subplot(311)

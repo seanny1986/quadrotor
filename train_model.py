@@ -11,13 +11,14 @@ style.use("seaborn-deep")
 
 def main():
 
-    epochs = 30000
+    epochs = 250000
     state_dim = 12
     action_dim = 4
-    hidden_dim = 128
+    hidden_dim = 256
     dyn = model.Transition(state_dim, action_dim, hidden_dim, True)
 
     mass = 0.65
+    prop_radius = 0.1
     l = 0.23
     Jxx = 7.5e-3
     Jyy = 7.5e-3
@@ -31,7 +32,7 @@ def main():
     hover_thrust = (mass*9.81)/4.0
     hover_rpm = math.sqrt(hover_thrust/kt)
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    iris = quad.Quadrotor(mass, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
+    iris = quad.Quadrotor(mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
 
     print("HOVER RPM: ", trim)
     input("Press to continue")

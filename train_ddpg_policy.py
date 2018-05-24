@@ -1,8 +1,9 @@
 import simulation.quadrotor as quad
+import simulation.animation as ani
+import simulation.config as cfg
 import math
 import numpy as np
 import matplotlib.pyplot as pl
-import simulation.animation as ani
 import policies.ddpg as ddpg
 import argparse
 from ounoise import OUNoise
@@ -35,22 +36,12 @@ state_dim = 12
 action_dim = 4
 hidden_dim = 256
 
-mass = 0.65
-prop_radius = 0.1
-l = 0.23
-Jxx = 7.5e-3
-Jyy = 7.5e-3
-Jzz = 1.3e-2
-kt = 3.13e-5
-kq = 7.5e-7
-kd1 = 9e-3
-kd2 = 9e-4
-dt = 0.05
+params = cfg.params
 
-hover_thrust = (mass*9.81)/4.0
-hover_rpm = math.sqrt(hover_thrust/kt)
+hover_thrust = (params["mass"]*9.81)/4.0
+hover_rpm = math.sqrt(hover_thrust/params["kt"])
 trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-iris = quad.Quadrotor(mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
+iris = quad.Quadrotor(params)
 
 actor = ddpg.Actor()
 target_actor = ddpg.Actor()

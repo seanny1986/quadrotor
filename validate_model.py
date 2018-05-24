@@ -1,12 +1,12 @@
 import torch
-import quad
+import simulation.quadrotor as quad
+import simulation.config as cfg
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.style as style
 
 style.use("seaborn-deep")
-
 
 cuda = True
 
@@ -15,31 +15,22 @@ def main():
     print("=> Loading model.pth.tar")
     dyn = torch.load("model.pth.tar")
 
-    print("initializing aircraft")
-    mass = 0.65
-    prop_radius = 0.1
-    l = 0.23
-    Jxx = 7.5e-3
-    Jyy = 7.5e-3
-    Jzz = 1.3e-2
-    kt = 3.13e-5
-    kq = 7.5e-7
-    kd1 = 9e-3
-    kd2 = 9e-4
-    dt = 0.05
+    print("=> Initializing aircraft from config")
+    params = cfg.params
+    mass = params["mass"]
+    kt = params["kt"]
+    dt = params["dt"]
     H = 0.5
 
     steps = int(H/dt)
-
     hover_thrust = (mass*9.81)/4.0
     hover_rpm = math.sqrt(hover_thrust/kt)
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    iris = quad.Quadrotor(mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
+    iris = quad.Quadrotor(params)
 
     print("HOVER RPM: ", trim)
     input("Press to continue")
     
-    print("getting state")
     xyz, zeta, uvw, pqr = iris.get_state()
     action = trim+50
     xyz_nn = xyz.reshape((1,-1))
@@ -77,6 +68,8 @@ def main():
         uvw_nn = uvw_nn/dyn.uvw_norm
         pqr_nn = pqr_nn/dyn.pqr_norm
     
+    print("=> Plotting trajectory")
+
     fig1 = plt.figure()
     ax1 = fig1.add_subplot(311)
     ax2 = fig1.add_subplot(312)
@@ -99,7 +92,7 @@ def main():
     ax3.plot(time, z_actual, time, z_nn)
     fig1.legend((p5, p6), ('Actual', 'Predicted'))
     plt.show()
-    print("Saving figure")
+    print("=> Saving figure as position_error.pdf")
     fig1.savefig('position_error.pdf', bbox_inches='tight')
 
 

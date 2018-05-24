@@ -1,8 +1,9 @@
 import simulation.quadrotor as quad
+import simulation.animation as ani
+import simulation.config as cfg
 import math
 import numpy as np
 import matplotlib.pyplot as pl
-import simulation.animation as ani
 
 def main():
     pl.close("all")
@@ -10,17 +11,10 @@ def main():
     fig = pl.figure(0)
     axis3d = fig.add_subplot(111, projection='3d')
     
-    mass = 0.65
-    prop_radius = 0.1
-    l = 0.23
-    Jxx = 7.5e-3
-    Jyy = 7.5e-3
-    Jzz = 1.3e-2
-    kt = 3.13e-5
-    kq = 7.5e-7
-    kd1 = 9e-3
-    kd2 = 9e-4
-    dt = 0.05
+    params = cfg.params
+    mass = params["mass"]
+    kt = params["kt"]
+    dt = params["dt"]
     T = 1.5
 
     time = np.linspace(0, T, T/dt)
@@ -28,7 +22,7 @@ def main():
     hover_thrust = (mass*9.81)/4.0
     hover_rpm = math.sqrt(hover_thrust/kt)
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    iris = quad.Quadrotor(mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt)
+    iris = quad.Quadrotor(params)
     vis = ani.Visualization(iris, 10)
 
     counter = 0

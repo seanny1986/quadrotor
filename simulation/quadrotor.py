@@ -2,18 +2,22 @@ import numpy as np
 from math import sin, cos, tan
 
 class Quadrotor:
-    def __init__(self, mass, prop_radius, l, Jxx, Jyy, Jzz, kt, kq, kd1, kd2, dt):
-        self.prop_radius = prop_radius
-        
-        self.mass = mass
-        self.J = np.array([[Jxx,0.0,0.0],
-                            [0.0,Jyy,0.0],
-                            [0.0,0.0,Jzz]])
-        self.kt = kt
-        self.kq = kq
-        self.kd1 = kd1
-        self.kd2 = kd2
-        self.l = l
+    def __init__(self, params):
+        self.mass = params["mass"]
+        self.prop_radius = params["prop_radius"]
+        self.l = params["l"]
+        self.Jxx = params["Jxx"]
+        self.Jyy = params["Jyy"]
+        self.Jzz = params["Jzz"]
+        self.kt = params["kt"]
+        self.kq = params["kq"]
+        self.kd1 = params["kd1"]
+        self.kd1 = params["kd2"]
+        self.dt = params["dt"]
+
+        self.J = np.array([[self.Jxx,0.0,0.0],
+                            [0.0,self.Jyy,0.0],
+                            [0.0,0.0,self.Jzz]])
         self.xyz = np.array([[0.0],
                             [0.0],
                             [0.0]])
@@ -30,7 +34,6 @@ class Quadrotor:
                             [0.0],
                             [-9.81]])
         self.rpm = np.array([0.0,0.0,0.0,0.0])
-        self.dt = dt
 
     def set_state(self, xyz, zeta, uvw, pqr):
         self.xyz = xyz

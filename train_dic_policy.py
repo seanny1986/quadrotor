@@ -52,3 +52,58 @@ for i, m in enumerate(maneuvers):
         g0 = [float(g) for g in m[16:]]
         maneuver_list.append([x0, g0])
 maneuvers = maneuver_list
+
+def main():                                                                        
+    env.reset()
+
+    # optimization of policy under the model
+    pol.eval()
+    optimize_policy(maneuvers, pol_opt, dt)
+    print()
+    input("Press any key to continue")
+
+    # run policy on the aircraft
+    pol.train()
+    run_policy(maneuvers, True, True)
+
+    # reset environment
+    env.reset()
+
+    # save policy
+    mbps_utils.save(pol, filename='policy.pth.tar')
+
+def optimize_policy(maneuvers, pol_opt, dt):
+    err = 1
+    count = 1
+    av = []
+    while err > 1e-2:
+        loss = pol.update(maneuvers, pol_opt, dt)
+        print("Policy Loss: {}".format(-loss))
+        err = loss
+        count += 1
+
+        if len(av)<10: 
+            av.append(-loss)
+        else:
+            del av[0]
+            av.append(-loss)
+        
+        moving_average = Tensor(av).sum(dim=0)/float(len(av))
+        
+        if count % 10 == 0:
+            logger.update_policy_info(moving_average.tolist())l
+            logger.plot_policy_graphs()
+
+def run_policy(maneuvers, noise=True, push_to_mem=True, set_state=True):
+    for m in maneuvers:
+        x0 = m[0]
+        g = m[1]
+        if set_state:
+            env.set_state(x0)
+        state = env.get_state()
+        T = int(g[-1])
+        state = evaluate_maneuver(x0, g, T, dt, noise, push_to_mem)
+        print("Maneuver Loss: {}".format(((state-Tensor(g[:-1])).pow(2)).mean()))
+
+if __name__ == "__main__":
+    main()

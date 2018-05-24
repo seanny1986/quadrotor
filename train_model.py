@@ -1,5 +1,5 @@
-import quad
-import model
+import simulation.quadrotor as quad
+import models.one_step as model
 import math
 from math import pi
 import numpy as np
@@ -122,7 +122,7 @@ def main():
             fig1.savefig('vdot_loss.pdf', bbox_inches='tight')
             fig2.savefig('wdot_loss.pdf', bbox_inches='tight')
             print("Saving model")
-            torch.save(dyn, "model.pth.tar")
+            torch.save(dyn, "/models/one_step.pth.tar")
 
         counter += 1
 

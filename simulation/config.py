@@ -16,6 +16,7 @@
 
 params = {"mass":0.65,
         "prop_radius": 0.1,
+	"max_rpm": 500,
         "l": 0.23,
         "Jxx": 7.5e-3,
         "Jyy": 7.5e-3,

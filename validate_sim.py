@@ -15,7 +15,7 @@ def main():
     mass = params["mass"]
     kt = params["kt"]
     dt = params["dt"]
-    T = 1.5
+    T = 2.5
 
     time = np.linspace(0, T, T/dt)
 
@@ -38,17 +38,17 @@ def main():
             pl.figure(0)
             axis3d.cla()
             vis.draw3d(axis3d, iris.xyz, iris.R1(iris.zeta).T)
-            axis3d.set_xlim(-5, 5)
-            axis3d.set_ylim(-5, 5)
-            axis3d.set_zlim(0, 10)
+            axis3d.set_xlim(-3, 3)
+            axis3d.set_ylim(-3, 3)
+            axis3d.set_zlim(0, 6)
             axis3d.set_xlabel('East/West [m]')
             axis3d.set_ylabel('North/South [m]')
             axis3d.set_zlabel('Up/Down [m]')
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        
-        rpm += np.array([0.5,0.0,0.0,0.0])
+        input("Press any key")
+        rpm += np.array([0., 0., 0.5, 0.])
 
 if __name__ == "__main__":
     main()

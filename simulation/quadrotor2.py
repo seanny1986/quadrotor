@@ -1,5 +1,5 @@
 import numpy as np
-from math import sin, cos, tan, pi
+from math import sin, cos, acos, sqrt
 
 class Quadrotor:
     """
@@ -8,8 +8,10 @@ class Quadrotor:
         in the body-frame z-direction, and the gravity vector is negative in the intertial frame 
         z-direction. The aircraft comes with a config file that includes the necessary parameters. These
         are:
+        
         mass = the mass of the vehicle in kg
         prop_radius = the radius of the propellers in meters (this is cosmetic only, no momentum theory)
+        max_rpm = the maximum rpm of the quadrotor (we clip to these values)
         l = the length between the centre of mass and the centre of the prop disk (i.e. arm length)
         Jxx = the mass moment of inertia about the x-axis (roll)
         Jyy = the mass moment of inertia about the y-axis (pitch)
@@ -19,6 +21,18 @@ class Quadrotor:
         kd1 = linear drag coefficient
         kd2 = angular drag coefficient
         dt = solver time step
+
+        quadrotor.py uses Euler angles for its rotation functions. This module uses quaternions to handle
+        rotation in order to avoid the singularity at +-90 degrees pitch. This means that this module uses
+        a different state space to quadrotor.py:
+
+        xyz = position x,y,z in the inertial frame
+        q = aircraft quaternion vector [w, x, y, z]
+        uvw = aircraft linear velocity in the body frame
+        pqr = aircraft angular velocity in the body frame
+        uvw_dot = aircraft linear acceleration in the body frame
+        pqr_dot = aircraft angular acceleration in the body fram
+        q_dot = time derivative of aircraft quaternion
 
         -- Sean Morrison, 2018
     """
@@ -44,7 +58,8 @@ class Quadrotor:
         self.xyz = np.array([[0.],
                             [0.],
                             [0.]])
-        self.zeta = np.array([[0.],
+        self.q = np.array([[1.],
+                            [0.],
                             [0.],
                             [0.]])
         self.uvw = np.array([[0.],
@@ -58,13 +73,13 @@ class Quadrotor:
                             [-9.81]])
         self.rpm = np.array([0.0, 0., 0., 0.])
 
-    def set_state(self, xyz, zeta, uvw, pqr):
+    def set_state(self, xyz, q, uvw, pqr):
         """
             Sets the state space of our vehicle
         """
 
         self.xyz = xyz
-        self.zeta = zeta
+        self.q = q
         self. uvw = uvw
         self.pqr = pqr
     
@@ -72,7 +87,7 @@ class Quadrotor:
         """
             Returns the current state space
         """
-        return self.xyz, self.zeta, self.uvw, self.pqr
+        return self.xyz, self.q, self.uvw, self.pqr
     
     def reset(self):
         """
@@ -82,7 +97,8 @@ class Quadrotor:
         self.xyz = np.array([[0.],
                             [0.],
                             [0.]])
-        self.zeta = np.array([[0.],
+        self.q = np.array([[1.],
+                            [0.],
                             [0.],
                             [0.]])
         self.uvw = np.array([[0.],
@@ -93,50 +109,47 @@ class Quadrotor:
                             [0.]]) 
         self.rpm = np.array([0., 0., 0., 0.])
         return self.get_state()
-
-    def R1(self, zeta):
-        """
-            Rotation matrix converting body frame linear values to the inertial frame.
-            This matrix is orthonormal, so to go from the intertial frame to the body
-            frame, we can take the transpose of this matrix. That is, R1^-1 = R1^T 
-        """
-        
-        phi = zeta[0,0]
-        theta = zeta[1,0]
-        psi = zeta[2,0]
-        x11 = cos(theta)*cos(psi)
-        x12 = -cos(theta)*sin(psi)+sin(phi)*sin(theta)*cos(psi)
-        x13 = sin(phi)*sin(psi)+cos(phi)*sin(theta)*cos(psi)
-        x21 = cos(theta)*sin(psi)
-        x22 = cos(phi)*cos(psi)+sin(phi)*sin(theta)*sin(psi)
-        x23 = -sin(phi)*cos(psi)+cos(phi)*sin(theta)*sin(psi)
-        x31 = -sin(theta)
-        x32 = sin(phi)*cos(theta)
-        x33 = cos(phi)*cos(theta)
-        return np.array([[x11, x12, x13],
-                        [x21, x22, x23],
-                        [x31, x32, x33]])
-
-    def R2(self, zeta):
-        """
-            Rotation matrix converting body frame angular velocities to the inertial frame.
-        """
-
-        phi = zeta[0,0]
-        theta = zeta[1,0]
-        x11 = 1
-        x12 = sin(phi)*tan(theta)
-        x13 = cos(phi)*tan(theta)
-        x21 = 0
-        x22 = cos(phi)
-        x23 = -sin(phi)
-        x31 = 0
-        x32 = sin(phi)/cos(theta)
-        x33 = cos(phi)/cos(theta)
-        return np.array([[x11, x12, x13],
-                        [x21, x22, x23],
-                        [x31, x32, x33]])
     
+    def normalize(self, v):
+        return v/np.linalg.norm(v)
+
+    def q_mult(self, q1, q2):
+        w1, x1, y1, z1 = q1[0,0], q1[1,0], q1[2,0], q1[3,0]
+        w2, x2, y2, z2 = q2[0,0], q2[1,0], q2[2,0], q2[3,0]
+        w = w1*w2-x1*x2-y1*y2-z1*z2
+        x = w1*x2+x1*w2+y1*z2-z1*y2
+        y = w1*y2+y1*w2+z1*x2-x1*z2
+        z = w1*z2+z1*w2+x1*y2-y1*x2
+        return np.array([[w], 
+                        [x], 
+                        [y], 
+                        [z]])
+    
+    def q_conjugate(self, q):
+        w, x, y, z = q[0,0], q[1,0], q[2,0], q[3,0]
+        return np.array([[w], 
+                        [-x], 
+                        [-y], 
+                        [-z]])
+    
+    def axisangle_to_q(self, v, theta):
+        v = self.normalize(v)
+        x, y, z = v[0,0], v[1,0], v[2,0]
+        theta /= 2
+        w = cos(theta)
+        x = x*sin(theta)
+        y = y*sin(theta)
+        z = z*sin(theta)
+        return np.array([[w], 
+                        [x], 
+                        [y], 
+                        [z]])
+    
+    def q_to_axisangle(self, q):
+        w, v = q[0,0], q[1:,0]
+        theta = acos(w)*2.0
+        return self.normalize(v), theta
+
     def aero_forces(self):
         """
             Calculates drag in the body xyz axis due to linear velocity
@@ -207,8 +220,6 @@ class Quadrotor:
         rpm[rpm < 0] = 0
         rpm[rpm > self.max_rpm] = self.max_rpm
         self.thrust = self.kt*rpm**2
-        r1 = self.R1(self.zeta)
-        r2 = self.R2(self.zeta)
         fm = self.thrust_forces(rpm)
         tm = self.thrust_torques(rpm)
         fa = self.aero_forces()
@@ -219,10 +230,11 @@ class Quadrotor:
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt
         xyz_dot = r1.dot(self.uvw)
-        zeta_dot = r2.dot(self.pqr)
+        q_dot = r2.dot(self.pqr)
         self.xyz += xyz_dot*self.dt
-        self.zeta += zeta_dot*self.dt
+        self.q += q_dot*self.dt
+        self.q = self.normalize(self.q)
         if not return_acceleration:
-            return self.xyz, self.zeta, self.uvw, self.pqr
+            return self.xyz, self.q, self.uvw, self.pqr
         else:    
-            return self.xyz, self.zeta, self.uvw, self.pqr, xyz_dot, zeta_dot, uvw_dot, pqr_dot
+            return self.xyz, self.q, self.uvw, self.pqr, xyz_dot, q_dot, uvw_dot, pqr_dot

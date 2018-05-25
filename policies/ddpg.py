@@ -1,8 +1,3 @@
-import argparse
-import gym
-import numpy as np
-from itertools import count
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,16 +9,15 @@ import copy
 import random
 
 class Actor(nn.Module):
-    def __init__(self, action_bound, state_dim, action_dim, neurons=64):
+    def __init__(self, state_dim, action_dim, neurons=64):
         super(Actor, self).__init__()
-        self.action_bound = action_bound
         self.affine1 = nn.Linear(state_dim, neurons)
         self.action_head = nn.Linear(neurons, action_dim)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
         mu = self.action_head(x)
-        return self.action_bound*F.sigmoid(mu)
+        return F.sigmoid(mu)
 
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, neurons=64):
@@ -37,29 +31,53 @@ class Critic(nn.Module):
         return q
 
 class DDPG(nn.Module):
-    def __init__(self, actor, target_actor, critic, target_critic, tau=0.001):
+    def __init__(self, action_bound, actor, target_actor, critic, target_critic, gamma=0.99, tau=0.001, GPU=True):
         super(DDPG, self).__init__()
+        self.action_bound = action_bound
+        
         self.actor = actor
         self.target_actor = target_actor
 
         self.critic = critic
         self.target_critic = target_critic
+        self.gamma = gamma
         self.tau = tau
 
         self.hard_update(self.target_actor, self.actor)
         self.hard_update(self.target_critic, self.critic)
 
+        self.pol_opt = optim.Adam(actor.parameters(), lr=1e-4)
+        self.crit_opt = optim.Adam(critic.parameters(), lr=1e-4)
+
+        self.GPU = GPU
+
+        if GPU:
+            self.Tensor = torch.cuda.FloatTensor
+            
+            self.actor = self.actor.cuda()
+            self.target_actor = self.target_actor.cuda()
+            self.critic = self.critic.cuda()
+            self.target_critic = self.target_critic.cuda()
+        else:
+            self.Tensor = torch.FloatTensor
+
     def select_action(self, state, noise=None):
         self.actor.eval()
-        mu = self.actor((Variable(state, volatile=True)))
+        with torch.no_grad():
+            mu = self.actor((Variable(state)))
         self.actor.train()
         if noise is not None:
             sigma = Variable(torch.Tensor(noise.noise()))
+            if self.GPU:
+                sigma = sigma.cuda()
             mu += sigma
-        return mu
+        return self.action_bound*mu
 
     def random_action(self, noise):
-        return Variable(torch.Tensor([noise.noise()]))
+        action = Variable(torch.Tensor([noise.noise()]))
+        if self.GPU:
+            action = action.cuda()
+        return self.action_bound*action
     
     def soft_update(self, target, source, tau):
 	    for target_param, param in zip(target.parameters(), source.parameters()):
@@ -70,30 +88,32 @@ class DDPG(nn.Module):
             target_param.data.copy_(param.data)
 
     def update(self, batch):
-        state = Variable(torch.stack(torch.FloatTensor(batch.state)))
-        next_state = Variable(torch.stack(torch.FloatTensor(batch.next_state)),volatile=True)
+        state = Variable(torch.stack(batch.state))
         action = Variable(torch.stack(batch.action))
-        reward = Variable(torch.cat(torch.FloatTensor([batch.reward])))
+        with torch.no_grad():
+            next_state = Variable(torch.stack(batch.next_state))
+            reward = Variable(torch.cat(batch.reward))
         reward = torch.unsqueeze(reward, 1)
-        
+
         next_action = self.target_actor(next_state)                                                 # take off-policy action
         next_state_action = torch.cat([next_state, next_action],dim=1)                              # next state-action batch
         next_state_action_value = self.target_critic(next_state_action)                             # target q-value
-        expected_state_action_value = reward+(args.gamma*next_state_action_value)                   # value iteration
+        with torch.no_grad():
+            expected_state_action_value = (reward+(self.gamma*next_state_action_value))             # value iteration
 
-        crit_opt.zero_grad()                                                                        # zero gradients in optimizer
+        self.crit_opt.zero_grad()                                                                   # zero gradients in optimizer
         state_action_value = self.critic(torch.cat([state, action],dim=1))                          # zero gradients in optimizer
         value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)              # (critic-target) loss
         value_loss.backward()                                                                       # backpropagate value loss
-        torch.nn.utils.clip_grad_norm(self.critic.parameters(),0.1)                                 # clip critic gradients
-        crit_opt.step()                                                                             # update value function
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(),0.1)                                # clip critic gradients
+        self.crit_opt.step()                                                                        # update value function
         
-        pol_opt.zero_grad()                                                                         # zero gradients in optimizer
+        self.pol_opt.zero_grad()                                                                    # zero gradients in optimizer
         policy_loss = self.critic(torch.cat([state, self.actor(state)],1))                          # use critic to estimate pol gradient
         policy_loss = policy_loss.mean()                                                            # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
-        torch.nn.utils.clip_grad_norm(self.actor.parameters(),0.1)                                  # clip policy gradient
-        pol_opt.step()                                                                              # update policy function
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(),0.1)                                  # clip policy gradient
+        self.pol_opt.step()                                                                         # update policy function
         
         self.soft_update(self.target_critic, self.critic, self.tau)                                 # soft update of target networks
         self.soft_update(self.target_actor, self.actor, self.tau)                                   # soft update of target networks

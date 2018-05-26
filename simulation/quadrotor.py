@@ -123,7 +123,7 @@ class Quadrotor:
     def R2(self, zeta):
         """
             Rotation matrix converting body frame angular velocities to the inertial frame.
-            Again, this uses the East-North-Up axis convention.
+            This uses the East-North-Up axis convention.
         """
 
         theta = zeta[1,0]
@@ -144,7 +144,7 @@ class Quadrotor:
 
     def aero_forces(self):
         """
-            Calculates drag in the body xyz axis due to linear velocity
+            Calculates drag in the body xyz axis (E-N-U) due to linear velocity
         """
 
         mag = np.linalg.norm(self.uvw)
@@ -156,7 +156,7 @@ class Quadrotor:
 
     def aero_torques(self):
         """
-            Calculates drag in the body xyz axis due to angular velocity
+            Calculates drag in the body xyz axis (E-N-U) due to angular velocity
         """
 
         mag = np.linalg.norm(self.pqr)
@@ -168,7 +168,7 @@ class Quadrotor:
 
     def thrust_forces(self, rpm):
         """
-            Calculates thrust forces in the body xyz axis
+            Calculates thrust forces in the body xyz axis (E-N-U)
         """
 
         f_body_x, f_body_y = 0, 0

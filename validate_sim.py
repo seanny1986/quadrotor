@@ -15,7 +15,7 @@ def main():
     mass = params["mass"]
     kt = params["kt"]
     dt = params["dt"]
-    T = 2.5
+    T = 3
 
     time = np.linspace(0, T, T/dt)
 
@@ -42,9 +42,9 @@ def main():
             axis3d.set_xlim(-3, 3)
             axis3d.set_ylim(-3, 3)
             axis3d.set_zlim(0, 6)
-            axis3d.set_xlabel('East/West [m]')
-            axis3d.set_ylabel('North/South [m]')
-            axis3d.set_zlabel('Up/Down [m]')
+            axis3d.set_xlabel('West/East [m]')
+            axis3d.set_ylabel('South/North [m]')
+            axis3d.set_zlabel('Down/Up [m]')
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()

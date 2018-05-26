@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
-from utils import gae, cuda_if, mean_std_groups, set_lr
+from ppo_utils import gae, cuda_if, mean_std_groups, set_lr
 
 
 class PPO:
@@ -276,4 +276,4 @@ class PPOObjective(nn.Module):
         value_loss = (.5 * (v - returns) ** 2.).mean()
         entropy_loss = (prob * log_prob).sum(1).mean()
 
-return policy_loss, value_loss, entropy_loss
+        return policy_loss, value_loss, entropy_loss

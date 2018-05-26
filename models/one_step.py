@@ -11,8 +11,8 @@ class Transition(nn.Module):
         self.lin_accel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
         self.ang_accel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
     
-        self.lin_accel_opt = torch.optim.SGD(self.lin_accel.parameters(),lr=1e-4)
-        self.ang_accel_opt = torch.optim.SGD(self.ang_accel.parameters(),lr=1e-4)
+        self.lin_accel_opt = torch.optim.Adam(self.lin_accel.parameters(),lr=1e-4)
+        self.ang_accel_opt = torch.optim.Adam(self.ang_accel.parameters(),lr=1e-4)
         self.GPU = GPU
 
         if GPU:
@@ -31,8 +31,8 @@ class Transition(nn.Module):
 
     def R1(self, zeta, v):
         phi = zeta[0,0]
-        theta = zeta[1,0]
-        psi = zeta[2,0]
+        theta = zeta[0,1]
+        psi = zeta[0,2]
 
         R_z = self.Tensor([[psi.cos(), -psi.sin(), 0],
                             [psi.sin(), psi.cos(), 0],
@@ -46,13 +46,23 @@ class Transition(nn.Module):
         R = torch.matmul(R_z, torch.matmul(R_y, R_x))
         return torch.matmul(R, torch.t(v)).view(1,-1)
 
-    def R2(self, phi, w):
-        a1 = phi[:,0]
-        a2 = phi[:,1]
-        R2_matrix = self.Tensor([[1, a1.sin()*a2.tan(), a1.cos()*a2.tan()],
-                                [0, a1.cos(), -a1.sin()],
-                                [0, a1.sin()/a2.cos(), a1.cos()/a2.cos()]])
-        return torch.matmul(R2_matrix, torch.t(w)).view(1,-1)
+    def R2(self, zeta, w):
+        theta = zeta[0,1]
+        psi = zeta[0,2]
+
+        x11 = psi.cos()/theta.cos()
+        x12 = psi.sin()/theta.cos()
+        x13 = 0
+        x21 = -psi.sin()
+        x22 = psi.cos()
+        x23 = 0
+        x31 = psi.cos()*theta.tan()
+        x32 = psi.sin()*theta.tan()
+        x33 = 1
+        R = self.Tensor([[x11, x12, x13],
+                        [x21, x22, x23],
+                        [x31, x32, x33]])
+        return torch.matmul(R, torch.t(w)).view(1,-1)
 
     def transition(self, x0, state_action, dt):
         # state_action is [sin(zeta), cos(zeta), v, w, a]

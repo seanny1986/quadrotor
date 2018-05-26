@@ -13,14 +13,14 @@ cuda = True
 def main():
     
     print("=> Loading model.pth.tar")
-    dyn = torch.load("model.pth.tar")
+    dyn = torch.load("/home/seanny/quadrotor/models/one_step.pth.tar")
 
     print("=> Initializing aircraft from config")
     params = cfg.params
     mass = params["mass"]
     kt = params["kt"]
     dt = params["dt"]
-    H = 0.5
+    H = 1.5
 
     steps = int(H/dt)
     hover_thrust = (mass*9.81)/4.0
@@ -63,7 +63,7 @@ def main():
         state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
         state_action = torch.cat([state, action_nn],dim=1)
         xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, dt)
-        xyz, zeta, uvw, pqr, _, _, _, _ = iris.step(action)
+        xyz, zeta, uvw, pqr, _, _, _, _ = iris.step(action,return_acceleration=True)
         zeta_nn = zeta_nn/dyn.zeta_norm
         uvw_nn = uvw_nn/dyn.uvw_norm
         pqr_nn = pqr_nn/dyn.pqr_norm

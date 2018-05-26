@@ -34,7 +34,7 @@ else:
 epochs = 250000
 state_dim = 12
 action_dim = 4
-hidden_dim = 32
+hidden_dim = 256
 
 params = cfg.params
 iris = quad.Quadrotor(params)
@@ -58,13 +58,13 @@ noise = OUNoise(action_dim)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 
-goal = Tensor([[0., 0., 3.], 
+goal = Tensor([[0., 0., 2.5], 
                 [0., 0., 0.]])
 
 vis = ani.Visualization(iris, 10)
 
 def reward(xyz, zeta):
-    return -10.*F.mse_loss(xyz[0], goal[0,:])-30.*F.mse_loss(zeta[0], goal[1,:])
+    return -F.mse_loss(xyz[0], goal[0,:])-F.mse_loss(zeta[0], goal[1,:])
 
 def main():
     pl.close("all")
@@ -74,6 +74,7 @@ def main():
 
     interval_avg = []
     avg = 0
+    best = -1000
     for ep in count(1):
         noise.reset()
         running_reward = 0
@@ -95,9 +96,9 @@ def main():
                 axis3d.set_xlim(-3, 3)
                 axis3d.set_ylim(-3, 3)
                 axis3d.set_zlim(0, 6)
-                axis3d.set_xlabel('West/East [m]')
-                axis3d.set_ylabel('South/North [m]')
-                axis3d.set_zlabel('Down/Up [m]')
+                axis3d.set_xlabel('East/West [m]')
+                axis3d.set_ylabel('North/South [m]')
+                axis3d.set_zlabel('Up/Down [m]')
                 axis3d.set_title("Time %.3f s" %t)
                 pl.pause(0.001)
                 pl.draw()
@@ -107,27 +108,24 @@ def main():
             else:    
                 action = agent.select_action(state,noise=noise)
                 action = action.data
-            xyz, zeta, uvw, pqr, _, _, uvw_dot, pqr_dot = iris.step(action.cpu().numpy()[0], return_acceleration=True)
-            mask1 = zeta > pi/2
-            mask2 = zeta < -pi/2
-            mask3 = np.abs(xyz) > 6
+            xyz, zeta, uvw, pqr = iris.step(action.cpu().numpy()[0])
+            mask1 = zeta > 45*pi/180
+            mask2 = zeta < -45*pi/180
+            mask3 = np.abs(xyz) > 2
             if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
+                #print("Breaking loop at time {}".format(t*iris.dt))
                 break
             xyz = torch.from_numpy(xyz.T).float()
             zeta = torch.from_numpy(zeta.T).float()
             uvw = torch.from_numpy(uvw.T).float()
             pqr = torch.from_numpy(pqr.T).float()
-            uvw_dot = torch.from_numpy(uvw_dot.T).float()
-            pqr_dot = torch.from_numpy(pqr_dot.T).float()
             if args.cuda:
                 xyz = xyz.cuda()
                 zeta = zeta.cuda()
                 uvw = uvw.cuda()
                 pqr = pqr.cuda()
-                uvw_dot = uvw_dot.cuda()
-                pqr_dot = pqr_dot.cuda()
             next_state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
-            r = reward(xyz, zeta)+100.-(uvw_dot.pow(2).sum()+pqr_dot.pow(2).sum())/1e4-action.pow(2).sum()/1e6
+            r = reward(xyz, zeta)+1
             running_reward += r
             memory.push(state.squeeze(0), action.squeeze(0), next_state.squeeze(0), r.unsqueeze(0))
             if ep >= args.warmup:

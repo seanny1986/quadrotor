@@ -1,20 +1,17 @@
 import random
 import argparse
 import torch
-import policy
-import environment
+import policies.dic
 import mbps_utils
-import copy
 import csv
 from torch.autograd import Variable
 from mpl_toolkits.mplot3d import axes3d 
 import matplotlib.pyplot as plt
 import matplotlib.style as style
-import pandas as pd
-import memory
-import datetime
-import numpy as np
 import torch.nn.functional as F
+import simulation.quadrotor as quad
+import simulation.config as cfg
+import simulation.animation as ani
 
 
 parser = argparse.ArgumentParser(description='PyTorch MBPS Node')
@@ -37,8 +34,13 @@ if args.cuda:
 else:
     Tensor = torch.Tensor
 
-dyn = mbps_utils.resume('model.pth.tar')
-pol = policy.FeedForwardPolicy(state_size+goal_size, 32, action_size, dyn, args.cuda)
+state_dim = 12
+action_dim = 4
+hidden_dim = 32
+goal_dim = 12
+
+dyn = mbps_utils.resume('/home/seanny/quadrotor/models/one_step.pth.tar')
+pol = policy.FeedForwardPolicy(state_dim+goal_dim, 32, action_dim, dyn, args.cuda)
 pol_opt = torch.optim.Adam(pol.parameters(), lr=1e-4)
 
 with open('maneuvers.csv', 'r') as f:
@@ -52,6 +54,15 @@ for i, m in enumerate(maneuvers):
         g0 = [float(g) for g in m[16:]]
         maneuver_list.append([x0, g0])
 maneuvers = maneuver_list
+
+pl.close("all")
+pl.ion()
+fig = pl.figure(0)
+axis3d = fig.add_subplot(111, projection='3d')
+params = cfg.params
+iris = quad.Quadrotor(params)
+dt = iris.dt
+vis = ani.Visualization(iris)
 
 def main():                                                                        
     env.reset()
@@ -91,7 +102,7 @@ def optimize_policy(maneuvers, pol_opt, dt):
         moving_average = Tensor(av).sum(dim=0)/float(len(av))
         
         if count % 10 == 0:
-            logger.update_policy_info(moving_average.tolist())l
+            logger.update_policy_info(moving_average.tolist())
             logger.plot_policy_graphs()
 
 def run_policy(maneuvers, noise=True, push_to_mem=True, set_state=True):

@@ -48,7 +48,7 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        rpm += np.array([0.5, 0., 0., 0.])
+        rpm += np.array([0., 0., 0., 0.25])
 
 if __name__ == "__main__":
     main()

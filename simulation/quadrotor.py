@@ -5,11 +5,13 @@ class Quadrotor:
     """
         6DOF rigid body, non-linear EOM solver for a plus configuration quadrotor. Aircraft is modeled
         with an East-North-Up axis system for convenience when plotting. This means thrust is positive
-        in the body-frame z-direction, and the gravity vector is negative in the intertial frame 
+        in the body-axis z-direction, and the gravity vector is negative in the intertial axis 
         z-direction. The aircraft comes with a config file that includes the necessary parameters. These
         are:
+
         mass = the mass of the vehicle in kg
         prop_radius = the radius of the propellers in meters (this is cosmetic only, no momentum theory)
+        max_rpm = the maximum rpm value; we clip rpm if is outside the bound 0 <= rpm <= rpm_max
         l = the length between the centre of mass and the centre of the prop disk (i.e. arm length)
         Jxx = the mass moment of inertia about the x-axis (roll)
         Jyy = the mass moment of inertia about the y-axis (pitch)
@@ -99,7 +101,9 @@ class Quadrotor:
         """
             Rotation matrix converting body frame linear values to the inertial frame.
             This matrix is orthonormal, so to go from the intertial frame to the body
-            frame, we can take the transpose of this matrix. That is, R1^-1 = R1^T 
+            frame, we can take the transpose of this matrix. That is, R1^-1 = R1^T.
+            These rotations are for an East-North-Up axis system, since our inertial
+            frame (matplotlib) uses this for plotting.
         """
         
         phi = zeta[0,0]
@@ -119,24 +123,25 @@ class Quadrotor:
     def R2(self, zeta):
         """
             Rotation matrix converting body frame angular velocities to the inertial frame.
+            Again, this uses the East-North-Up axis convention.
         """
 
-        phi = zeta[0,0]
         theta = zeta[1,0]
-        x11 = 1
-        x12 = sin(phi)*tan(theta)
-        x13 = cos(phi)*tan(theta)
-        x21 = 0
-        x22 = cos(phi)
-        x23 = -sin(phi)
-        x31 = 0
-        x32 = sin(phi)/cos(theta)
-        x33 = cos(phi)/cos(theta)
+        psi = zeta[2,0]
+
+        x11 = cos(psi)/cos(theta)
+        x12 = sin(psi)/cos(theta)
+        x13 = 0
+        x21 = -sin(psi)
+        x22 = cos(psi)
+        x23 = 0
+        x31 = cos(psi)*tan(theta)
+        x32 = sin(psi)*tan(theta)
+        x33 = 1
         return np.array([[x11, x12, x13],
                         [x21, x22, x23],
                         [x31, x32, x33]])
 
-    
     def aero_forces(self):
         """
             Calculates drag in the body xyz axis due to linear velocity

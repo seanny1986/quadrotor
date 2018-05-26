@@ -21,7 +21,9 @@ class Visualization:
         self.p3 += np.array([[-self.l, 0.0, 0.0] for x in range(n+1)])
         self.p4 += np.array([[0.0, self.l, 0.0] for x in range(n+1)])
 
-    def draw3d(self, ax, xyz, R):
+    def draw3d(self, ax):
+        xyz, R = self.aircraft.xyz, self.aircraft.R1(self.aircraft.zeta).T
+        
         ax.scatter(xyz[0,0], xyz[1,0], xyz[2,0], color='black')
         ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[0,0], R[0,1], R[0,2], pivot='tail', color='red')
         ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[1,0], R[1,1], R[1,2], pivot='tail', color='green')

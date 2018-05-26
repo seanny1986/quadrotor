@@ -57,6 +57,7 @@ class Quadrotor:
                             [0.],
                             [-9.81]])
         self.rpm = np.array([0.0, 0., 0., 0.])
+        
 
     def set_state(self, xyz, zeta, uvw, pqr):
         """
@@ -104,18 +105,16 @@ class Quadrotor:
         phi = zeta[0,0]
         theta = zeta[1,0]
         psi = zeta[2,0]
-        x11 = cos(theta)*cos(psi)
-        x12 = -cos(theta)*sin(psi)+sin(phi)*sin(theta)*cos(psi)
-        x13 = sin(phi)*sin(psi)+cos(phi)*sin(theta)*cos(psi)
-        x21 = cos(theta)*sin(psi)
-        x22 = cos(phi)*cos(psi)+sin(phi)*sin(theta)*sin(psi)
-        x23 = -sin(phi)*cos(psi)+cos(phi)*sin(theta)*sin(psi)
-        x31 = -sin(theta)
-        x32 = sin(phi)*cos(theta)
-        x33 = cos(phi)*cos(theta)
-        return np.array([[x11, x12, x13],
-                        [x21, x22, x23],
-                        [x31, x32, x33]])
+        R_z = np.array([[cos(psi), -sin(psi), 0],
+                            [sin(psi), cos(psi), 0],
+                            [0., 0., 1.]])
+        R_y = np.array([[cos(theta), 0., sin(theta)],
+                            [0., 1., 0.],
+                            [-sin(theta), 0, cos(theta)]])
+        R_x =  np.array([[1., 0., 0.],
+                            [0., cos(phi), -sin(phi)],
+                            [0., sin(phi), cos(phi)]])
+        return R_z.dot(R_y.dot(R_x))
 
     def R2(self, zeta):
         """
@@ -136,6 +135,7 @@ class Quadrotor:
         return np.array([[x11, x12, x13],
                         [x21, x22, x23],
                         [x31, x32, x33]])
+
     
     def aero_forces(self):
         """

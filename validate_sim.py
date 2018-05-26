@@ -28,6 +28,7 @@ def main():
     counter = 0
     frames = 100
     rpm = trim+50
+
     for t in time:
 
         iris.step(rpm)
@@ -37,7 +38,7 @@ def main():
 
             pl.figure(0)
             axis3d.cla()
-            vis.draw3d(axis3d, iris.xyz, iris.R1(iris.zeta).T)
+            vis.draw3d(axis3d)
             axis3d.set_xlim(-3, 3)
             axis3d.set_ylim(-3, 3)
             axis3d.set_zlim(0, 6)
@@ -47,8 +48,7 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        input("Press any key")
-        rpm += np.array([0., 0., 0.5, 0.])
+        rpm += np.array([0.5, 0., 0., 0.])
 
 if __name__ == "__main__":
     main()

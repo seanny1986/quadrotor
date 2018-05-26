@@ -29,14 +29,22 @@ class Transition(nn.Module):
         self.uvw_dot_norm = 0
         self.pqr_dot_norm = 0
 
-    def R1(self, phi, v):
-        a1 = phi[:,0]
-        a2 = phi[:,1]
-        a3 = phi[:,2]
-        R1_matrix = self.Tensor([[a2.cos()*a3.cos(), a1.sin()*a2.sin()*a3.cos()-a3.cos()*a3.sin(), a1.cos()*a2.sin()*a3.cos()+a1.sin()*a3.sin()],
-                                [a2.cos()*a3.sin(), a1.sin()*a2.sin()*a3.sin()+a1.cos()*a3.cos(), a1.cos()*a2.sin()*a3.sin()-a1.sin()*a3.cos()],
-                                [-a2.sin(), a1.sin()*a2.cos(), a1.cos()*a2.cos()]])
-        return torch.matmul(R1_matrix, torch.t(v)).view(1,-1)
+    def R1(self, zeta, v):
+        phi = zeta[0,0]
+        theta = zeta[1,0]
+        psi = zeta[2,0]
+
+        R_z = self.Tensor([[psi.cos(), -psi.sin(), 0],
+                            [psi.sin(), psi.cos(), 0],
+                            [0., 0., 1.]])
+        R_y = self.Tensor([[theta.cos(), 0., theta.sin()],
+                            [0., 1., 0.],
+                            [-theta.sin(), 0, theta.cos()]])
+        R_x =  self.Tensor([[1., 0., 0.],
+                            [0., phi.cos(), -phi.sin()],
+                            [0., phi.sin(), phi.cos()]])
+        R = torch.matmul(R_z, torch.matmul(R_y, R_x))
+        return torch.matmul(R, torch.t(v)).view(1,-1)
 
     def R2(self, phi, w):
         a1 = phi[:,0]

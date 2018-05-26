@@ -12,7 +12,7 @@ style.use("seaborn-deep")
 
 def main():
 
-    epochs = 250000
+    epochs = 25000
     state_dim = 12
     action_dim = 4
     hidden_dim = 256
@@ -69,7 +69,7 @@ def main():
 
         # generate random action, assume hover at 50%
         action = np.random.uniform(low=0, high=500, size=(4,))
-        _, _, _, _, _, _, uvw_dot, pqr_dot = iris.step(action)
+        _, _, _, _, _, _, uvw_dot, pqr_dot = iris.step(action, return_acceleration=True)
 
         # update network
         v_dot_loss, w_dot_loss = dyn.update(zeta_rand, uvw_rand, pqr_rand, action, uvw_dot, pqr_dot)
@@ -115,7 +115,7 @@ def main():
             fig1.savefig('vdot_loss.pdf', bbox_inches='tight')
             fig2.savefig('wdot_loss.pdf', bbox_inches='tight')
             print("Saving model")
-            torch.save(dyn, "/models/one_step.pth.tar")
+            torch.save(dyn, "/home/seanny/quadrotor/models/one_step.pth.tar")
 
         counter += 1
 

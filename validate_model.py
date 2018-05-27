@@ -93,7 +93,7 @@ def main():
     fig1.legend((p5, p6), ('Actual', 'Predicted'))
     plt.show()
     print("=> Saving figure as position_error.pdf")
-    fig1.savefig('position_error.pdf', bbox_inches='tight')
+    fig1.savefig('/home/seanny/quadrotor/figures/position_error.pdf', bbox_inches='tight')
 
 
 if __name__ == "__main__":

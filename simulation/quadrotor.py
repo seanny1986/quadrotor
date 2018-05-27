@@ -1,26 +1,16 @@
 import numpy as np
-from math import sin, cos, tan, pi
+from math import sin, cos, tan, sqrt
 
 class Quadrotor:
     """
         6DOF rigid body, non-linear EOM solver for a plus configuration quadrotor. Aircraft is modeled
         with an East-North-Up axis system for convenience when plotting. This means thrust is positive
-        in the body-axis z-direction, and the gravity vector is negative in the intertial axis 
-        z-direction. The aircraft comes with a config file that includes the necessary parameters. These
-        are:
+        in the body-axis z-direction, and the gravity vector is negative in the inertial axis 
+        z-direction. The aircraft comes with a config file that includes the necessary parameters. For
+        a description of what each parameter means, please check config.py.
 
-        mass = the mass of the vehicle in kg
-        prop_radius = the radius of the propellers in meters (this is cosmetic only, no momentum theory)
-        max_rpm = the maximum rpm value; we clip rpm if is outside the bound 0 <= rpm <= rpm_max
-        l = the length between the centre of mass and the centre of the prop disk (i.e. arm length)
-        Jxx = the mass moment of inertia about the x-axis (roll)
-        Jyy = the mass moment of inertia about the y-axis (pitch)
-        Jzz = the mass moment of inertia about the z-axis (yaw)
-        kt = motor thrust coefficient
-        kq = motor torque coefficient
-        kd1 = linear drag coefficient
-        kd2 = angular drag coefficient
-        dt = solver time step
+        I've chosen a representation for the rotation matrices that makes it easy to see what I'm doing;
+        it shouldn't have a huge impact on performance since we don't have much in the way of graphics.
 
         -- Sean Morrison, 2018
     """
@@ -28,7 +18,8 @@ class Quadrotor:
     def __init__(self, params):
         self.mass = params["mass"]
         self.prop_radius = params["prop_radius"]
-        self.max_rpm = params["max_rpm"]
+        self.n_motors = params["n_motors"]
+        self.hov_p = params["hov_p"]
         self.l = params["l"]
         self.Jxx = params["Jxx"]
         self.Jyy = params["Jyy"]
@@ -37,7 +28,12 @@ class Quadrotor:
         self.kq = params["kq"]
         self.kd1 = params["kd1"]
         self.kd2 = params["kd2"]
+        self.g = params["g"]
         self.dt = params["dt"]
+
+        self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
+        self.max_rpm = sqrt(2.)*self.hov_rpm
+
         self.thrust = None
 
         self.J = np.array([[self.Jxx, 0., 0.],
@@ -57,7 +53,7 @@ class Quadrotor:
                             [0.]])
         self.g = np.array([[0.],
                             [0.],
-                            [-9.81]])
+                            [-self.g]])
         self.rpm = np.array([0.0, 0., 0., 0.])
         
 
@@ -109,15 +105,18 @@ class Quadrotor:
         phi = zeta[0,0]
         theta = zeta[1,0]
         psi = zeta[2,0]
-        R_z = np.array([[cos(psi), -sin(psi), 0],
-                            [sin(psi), cos(psi), 0],
-                            [0., 0., 1.]])
-        R_y = np.array([[cos(theta), 0., sin(theta)],
-                            [0., 1., 0.],
-                            [-sin(theta), 0, cos(theta)]])
-        R_x =  np.array([[1., 0., 0.],
-                            [0., cos(phi), -sin(phi)],
-                            [0., sin(phi), cos(phi)]])
+        
+        R_z = np.array([[cos(psi),      -sin(psi),          0.],
+                            [sin(psi),  cos(psi),           0.],
+                            [0.,            0.,             1.]])
+        
+        R_y = np.array([[cos(theta),        0.,     sin(theta)],
+                            [0.,            1.,             0.],
+                            [-sin(theta),   0.,     cos(theta)]])
+
+        R_x =  np.array([[1.,               0.,             0.],
+                            [0.,        cos(phi),       -sin(phi)],
+                            [0.,        sin(phi),       cos(phi)]])
         return R_z.dot(R_y.dot(R_x))
 
     def R2(self, zeta):
@@ -128,19 +127,9 @@ class Quadrotor:
 
         theta = zeta[1,0]
         psi = zeta[2,0]
-
-        x11 = cos(psi)/cos(theta)
-        x12 = sin(psi)/cos(theta)
-        x13 = 0
-        x21 = -sin(psi)
-        x22 = cos(psi)
-        x23 = 0
-        x31 = cos(psi)*tan(theta)
-        x32 = sin(psi)*tan(theta)
-        x33 = 1
-        return np.array([[x11, x12, x13],
-                        [x21, x22, x23],
-                        [x31, x32, x33]])
+        return np.array([[cos(psi)/cos(theta), sin(psi)/cos(theta), 0.],
+                        [-sin(psi),             cos(psi),           0.],
+                        [cos(psi)*tan(theta), sin(psi)*tan(theta),  1.]])
 
     def aero_forces(self):
         """
@@ -149,7 +138,9 @@ class Quadrotor:
 
         mag = np.linalg.norm(self.uvw)
         if mag == 0:
-            return np.array([[0.0],[0.0],[0.0]])
+            return np.array([[0.],
+                            [0.],
+                            [0.]])
         else:
             norm = self.uvw/mag
             return -(self.kd1*mag**2)*norm
@@ -161,7 +152,9 @@ class Quadrotor:
 
         mag = np.linalg.norm(self.pqr)
         if mag == 0:
-            return np.array([[0.0],[0.0],[0.0]])
+            return np.array([[0.],
+                            [0.],
+                            [0.]])
         else:
             norm = self.pqr/mag
             return -(self.kd2*mag**2)*norm
@@ -219,8 +212,8 @@ class Quadrotor:
         fa = self.aero_forces()
         ta = self.aero_torques()
         Jw = self.J.dot(self.pqr)
-        uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr,self.uvw,axis=0)
-        pqr_dot = np.linalg.inv(self.J).dot(((tm+ta)-np.cross(self.pqr,Jw,axis=0)))
+        uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr, self.uvw, axis=0)
+        pqr_dot = np.linalg.inv(self.J).dot(tm+ta-np.cross(self.pqr, Jw, axis=0))
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt
         xyz_dot = r1.dot(self.uvw)

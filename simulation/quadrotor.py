@@ -3,14 +3,24 @@ from math import sin, cos, tan, sqrt
 
 class Quadrotor:
     """
-        6DOF rigid body, non-linear EOM solver for a plus configuration quadrotor. Aircraft is modeled
+        6DOF rigid body, non-linear EOM solver for a '+' configuration quadrotor. Aircraft is modeled
         with an East-North-Up axis system for convenience when plotting. This means thrust is positive
         in the body-axis z-direction, and the gravity vector is negative in the inertial axis 
         z-direction. The aircraft comes with a config file that includes the necessary parameters. For
-        a description of what each parameter means, please check config.py.
+        a description of what each parameter means, please check this file.
 
         I've chosen a representation for the rotation matrices that makes it easy to see what I'm doing;
         it shouldn't have a huge impact on performance since we don't have much in the way of graphics.
+        For an 'x' config quadrotor, calculate thrust and moments due to the motors as normal, and then 
+        rotate these vectors by pi/4 around the body z-axis. Thrust should be unaffected, but the moments
+        will be, since the moment arm to the COM will change.
+
+        You can also use this sim for standard fixed-wing aircraft or rockets by implementing new force
+        and torque methods. For example, for a fixed wing, you could implement a strip theory aerodynamics 
+        solver to get lift and drag in the body frame, VLM, or a linearized method. For a rocket you would 
+        use standard rocket thrust equations, and update the mass of the vehicle (which has its own ODE 
+        and is included in the state space). Quaternion rotations are probably better for rockets though,
+        since the rotation matrices have a singularity at pitch +-90 degrees.
 
         -- Sean Morrison, 2018
     """
@@ -36,9 +46,9 @@ class Quadrotor:
 
         self.thrust = None
 
-        self.J = np.array([[self.Jxx, 0., 0.],
-                            [0., self.Jyy, 0.],
-                            [0., 0., self.Jzz]])
+        self.J = np.array([[self.Jxx,   0.,         0.],
+                            [0.,    self.Jyy,       0.],
+                            [0.,        0., self.Jzz]])
         self.xyz = np.array([[0.],
                             [0.],
                             [0.]])
@@ -96,10 +106,13 @@ class Quadrotor:
     def R1(self, zeta):
         """
             Rotation matrix converting body frame linear values to the inertial frame.
-            This matrix is orthonormal, so to go from the intertial frame to the body
+            This matrix is orthonormal, so to go from the inertial frame to the body
             frame, we can take the transpose of this matrix. That is, R1^-1 = R1^T.
-            These rotations are for an East-North-Up axis system, since our inertial
-            frame (matplotlib) uses this for plotting.
+            These rotations are for an East-North-Up axis system, since matplotlib 
+            uses this for plotting. If you wanted to use N-E-D as is more typical in
+            aerospace, you would need two additional rotation matrices for plotting -- 
+            a pi/2 rotation about the inertial z-axis, and then another pi/2 rotation 
+            about the inertial x-axis.
         """
         
         phi = zeta[0,0]
@@ -107,22 +120,24 @@ class Quadrotor:
         psi = zeta[2,0]
         
         R_z = np.array([[cos(psi),      -sin(psi),          0.],
-                            [sin(psi),  cos(psi),           0.],
-                            [0.,            0.,             1.]])
+                        [sin(psi),      cos(psi),           0.],
+                        [0.,                0.,             1.]])
         
         R_y = np.array([[cos(theta),        0.,     sin(theta)],
-                            [0.,            1.,             0.],
-                            [-sin(theta),   0.,     cos(theta)]])
+                        [0.,                1.,             0.],
+                        [-sin(theta),       0.,     cos(theta)]])
 
         R_x =  np.array([[1.,               0.,             0.],
-                            [0.,        cos(phi),       -sin(phi)],
-                            [0.,        sin(phi),       cos(phi)]])
+                        [0.,            cos(phi),       -sin(phi)],
+                        [0.,            sin(phi),       cos(phi)]])
         return R_z.dot(R_y.dot(R_x))
 
     def R2(self, zeta):
         """
-            Rotation matrix converting body frame angular velocities to the inertial frame.
-            This uses the East-North-Up axis convention.
+            Euler rates rotation matrix converting body frame angular velocities 
+            to the inertial frame. This uses the East-North-Up axis convention, which 
+            is why it looks different to the matrix you will find in most aircraft
+            dynamics textbooks (which use an N-E-D system).
         """
 
         theta = zeta[1,0]
@@ -163,9 +178,10 @@ class Quadrotor:
         """
             Calculates thrust forces in the body xyz axis (E-N-U)
         """
-
-        f_body_x, f_body_y = 0, 0
-        f_body_z = np.sum(self.thrust)
+        
+        thrust = self.kt*rpm**2
+        f_body_x, f_body_y = 0., 0.
+        f_body_z = np.sum(thrust)
         return np.array([[f_body_x],
                         [f_body_y],
                         [f_body_z]])
@@ -175,8 +191,9 @@ class Quadrotor:
             Calculates torques about the body xyz axis due to motor thrust and torque
         """
 
-        t_body_x = self.l*(self.thrust[1]-self.thrust[3])
-        t_body_y = self.l*(self.thrust[2]-self.thrust[0])
+        thrust = self.kt*rpm**2
+        t_body_x = self.l*(thrust[1]-thrust[3])
+        t_body_y = self.l*(thrust[2]-thrust[0])
         motor_torques = self.kq*rpm**2
         t_body_z = -motor_torques[0]+motor_torques[1]-motor_torques[2]+motor_torques[3]
         return np.array([[t_body_x],
@@ -185,35 +202,62 @@ class Quadrotor:
     
     def step(self, rpm, return_acceleration=False):
         """
-            Semi-implicit Euler update of the non-linear equations of motion. Use the
-            matrix form since it's much nicer to work with. Our two equations are:
+            Semi-implicit Euler update of the non-linear equations of motion. Uses the
+            matrix form since it's much nicer to work with. Our state space equations 
+            are:
             
             v_dot = F_b/m + R1^{-1}G_i - omega x v
-            omega_dot = J^{-1}[Q_b - omega x v]
+            omega_dot = J^{-1}[Q_b - omega x H]
+            x_dot = R1*v
+            zeta_dot = R2*omega
 
             Where F_b are the external body forces (thrust+drag) in the body frame, m 
             is the mass of the vehicle, R1^{-1} is the inverse of matrix R1 (since R1
             rotates the body frame to the inertial frame, the inverse rotates the inertial
             to the body frame), G_i is the gravity vector in the inertial frame (0,0,-9.81),
-            omega is the angular velocity, v is the velocity, J is the inertia matrix, and
+            omega is the angular velocity, v is the velocity, J is the inertia matrix,
             Q_b are the external moments about the body axes system (motor thrust, motor
-            torque, and aerodynamic moments).
+            torque, and aerodynamic moments), and H is the angular momentum J*omega. I 
+            assume J is a diagonal matrix here; that is, the aircraft is symmetrical about 
+            the body x and y axes.
+            
+            Since R1 is an orthornormal matrix:
 
-            In some cases we may want to return the acceleration, though the default is False.
+            R1^{-1} = R1^{T}
+
+            This is not true for the Euler rates matrix R2, so we need to invert it the old
+            fashioned way.
+
+            I step the EOMs forward under the assumption that:
+
+            x_{t+1} ~ x_{t}+h*x_dot_{t}
+
+            Where h is the time step. We can make this update semi-implicit by updating linear 
+            and angular velocities using a forward Euler step, and then updating position and
+            attitude using v_{t+1} and omega_{t+1} (as opposed to using v_{t} and omega_{t}).
+            This has the benefit of being more numerically stable. An even better method would
+            be to use leapfrog integration to mitigate energy drift, and give ourselves the
+            ability to run the simulation in reverse. More advanced solvers are available, but
+            I'll leave that to others -- this is good enough for my needs.
+
+            Another potential source of error is the singularity at pitch 90 degrees. As theta
+            approaches pi, the rotation matrices start to break down, and numerical errors build
+            up. There's no way to fix this without the introduction of a fourth variable. That is, 
+            we would need to use quaternions, and recover angles using the axis-angle representation.
+            I'm in the process of implementing this in quadrotor2.py, though it's not currently a
+            high priority.
         """
         
-        rpm[rpm < 0] = 0
-        rpm[rpm > self.max_rpm] = self.max_rpm
-        self.thrust = self.kt*rpm**2
+        rpm = np.clip(rpm, 0., self.max_rpm)
         r1 = self.R1(self.zeta)
         r2 = self.R2(self.zeta)
         fm = self.thrust_forces(rpm)
         tm = self.thrust_torques(rpm)
         fa = self.aero_forces()
         ta = self.aero_torques()
-        Jw = self.J.dot(self.pqr)
+        H = self.J.dot(self.pqr)
         uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr, self.uvw, axis=0)
-        pqr_dot = np.linalg.inv(self.J).dot(tm+ta-np.cross(self.pqr, Jw, axis=0))
+        pqr_dot = np.linalg.inv(self.J).dot(tm+ta-np.cross(self.pqr, H, axis=0))
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt
         xyz_dot = r1.dot(self.uvw)

@@ -12,7 +12,7 @@ cuda = True
 
 def main():
     
-    print("=> Loading model.pth.tar")
+    print("=> Loading one_step_accel.pth.tar")
     dyn = torch.load("/home/seanny/quadrotor/models/one_step.pth.tar")
 
     print("=> Initializing aircraft from config")

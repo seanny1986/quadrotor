@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 # torch.manual_seed(1)    # reproducible
 
 # Hyper Parameters
-TIME_STEP = 10      # rnn time step
+TIME_STEP = 30      # rnn time step
 INPUT_SIZE = 1      # rnn input size
 LR = 0.02           # learning rate
 
@@ -40,6 +40,60 @@ class RNN(nn.Module):
             batch_first=True,   # input & output will has batch size as 1s dimension. e.g. (batch, time_step, input_size)
         )
         self.out = nn.Linear(32, 1)
+    
+    def R1(self, zeta, v):
+        phi = zeta[0,0]
+        theta = zeta[0,1]
+        psi = zeta[0,2]
+
+        R_z = self.Tensor([[psi.cos(), -psi.sin(), 0],
+                            [psi.sin(), psi.cos(), 0],
+                            [0., 0., 1.]])
+        R_y = self.Tensor([[theta.cos(), 0., theta.sin()],
+                            [0., 1., 0.],
+                            [-theta.sin(), 0, theta.cos()]])
+        R_x =  self.Tensor([[1., 0., 0.],
+                            [0., phi.cos(), -phi.sin()],
+                            [0., phi.sin(), phi.cos()]])
+        R = torch.matmul(R_z, torch.matmul(R_y, R_x))
+        return torch.matmul(R, torch.t(v)).view(1,-1)
+
+    def R2(self, zeta, w):
+        theta = zeta[0,1]
+        psi = zeta[0,2]
+
+        x11 = psi.cos()/theta.cos()
+        x12 = psi.sin()/theta.cos()
+        x13 = 0
+        x21 = -psi.sin()
+        x22 = psi.cos()
+        x23 = 0
+        x31 = psi.cos()*theta.tan()
+        x32 = psi.sin()*theta.tan()
+        x33 = 1
+        R = self.Tensor([[x11, x12, x13],
+                        [x21, x22, x23],
+                        [x31, x32, x33]])
+        return torch.matmul(R, torch.t(w)).view(1,-1)
+
+    def transition(self, x0, state_action, dt):
+        # state_action is [sin(zeta), cos(zeta), v, w, a]
+        xyz = x0.clone()
+        uvw_pqr = state_action[:,6:12].clone()
+        zeta = state_action[:,0:3].asin()
+        uvw = uvw_pqr[:,0:3]
+        pqr = uvw_pqr[:,3:]
+        uvw_dot = self.lin_accel(state_action)*self.uvw_dot_norm
+        pqr_dot = self.ang_accel(state_action)*self.pqr_dot_norm
+        dv, dw = uvw_dot*dt, pqr_dot*dt
+        uvw = uvw+dv
+        pqr = pqr+dw
+        xyz_dot = self.R1(zeta, uvw)
+        zeta_dot = self.R2(zeta, pqr)
+        dx, dzeta = xyz_dot*dt, zeta_dot*dt
+        xyz = xyz+dx
+        zeta = zeta+dzeta
+        return xyz, zeta, uvw, pqr
 
     def forward(self, x, h_state):
         # x (batch, time_step, input_size)

@@ -42,7 +42,7 @@ class Quadrotor:
         self.dt = params["dt"]
 
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
-        self.max_rpm = sqrt(2.)*self.hov_rpm
+        self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
 
         self.thrust = None
 

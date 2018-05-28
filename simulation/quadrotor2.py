@@ -1,38 +1,11 @@
 import numpy as np
-from math import sin, cos, acos, sqrt
+from math import sin, cos, acos, sqrt, atan2, asin
 
 class Quadrotor:
     """
-        6DOF rigid body, non-linear EOM solver for a plus configuration quadrotor. Aircraft is modeled
-        with an East-North-Up axis system for convenience when plotting. This means thrust is positive
-        in the body-frame z-direction, and the gravity vector is negative in the intertial frame 
-        z-direction. The aircraft comes with a config file that includes the necessary parameters. These
-        are:
-        
-        mass = the mass of the vehicle in kg
-        prop_radius = the radius of the propellers in meters (this is cosmetic only, no momentum theory)
-        max_rpm = the maximum rpm of the quadrotor (we clip to these values)
-        l = the length between the centre of mass and the centre of the prop disk (i.e. arm length)
-        Jxx = the mass moment of inertia about the x-axis (roll)
-        Jyy = the mass moment of inertia about the y-axis (pitch)
-        Jzz = the mass moment of inertia about the z-axis (yaw)
-        kt = motor thrust coefficient
-        kq = motor torque coefficient
-        kd1 = linear drag coefficient
-        kd2 = angular drag coefficient
-        dt = solver time step
-
-        quadrotor.py uses Euler angles for its rotation functions. This module uses quaternions to handle
-        rotation in order to avoid the singularity at +-90 degrees pitch. This means that this module uses
-        a different state space to quadrotor.py:
-
-        xyz = position x,y,z in the inertial frame
-        q = aircraft quaternion vector [w, x, y, z]
-        uvw = aircraft linear velocity in the body frame
-        pqr = aircraft angular velocity in the body frame
-        uvw_dot = aircraft linear acceleration in the body frame
-        pqr_dot = aircraft angular acceleration in the body fram
-        q_dot = time derivative of aircraft quaternion
+        High fidelity quadrotor simulation using quaternion rotations and a more
+        robust ODE integrator. For a description of the aircraft parameters, please
+        see the config file.
 
         -- Sean Morrison, 2018
     """
@@ -40,7 +13,8 @@ class Quadrotor:
     def __init__(self, params):
         self.mass = params["mass"]
         self.prop_radius = params["prop_radius"]
-        self.max_rpm = params["max_rpm"]
+        self.n_motors = params["n_motors"]
+        self.hov_p = params["hov_p"]
         self.l = params["l"]
         self.Jxx = params["Jxx"]
         self.Jyy = params["Jyy"]
@@ -49,13 +23,19 @@ class Quadrotor:
         self.kq = params["kq"]
         self.kd1 = params["kd1"]
         self.kd2 = params["kd2"]
+        self.g = params["g"]
         self.dt = params["dt"]
-        self.thrust = None
+
+        self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
+        self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
 
         self.J = np.array([[self.Jxx, 0., 0.],
                             [0., self.Jyy, 0.],
                             [0., 0., self.Jzz]])
         self.xyz = np.array([[0.],
+                            [0.],
+                            [0.]])
+        self.zeta = np.array([[0.],
                             [0.],
                             [0.]])
         self.q = np.array([[1.],
@@ -72,7 +52,7 @@ class Quadrotor:
                             [0.],
                             [-9.81]])
         self.rpm = np.array([0.0, 0., 0., 0.])
-
+        
     def set_state(self, xyz, q, uvw, pqr):
         """
             Sets the state space of our vehicle
@@ -113,42 +93,55 @@ class Quadrotor:
     def normalize(self, v):
         return v/np.linalg.norm(v)
 
-    def q_mult(self, q1, q2):
-        w1, x1, y1, z1 = q1[0,0], q1[1,0], q1[2,0], q1[3,0]
-        w2, x2, y2, z2 = q2[0,0], q2[1,0], q2[2,0], q2[3,0]
-        w = w1*w2-x1*x2-y1*y2-z1*z2
-        x = w1*x2+x1*w2+y1*z2-z1*y2
-        y = w1*y2+y1*w2+z1*x2-x1*z2
-        z = w1*z2+z1*w2+x1*y2-y1*x2
-        return np.array([[w], 
-                        [x], 
-                        [y], 
-                        [z]])
+    def Q1(self, p):
+        p0, p1, p2, p3 = p[0,0], p[1,0], p[2,0], p[3,0]
+        x11 = p0**2+p1**2-p2**2-p3**2
+        x12 = 2.*(p1*p2-p0*p3)
+        x13 = 2.*(p1*p3+p0*p2)
+        x21 = 2.*(p1*p2+p0*p3)
+        x22 = p0**2-p1**2+p2**2-p3**2
+        x23 = 2.*(p2*p3-p0*p1)
+        x31 = 2.*(p1*p3-p0*p2)
+        x32 = 2.*(p2*p3+p0*p1)
+        x33 = p0**2-p1**2-p2**2+p3**2
+        return np.array([[x11, x12, x13],
+                        [x21, x22, x23],
+                        [x31, x32, x33]])
+    
+    def q_mult(self, p):
+        p0, p1, p2, p3 = p[0,0], p[1,0], p[2,0], p[3,0]
+        return np.array([[p0, -p1, -p2, -p3],
+                        [p1, p0, -p3, p2],
+                        [p2, p3, p0, -p1],
+                        [p3, -p2, p1, p0]])
+
     
     def q_conjugate(self, q):
-        w, x, y, z = q[0,0], q[1,0], q[2,0], q[3,0]
-        return np.array([[w], 
-                        [-x], 
-                        [-y], 
-                        [-z]])
+        p0, p1, p2, p3 = q[0,0], q[1,0], q[2,0], q[3,0]
+        return np.array([[p0], 
+                        [-p1], 
+                        [-p2], 
+                        [-p3]])
     
-    def axisangle_to_q(self, v, theta):
-        v = self.normalize(v)
-        x, y, z = v[0,0], v[1,0], v[2,0]
-        theta /= 2
-        w = cos(theta)
-        x = x*sin(theta)
-        y = y*sin(theta)
-        z = z*sin(theta)
-        return np.array([[w], 
-                        [x], 
-                        [y], 
-                        [z]])
+    def q_to_euler(self, q):
+        q0, q1, q2, q3 = q
+        phi = atan2(2.*(q0*q1+q2*q3),q0**2-q1**2-q2**2+q3**2)
+        theta = asin(2.*q0*q2-q3*q1)
+        psi = atan2(2.*(q0*q3+q1*q2),q0**2+q1**2-q2**2-q3**2)
+        return np.array([[phi],
+                        [theta],
+                        [psi]])
     
-    def q_to_axisangle(self, q):
-        w, v = q[0,0], q[1:,0]
-        theta = acos(w)*2.0
-        return self.normalize(v), theta
+    def euler_to_q(self, zeta):
+        phi, theta, psi = zeta
+        q0 = cos(phi/2.)*cos(theta/2.)*cos(psi/2.)+sin(phi/2.)*sin(theta/2.)*sin(psi/2.)
+        q1 = sin(phi/2.)*cos(theta/2.)*cos(psi/2.)-cos(phi/2.)*sin(theta/2.)*sin(psi/2.)
+        q2 = cos(phi/2.)*sin(theta/2.)*cos(psi/2.)+sin(phi/2.)*cos(theta/2.)*sin(psi/2.)
+        q3 = cos(phi/2.)*cos(theta/2.)*sin(psi/2.)-sin(phi/2.)*sin(theta/2.)*cos(psi/2.)
+        return np.array([[q0],
+                        [q1],
+                        [q2],
+                        [q3]])
 
     def aero_forces(self):
         """
@@ -162,9 +155,9 @@ class Quadrotor:
             norm = self.uvw/mag
             return -(self.kd1*mag**2)*norm
 
-    def aero_torques(self):
+    def aero_moments(self):
         """
-            Calculates drag in the body xyz axis due to angular velocity
+            Models aero moments in the body xyz axis as a function of angular velocity
         """
 
         mag = np.linalg.norm(self.pqr)
@@ -176,22 +169,24 @@ class Quadrotor:
 
     def thrust_forces(self, rpm):
         """
-            Calculates thrust forces in the body xyz axis
+            Calculates thrust forces in the body xyz axis (E-N-U)
         """
-
-        f_body_x, f_body_y = 0, 0
-        f_body_z = np.sum(self.thrust)
+        
+        thrust = self.kt*rpm**2
+        f_body_x, f_body_y = 0., 0.
+        f_body_z = np.sum(thrust)
         return np.array([[f_body_x],
                         [f_body_y],
                         [f_body_z]])
     
-    def thrust_torques(self, rpm):
+    def thrust_moments(self, rpm):
         """
-            Calculates torques about the body xyz axis due to motor thrust and torque
+            Calculates moments about the body xyz axis due to motor thrust and torque
         """
 
-        t_body_x = self.l*(self.thrust[1]-self.thrust[3])
-        t_body_y = self.l*(self.thrust[2]-self.thrust[0])
+        thrust = self.kt*rpm**2
+        t_body_x = self.l*(thrust[1]-thrust[3])
+        t_body_y = self.l*(thrust[2]-thrust[0])
         motor_torques = self.kq*rpm**2
         t_body_z = -motor_torques[0]+motor_torques[1]-motor_torques[2]+motor_torques[3]
         return np.array([[t_body_x],
@@ -200,40 +195,40 @@ class Quadrotor:
     
     def step(self, rpm, return_acceleration=False):
         """
-            Semi-implicit Euler update of the non-linear equations of motion. Use the
-            matrix form since it's much nicer to work with. Our two equations are:
-            
-            v_dot = F_b/m + R1^{-1}G_i - omega x v
-            omega_dot = J^{-1}[Q_b - omega x v]
-
-            Where F_b are the external body forces (thrust+drag) in the body frame, m 
-            is the mass of the vehicle, R1^{-1} is the inverse of matrix R1 (since R1
-            rotates the body frame to the inertial frame, the inverse rotates the inertial
-            to the body frame), G_i is the gravity vector in the inertial frame (0,0,-9.81),
-            omega is the angular velocity, v is the velocity, J is the inertia matrix, and
-            Q_b are the external moments about the body axes system (motor thrust, motor
-            torque, and aerodynamic moments).
-
-            In some cases we may want to return the acceleration, though the default is False.
+            WIP
         """
         
-        rpm[rpm < 0] = 0
-        rpm[rpm > self.max_rpm] = self.max_rpm
-        self.thrust = self.kt*rpm**2
-        fm = self.thrust_forces(rpm)
-        tm = self.thrust_torques(rpm)
+        rpm = np.clip(rpm, 0., self.max_rpm)
+        
+        # thrust forces and moments, aerodynamic forces and moments
+        ft = self.thrust_forces(rpm)
+        mt = self.thrust_moments(rpm)
         fa = self.aero_forces()
-        ta = self.aero_torques()
-        Jw = self.J.dot(self.pqr)
-        uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr,self.uvw,axis=0)
-        pqr_dot = np.linalg.inv(self.J).dot(((tm+ta)-np.cross(self.pqr,Jw,axis=0)))
+        ma = self.aero_moments()
+
+        # calc angular momentum
+        H = self.J.dot(self.pqr)
+        
+        # rotate gravity vector from inertial frame to body frame
+        g_b = self.Q1(self.q).dot(self.g)
+
+        # linear and angular accelerations
+        uvw_dot = (ft+fa)/self.mass+g_b-np.cross(self.pqr, self.uvw, axis=0)
+        pqr_dot = np.linalg.inv(self.J).dot(((mt+ma)-np.cross(self.pqr, H, axis=0)))
+        
+        # forward Euler update of linear and angular velocity
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt
-        xyz_dot = r1.dot(self.uvw)
-        q_dot = r2.dot(self.pqr)
+        
+        # backwards update of q_dot. We need to normalize to ensure unit quaternion
+        p_pqr = np.vstack((np.array([[0]]), self.pqr))
+        q_dot = -0.5*self.q_mult(self.q).dot(p_pqr)
+        self.q = self.normalize(self.q+q_dot*self.dt)
+
+        # backwards update of xyz_dot, update Euler angles
+        xyz_dot = self.Q1(self.q_conjugate(self.q)).dot(self.uvw)
         self.xyz += xyz_dot*self.dt
-        self.q += q_dot*self.dt
-        self.q = self.normalize(self.q)
+        self.zeta = self.q_to_euler(self.q)
         if not return_acceleration:
             return self.xyz, self.q, self.uvw, self.pqr
         else:    

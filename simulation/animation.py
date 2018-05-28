@@ -21,6 +21,17 @@ class Visualization:
         self.p3 += np.array([[-self.l, 0.0, 0.0] for x in range(n+1)])
         self.p4 += np.array([[0.0, self.l, 0.0] for x in range(n+1)])
 
+        self.x_i = np.array([[1.],
+                            [0.],
+                            [0.]])
+        self.y_i = np.array([[0.],
+                            [1.],
+                            [0.]])
+        self.z_i = np.array([[0.],
+                            [0.],
+                            [1.]])
+
+
     def draw3d(self, ax):
         xyz, R = self.aircraft.xyz, self.aircraft.R1(self.aircraft.zeta).T
         
@@ -35,7 +46,38 @@ class Visualization:
         p3 = np.einsum('ij,kj->ik', self.p3, R.T)
         p4 = np.einsum('ij,kj->ik', self.p4, R.T)
 
-        # shift to 
+        # shift to z
+        p1 = np.matlib.repmat(xyz.T,self.n+1,1)+p1
+        p2 = np.matlib.repmat(xyz.T,self.n+1,1)+p2
+        p3 = np.matlib.repmat(xyz.T,self.n+1,1)+p3
+        p4 = np.matlib.repmat(xyz.T,self.n+1,1)+p4
+
+        # plot rotated 
+        ax.plot(p1[:,0], p1[:,1], p1[:,2],'k')
+        ax.plot(p2[:,0], p2[:,1], p2[:,2],'k')
+        ax.plot(p3[:,0], p3[:,1], p3[:,2],'k')
+        ax.plot(p4[:,0], p4[:,1], p4[:,2],'k')
+
+    def draw3d_quat(self, ax):
+        xyz = self.aircraft.xyz
+        Q = self.aircraft.Q1(self.aircraft.q_conjugate(self.aircraft.q))
+
+        x_b = Q.dot(self.x_i).T
+        y_b = Q.dot(self.y_i).T
+        z_b = Q.dot(self.z_i).T
+
+        ax.scatter(xyz[0,0], xyz[1,0], xyz[2,0], color='black')
+        ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], x_b[0,0], x_b[0,1], x_b[0,2], pivot='tail', color='red')
+        ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], y_b[0,0], y_b[0,1], y_b[0,2], pivot='tail', color='green')
+        ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], z_b[0,0], z_b[0,1], z_b[0,2], pivot='tail', color='blue')
+
+        # rotate to aircraft attitude
+        p1 = np.einsum('ij,kj->ik', self.p1, Q)
+        p2 = np.einsum('ij,kj->ik', self.p2, Q)
+        p3 = np.einsum('ij,kj->ik', self.p3, Q)
+        p4 = np.einsum('ij,kj->ik', self.p4, Q)
+
+        # shift to z
         p1 = np.matlib.repmat(xyz.T,self.n+1,1)+p1
         p2 = np.matlib.repmat(xyz.T,self.n+1,1)+p2
         p3 = np.matlib.repmat(xyz.T,self.n+1,1)+p3

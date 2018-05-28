@@ -1,6 +1,6 @@
 import simulation.quadrotor as quad
 import simulation.config as cfg
-import models.one_step as model
+import models.one_step_acceleration as model
 import math
 from math import pi
 import numpy as np

@@ -7,13 +7,17 @@ import scipy.optimize as opt
 from math import pi
 
 class PID_Controller:
-    def __init__(self, aircraft, p_gain, i_gain, d_gain):
+    def __init__(self, aircraft, gains):
         self.aircraft = aircraft
-        self.p_gain = p_gain
-        self.i_gain = i_gain
-        self.d_gain = d_gain
-        self.last_error = 0.
-        self.i_error = 0.
+        self.p_lin = gains.linear.p
+        self.i_lin = gains.linear.i
+        self.d_lin = gains.linear.d
+        self.p_ang = gains.angular.p
+        self.i_ang = gains.angular.i
+        self.d_ang = gains.angular.d
+        self.last_lin_error = 0.
+        self.lin_i_error = 0.
+        self.ang_i_error = 0.
         
         self.kt = aircraft.kt
         self.kq = aircraft.kq
@@ -25,41 +29,31 @@ class PID_Controller:
         self.min_rpm = 0.
         self.max_rpm = aircraft.max_rpm
     
-    def compute(self, state, target):
+    def compute_lin_pid(self, state, target):
         error = target-state
         p_error = error
-        self.i_error += (error + self.last_error)*self.dt
-        i_error = self.i_error
-        d_error = (error-self.last_error)/self.dt
+        self.lin_i_error += (error + self.last_lin_error)*self.dt
+        d_error = (error-self.last_lin_error)/self.dt
         p_output = self.p_gain*p_error
-        i_output = self.i_gain*i_error
+        i_output = self.i_gain*self.lin_i_error
         d_output = self.d_gain*d_error
-        self.last_error = error
+        self.last_lin_error = error
+        return p_output+i_output+d_output
+    
+    def compute_ang_pid(self, state, target)
+        error = target-state
+        p_error = error
+        self.ang_i_error += (error + self.last_ang_error)*self.dt
+        d_error = (error-self.last_ang_error)/self.dt
+        p_output = self.p_gain*p_error
+        i_output = self.i_gain*self.ang_i_error
+        d_output = self.d_gain*d_error
+        self.last_ang_error = error
         return p_output+i_output+d_output
     
     def action(self, state, target):
         u = -self.compute(state, target)
-        print(self.max_rpm)
-        print(self.hov_rpm)
-        print(u)
-        input("Press any key")
-        bnds = ((self.min_rpm, self.max_rpm),
-                (self.min_rpm, self.max_rpm),
-                (self.min_rpm, self.max_rpm),
-                (self.min_rpm, self.max_rpm))
-        x0 = np.array([self.hov_rpm, self.hov_rpm, self.hov_rpm, self.hov_rpm])
-        rpm = opt.minimize(self.cost, x0, args=(u, state), method='L-BFGS-B', bounds=bnds)
-        print(rpm)
-        return rpm.x
-    
-    def cost(self, rpm, req_torques, state):
-        torques = self.aircraft.thrust_torques(rpm)
-        thrust = self.aircraft.thrust_forces(rpm)
-        thrust_i = self.aircraft.R1(state).dot(thrust)
-        mg = self.mass*self.g
-        torque_cost = -0.5*(req_torques-torques)**2
-        hover_cost = -0.5*(thrust_i-mg)**2
-        return np.sum(torque_cost)#+hover_cost)
+        return None
 
 def terminal(xyz, zeta, uvw, pqr):
     mask1 = zeta > pi/2.
@@ -101,7 +95,13 @@ def main():
     zeta_init = goal_zeta+eps
     iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
     xyz, zeta, uvw, pqr = iris.get_state()
-    controller = PID_Controller(iris, 0.025, 0.015, 0.025)
+    gains = {"linear":{"p": 1.,
+                        "i": 1.,
+                        "d": 1.},
+            "angular":{"p": 1.,
+                        "i": 1.,
+                        "d": 1.}}
+    controller = PID_Controller(iris, gains)
 
     counter = 0
     frames = 100

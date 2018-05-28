@@ -133,9 +133,9 @@ class Quadrotor:
     def R2(self, zeta):
         """
             Euler rates rotation matrix converting body frame angular velocities 
-            to the inertial frame. This uses the East-North-Up axis convention, which 
-            is why it looks different to the matrix you will find in most aircraft
-            dynamics textbooks (which use an N-E-D system).
+            to the inertial frame. This uses the East-North-Up axis convention, so 
+            it looks a bit different to the rates matrix in most aircraft dynamics
+            textbooks (which use an N-E-D system).
         """
 
         theta = zeta[1,0]
@@ -158,9 +158,9 @@ class Quadrotor:
             norm = self.uvw/mag
             return -(self.kd1*mag**2)*norm
 
-    def aero_torques(self):
+    def aero_moments(self):
         """
-            Calculates drag in the body xyz axis (E-N-U) due to angular velocity
+            Models aero moments about the body xyz axis (E-N-U) as a function of angular velocity
         """
 
         mag = np.linalg.norm(self.pqr)
@@ -184,9 +184,9 @@ class Quadrotor:
                         [f_body_y],
                         [f_body_z]])
     
-    def thrust_torques(self, rpm):
+    def thrust_moments(self, rpm):
         """
-            Calculates torques about the body xyz axis due to motor thrust and torque
+            Calculates moments about the body xyz axis due to motor thrust and torque
         """
 
         thrust = self.kt*rpm**2
@@ -230,29 +230,18 @@ class Quadrotor:
 
             x_{t+1} ~ x_{t}+h*x_dot_{t}
 
-            Where h is the time step. We can make this update semi-implicit by updating linear 
-            and angular velocities using a forward Euler step, and then updating position and
+            Where h is the time step. This update is semi-implicit since it updates linear 
+            and angular velocities using a forward Euler step, and then updates position and
             attitude using v_{t+1} and omega_{t+1} (as opposed to using v_{t} and omega_{t}).
-            This has the benefit of being more numerically stable. An even better method would
-            be to use leapfrog integration to mitigate energy drift, and give ourselves the
-            ability to run the simulation in reverse. More advanced solvers are available, but
-            I'll leave that to others -- this is good enough for my needs.
-
-            Another potential source of error is the singularity at pitch 90 degrees. As theta
-            approaches pi, the rotation matrices start to break down, and numerical errors build
-            up. There's no way to fix this without the introduction of a fourth variable. That is, 
-            we would need to use quaternions, and recover angles using the axis-angle representation.
-            I'm in the process of implementing this in quadrotor2.py, though it's not currently a
-            high priority.
         """
         
         rpm = np.clip(rpm, 0., self.max_rpm)
         r1 = self.R1(self.zeta)
         r2 = self.R2(self.zeta)
         fm = self.thrust_forces(rpm)
-        tm = self.thrust_torques(rpm)
+        tm = self.thrust_moments(rpm)
         fa = self.aero_forces()
-        ta = self.aero_torques()
+        ta = self.aero_moments()
         H = self.J.dot(self.pqr)
         uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr, self.uvw, axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(tm+ta-np.cross(self.pqr, H, axis=0))

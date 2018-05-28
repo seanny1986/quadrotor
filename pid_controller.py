@@ -38,27 +38,19 @@ class PID_Controller:
         return p_output+i_output+d_output
     
     def action(self, state, target):
-        u = self.compute(state, target)
-        req_torques = -self.J.dot(u)
-        print(req_torques)
-        input("Press any key")
+        u = -self.compute(state, target)
         bnds = ((self.min_rpm, self.max_rpm),
                 (self.min_rpm, self.max_rpm),
                 (self.min_rpm, self.max_rpm),
                 (self.min_rpm, self.max_rpm))
         x0 = np.array([self.hov_rpm, self.hov_rpm, self.hov_rpm, self.hov_rpm])
-        rpm = opt.minimize(self.cost, x0, args=(req_torques, state),method='L-BFGS-B', bounds=bnds)
-        print(rpm)
+        rpm = opt.minimize(self.cost, x0, args=(u, state), method='L-BFGS-B', bounds=bnds)
         return rpm.x
     
     def cost(self, rpm, req_torques, state):
         torques = self.aircraft.thrust_torques(rpm)
-        thrust = self.aircraft.thrust_forces(rpm)
-        thrust_i = self.aircraft.R1(state).dot(thrust)
-        mg = self.mass*self.g
-        torque_cost = np.mean((req_torques-torques)**2)
-        hover_cost = (thrust_i[2,0]-mg[2,0])**2
-        return torque_cost+hover_cost
+        torque_cost = -0.5*(req_torques-torques)**2
+        return np.sum(torque_cost)
 
 def terminal(xyz, zeta, uvw, pqr):
     mask1 = zeta > pi/2.
@@ -100,7 +92,7 @@ def main():
     zeta_init = goal_zeta+eps
     iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
     xyz, zeta, uvw, pqr = iris.get_state()
-    controller = PID_Controller(iris, 0.5, 0.5, 0.5)
+    controller = PID_Controller(iris, 0.025, 0.015, 0.025)
 
     counter = 0
     frames = 100
@@ -129,7 +121,6 @@ def main():
         if done:
             print("Resetting vehicle")
             iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
-            xyz, zeta, uvw, pqr = iris.get_state()
             t = 0
             counter = 0
             done = False

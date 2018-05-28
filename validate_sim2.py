@@ -16,7 +16,7 @@ def main():
     time = np.linspace(0, T, T/iris.dt)
     hover_rpm = iris.hov_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    vis = ani.Visualization(iris, 10)
+    vis = ani.Visualization(iris, 10, quaternion=True)
 
     counter = 0
     frames = 100
@@ -37,7 +37,7 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        rpm += np.array([0.25, 0., 0., 0.])
+        rpm += np.array([0., 0., 0., 0.25])
 
 if __name__ == "__main__":
     main()

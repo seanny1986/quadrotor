@@ -3,8 +3,8 @@ from math import sin, cos, acos, sqrt, atan2, asin
 
 class Quadrotor:
     """
-        High fidelity quadrotor simulation using quaternion rotations and a more
-        robust ODE integrator. For a description of the aircraft parameters, please
+        Higher fidelity quadrotor simulation using quaternion rotations and a second
+        order ODE integrator. For a description of the aircraft parameters, please
         see the config file.
 
         -- Sean Morrison, 2018
@@ -38,10 +38,6 @@ class Quadrotor:
         self.zeta = np.array([[0.],
                             [0.],
                             [0.]])
-        self.q = np.array([[1.],
-                            [0.],
-                            [0.],
-                            [0.]])
         self.uvw = np.array([[0.],
                             [0.],
                             [0.]])
@@ -50,8 +46,18 @@ class Quadrotor:
                             [0.]])
         self.g = np.array([[0.],
                             [0.],
-                            [-9.81]])
+                            [0.],
+                            [-self.g]])
+        self.uvw_q = np.array([[0.],
+                                [0.],
+                                [0.],
+                                [0.]])
+        self.pqr_q = np.array([[0.],
+                                [0.],
+                                [0.],
+                                [0.]])
         self.rpm = np.array([0.0, 0., 0., 0.])
+        self.q = self.euler_to_q(self.zeta)
         
     def set_state(self, xyz, q, uvw, pqr):
         """
@@ -89,50 +95,61 @@ class Quadrotor:
                             [0.]]) 
         self.rpm = np.array([0., 0., 0., 0.])
         return self.get_state()
-    
-    def normalize(self, v):
-        return v/np.linalg.norm(v)
 
-    def Q1(self, p):
-        p0, p1, p2, p3 = p[0,0], p[1,0], p[2,0], p[3,0]
-        x11 = p0**2+p1**2-p2**2-p3**2
-        x12 = 2.*(p1*p2-p0*p3)
-        x13 = 2.*(p1*p3+p0*p2)
-        x21 = 2.*(p1*p2+p0*p3)
-        x22 = p0**2-p1**2+p2**2-p3**2
-        x23 = 2.*(p2*p3-p0*p1)
-        x31 = 2.*(p1*p3-p0*p2)
-        x32 = 2.*(p2*p3+p0*p1)
-        x33 = p0**2-p1**2-p2**2+p3**2
-        return np.array([[x11, x12, x13],
-                        [x21, x22, x23],
-                        [x31, x32, x33]])
+    def q_norm(self, v):
+        """
+            Quaternion rotations rely on a unit quaternion. To ensure
+            this is the case, we normalize here.
+        """
+
+        return v/np.linalg.norm(v)
     
     def q_mult(self, p):
+        """
+            One way to compute the Hamilton product is usin Q(p)q, where Q(p) is
+            the below 4x4 matrix, and q is a 4x1 quaternion. I decided not to do
+            the full multiplication here, and instead return Q(p).  
+        """
+
         p0, p1, p2, p3 = p[0,0], p[1,0], p[2,0], p[3,0]
         return np.array([[p0, -p1, -p2, -p3],
                         [p1, p0, -p3, p2],
                         [p2, p3, p0, -p1],
                         [p3, -p2, p1, p0]])
 
-    
-    def q_conjugate(self, q):
-        p0, p1, p2, p3 = q[0,0], q[1,0], q[2,0], q[3,0]
-        return np.array([[p0], 
-                        [-p1], 
-                        [-p2], 
-                        [-p3]])
+    def q_conj(self, q):
+        """
+            Returns the conjugate of quaternion q. q* = q'/|q|, where q is the
+            magnitude, and q' is the inverse [p0, -p1, -p2, -p3]^T. Since we
+            always normalize after updating q, we should always have a unit
+            quaternion. This means we don't have to normalize in this routine.
+        """
+
+        p0, p1, p2, p3 = q
+        return np.array([p0, 
+                        -p1, 
+                        -p2, 
+                        -p3])
     
     def q_to_euler(self, q):
+        """
+            Convert quaternion q to a set of angles zeta. We do all of the heavy
+            lifting with quaternions, and then return the Euler angles since they
+            are more intuitive.
+        """
         q0, q1, q2, q3 = q
         phi = atan2(2.*(q0*q1+q2*q3),q0**2-q1**2-q2**2+q3**2)
         theta = asin(2.*q0*q2-q3*q1)
         psi = atan2(2.*(q0*q3+q1*q2),q0**2+q1**2-q2**2-q3**2)
-        return np.array([[phi],
-                        [theta],
-                        [psi]])
+        return np.array([phi,
+                        theta,
+                        psi])
     
     def euler_to_q(self, zeta):
+        """
+            Converts a set of Euler angles to a quaternion. We do this at the very
+            start, since we initialize the vehicle with Euler angles zeta.
+        """
         phi, theta, psi = zeta
         q0 = cos(phi/2.)*cos(theta/2.)*cos(psi/2.)+sin(phi/2.)*sin(theta/2.)*sin(psi/2.)
         q1 = sin(phi/2.)*cos(theta/2.)*cos(psi/2.)-cos(phi/2.)*sin(theta/2.)*sin(psi/2.)
@@ -195,7 +212,8 @@ class Quadrotor:
     
     def step(self, rpm, return_acceleration=False):
         """
-            WIP
+            Updating the EOMs using a second order leapfrog integration (kick-drift-kick
+            form) with quaternion rotations. 
         """
         
         rpm = np.clip(rpm, 0., self.max_rpm)
@@ -209,27 +227,32 @@ class Quadrotor:
         # calc angular momentum
         H = self.J.dot(self.pqr)
         
-        # rotate gravity vector from inertial frame to body frame
-        g_b = self.Q1(self.q).dot(self.g)
+        # rotate gravity vector from inertial frame to body frame using qpq^-1
+        Q = self.q_mult(self.q)
+        Q_inv = self.q_conj(self.q)
+        g_b = Q.dot(self.q_mult(self.g).dot(Q_inv))[1:]
 
-        # linear and angular accelerations
+        # linear and angular accelerations due to thrust and aerodynamic effects
         uvw_dot = (ft+fa)/self.mass+g_b-np.cross(self.pqr, self.uvw, axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(((mt+ma)-np.cross(self.pqr, H, axis=0)))
         
-        # forward Euler update of linear and angular velocity
-        self.uvw += uvw_dot*self.dt
-        self.pqr += pqr_dot*self.dt
-        
-        # backwards update of q_dot. We need to normalize to ensure unit quaternion
-        p_pqr = np.vstack((np.array([[0]]), self.pqr))
-        q_dot = -0.5*self.q_mult(self.q).dot(p_pqr)
-        self.q = self.normalize(self.q+q_dot*self.dt)
+        # kick
+        self.uvw += uvw_dot*self.dt/2.
+        self.pqr += pqr_dot*self.dt/2.
+        self.uvw_q[1:] = self.uvw[:]
+        self.pqr_q[1:] = self.pqr[:]
 
-        # backwards update of xyz_dot, update Euler angles
-        xyz_dot = self.Q1(self.q_conjugate(self.q)).dot(self.uvw)
+        # drift
+        q_dot = -0.5*Q.dot(self.pqr_q)
+        self.q = self.q_norm(self.q+q_dot*self.dt)
+        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw_q).dot(self.q))[1:]
         self.xyz += xyz_dot*self.dt
         self.zeta = self.q_to_euler(self.q)
+
+        # kick
+        self.uvw += uvw_dot*self.dt/2.
+        self.pqr += pqr_dot*self.dt/2.
         if not return_acceleration:
-            return self.xyz, self.q, self.uvw, self.pqr
+            return self.xyz, self.zeta, self.q, self.uvw, self.pqr
         else:    
-            return self.xyz, self.q, self.uvw, self.pqr, xyz_dot, q_dot, uvw_dot, pqr_dot
+            return self.xyz, self.zeta, self.q, self.uvw, self.pqr, xyz_dot, q_dot, uvw_dot, pqr_dot

@@ -21,7 +21,6 @@ def main():
     counter = 0
     frames = 100
     rpm = trim+50
-    c = 0
     for t in time:
         iris.step(rpm)
         if counter%frames == 0:

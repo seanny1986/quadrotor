@@ -104,13 +104,13 @@ class Quadrotor:
         self.rpm = np.array([0., 0., 0., 0.])
         return self.get_state()
 
-    def q_norm(self, v):
+    def q_norm(self, q):
         """
             Quaternion rotations rely on a unit quaternion. To ensure
             this is the case, we normalize here.
         """
 
-        return v/np.linalg.norm(v)
+        return q/np.linalg.norm(q)
     
     def q_mult(self, p):
         """
@@ -133,11 +133,11 @@ class Quadrotor:
             quaternion. This means we don't have to normalize in this routine.
         """
 
-        p0, p1, p2, p3 = q
-        return np.array([p0, 
-                        -p1, 
-                        -p2, 
-                        -p3])
+        q0, q1, q2, q3 = q
+        return np.array([q0, 
+                        -q1, 
+                        -q2, 
+                        -q3])
     
     def q_to_euler(self, q):
         """
@@ -257,6 +257,7 @@ class Quadrotor:
         # drift: x_{i+1} = x_{i}+v_{i+0.5}dt
         q_dot = -0.5*Q.dot(self.pqr_q)
         self.q = self.q_norm(self.q+q_dot*self.dt)
+        Q_inv = self.q_conj(self.q)
         xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw_q).dot(self.q))[1:]
         self.xyz += xyz_dot*self.dt
         self.zeta = self.q_to_euler(self.q)

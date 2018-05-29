@@ -23,7 +23,7 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, neurons=64):
         super(Critic, self).__init__()
         self.affine1 = nn.Linear(state_dim+action_dim, neurons)
-        self.value_head = nn.Linear(neurons, action_dim)
+        self.value_head = nn.Linear(neurons, 1)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))

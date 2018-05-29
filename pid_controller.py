@@ -16,6 +16,7 @@ class PID_Controller:
         self.i_ang = gains.angular.i
         self.d_ang = gains.angular.d
         self.last_lin_error = 0.
+        self.last_ang_error = 0.
         self.lin_i_error = 0.
         self.ang_i_error = 0.
         
@@ -34,26 +35,32 @@ class PID_Controller:
         p_error = error
         self.lin_i_error += (error + self.last_lin_error)*self.dt
         d_error = (error-self.last_lin_error)/self.dt
-        p_output = self.p_gain*p_error
-        i_output = self.i_gain*self.lin_i_error
-        d_output = self.d_gain*d_error
+        p_output = self.p_lin*p_error
+        i_output = self.i_lin*self.lin_i_error
+        d_output = self.d_lin*d_error
         self.last_lin_error = error
         return p_output+i_output+d_output
     
-    def compute_ang_pid(self, state, target)
+    def compute_ang_pid(self, state, target, lin_pid):
         error = target-state
         p_error = error
         self.ang_i_error += (error + self.last_ang_error)*self.dt
         d_error = (error-self.last_ang_error)/self.dt
-        p_output = self.p_gain*p_error
-        i_output = self.i_gain*self.ang_i_error
-        d_output = self.d_gain*d_error
+        p_output = self.p_ang*p_error
+        i_output = self.i_ang*self.ang_i_error
+        d_output = self.d_ang*d_error
         self.last_ang_error = error
         return p_output+i_output+d_output
     
     def action(self, state, target):
-        u = -self.compute(state, target)
-        return None
+        u1 = -self.compute_lin_pid(state.xyz, target.xyz)
+        u2 = -self.compute_ang_pid(state.zeta, target.zeta, u1)
+        throttle = u1[2,0]
+        o1 = throttle+u2[0,0]-u2[2,0]
+        o2 = throttle+u2[1,0]+u2[2,0]
+        o3 = throttle-u2[0,0]-u2[2,0]
+        o4 = throttle-u2[1,0]+u2[2,0]
+        return np.array([o1, o2, o3, o4])
 
 def terminal(xyz, zeta, uvw, pqr):
     mask1 = zeta > pi/2.
@@ -81,6 +88,9 @@ def main():
     goal_zeta = np.array([[0.],
                         [0.],
                         [0.]])
+    goal_xyz = np.array([[0.],
+                        [0.],
+                        [2.]])
     xyz_init = np.array([[0.],
                         [0.],
                         [1.5]])
@@ -101,6 +111,8 @@ def main():
             "angular":{"p": 1.,
                         "i": 1.,
                         "d": 1.}}
+    targets = {"xyz": goal_xyz,
+                "zeta": goal_zeta}
     controller = PID_Controller(iris, gains)
 
     counter = 0
@@ -123,7 +135,9 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        rpm = controller.action(zeta, goal_zeta)
+        states = {"xyz": xyz,
+                "zeta": zeta}
+        rpm = controller.action(states, targets)
         xyz, zeta, uvw, pqr = iris.step(rpm)
         done = terminal(xyz, zeta, uvw, pqr)
         t += iris.dt

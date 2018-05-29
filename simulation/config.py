@@ -11,8 +11,8 @@
         Jzz = the mass moment of inertia about the z-axis (yaw)
         kt = motor thrust coefficient
         kq = motor torque coefficient
-        kd1 = linear drag coefficient
-        kd2 = angular drag coefficient
+        kd = aerodynamic drag coefficient
+        km = aerodynamic moment coefficient
         g = gravitational acceleration (positive in config, corrected in simulated)
         dt = solver time step
     """
@@ -27,7 +27,7 @@ params = {"mass":0.65,
         "Jzz": 1.3-2,
         "kt": 3.13e-5,
         "kq": 7.5e-7,
-        "kd1": 9e-3,
-        "kd2": 9e-4,
+        "kd": 9e-3,
+        "km": 9e-4,
         "g": 9.81,
         "dt": 0.05}

@@ -36,8 +36,8 @@ class Quadrotor:
         self.Jzz = params["Jzz"]
         self.kt = params["kt"]
         self.kq = params["kq"]
-        self.kd1 = params["kd1"]
-        self.kd2 = params["kd2"]
+        self.kd = params["kd"]
+        self.km = params["km"]
         self.g = params["g"]
         self.dt = params["dt"]
 
@@ -156,7 +156,7 @@ class Quadrotor:
                             [0.]])
         else:
             norm = self.uvw/mag
-            return -(self.kd1*mag**2)*norm
+            return -(self.kd*mag**2)*norm
 
     def aero_moments(self):
         """
@@ -170,7 +170,7 @@ class Quadrotor:
                             [0.]])
         else:
             norm = self.pqr/mag
-            return -(self.kd2*mag**2)*norm
+            return -(self.km*mag**2)*norm
 
     def thrust_forces(self, rpm):
         """

@@ -37,22 +37,16 @@ class Quadrotor:
                             [0.]])
         self.uvw = np.array([[0.],
                             [0.],
+                            [0.],
                             [0.]])
         self.pqr = np.array([[0.],
                             [0.],
+                            [0.],
                             [0.]])
-        self.g_q = np.array([[0.],
+        self.G = np.array([[0.],
                             [0.],
                             [0.],
                             [-self.g]])
-        self.uvw_q = np.array([[0.],
-                                [0.],
-                                [0.],
-                                [0.]])
-        self.pqr_q = np.array([[0.],
-                                [0.],
-                                [0.],
-                                [0.]])
         self.rpm = np.array([0.0, 0., 0., 0.])
         self.uvw_dot = np.array([[0.],
                                 [0.],
@@ -73,8 +67,8 @@ class Quadrotor:
         self.xyz = xyz
         self.zeta = zeta
         self.q = self.euler_to_q(zeta)
-        self. uvw = uvw
-        self.pqr = pqr
+        self. uvw[1:] = uvw
+        self.pqr[1:] = pqr
     
     def get_state(self):
         """
@@ -95,10 +89,10 @@ class Quadrotor:
                             [0.],
                             [0.],
                             [0.]])
-        self.uvw = np.array([[0.],
+        self.uvw[1:] = np.array([[0.],
                             [0.],
                             [0.]])
-        self.pqr = np.array([[0.],
+        self.pqr[1:] = np.array([[0.],
                             [0.],
                             [0.]]) 
         self.rpm = np.array([0., 0., 0., 0.])
@@ -175,11 +169,11 @@ class Quadrotor:
             Calculates drag in the body xyz axis due to linear velocity
         """
 
-        mag = np.linalg.norm(self.uvw)
+        mag = np.linalg.norm(self.uvw[:1])
         if mag == 0:
             return np.array([[0.0],[0.0],[0.0]])
         else:
-            norm = self.uvw/mag
+            norm = self.uvw[:1]/mag
             return -(self.kd*mag**2)*norm
 
     def aero_moments(self):
@@ -187,11 +181,11 @@ class Quadrotor:
             Models aero moments in the body xyz axis as a function of angular velocity
         """
 
-        mag = np.linalg.norm(self.pqr)
+        mag = np.linalg.norm(self.pqr[:1])
         if mag == 0:
             return np.array([[0.0],[0.0],[0.0]])
         else:
-            norm = self.pqr/mag
+            norm = self.pqr[:1]/mag
             return -(self.km*mag**2)*norm
 
     def thrust_forces(self, rpm):
@@ -228,6 +222,7 @@ class Quadrotor:
             at pitch +-90 degrees.
         """
         
+        # clip rpm values
         rpm = np.clip(rpm, 0., self.max_rpm)
         
         # thrust forces and moments, aerodynamic forces and moments
@@ -237,37 +232,35 @@ class Quadrotor:
         ma = self.aero_moments()
 
         # calc angular momentum
-        H = self.J.dot(self.pqr)
+        H = self.J.dot(self.pqr[1:])
         
         # rotate gravity vector from inertial frame to body frame using qpq^-1
         Q = self.q_mult(self.q)
         Q_inv = self.q_conj(self.q)
-        g_b = Q.dot(self.q_mult(self.g_q).dot(Q_inv))[1:]
+        g_b = Q.dot(self.q_mult(self.G).dot(Q_inv))[1:]
 
         # linear and angular accelerations due to thrust and aerodynamic effects
-        uvw_dot = (ft+fa)/self.mass+g_b-np.cross(self.pqr, self.uvw, axis=0)
-        pqr_dot = np.linalg.inv(self.J).dot(((mt+ma)-np.cross(self.pqr, H, axis=0)))
+        uvw_dot = (ft+fa)/self.mass+g_b-np.cross(self.pqr[1:], self.uvw[1:], axis=0)
+        pqr_dot = np.linalg.inv(self.J).dot(((mt+ma)-np.cross(self.pqr[1:], H, axis=0)))
         
         # kick: v_{i+0.5} = v_{i}+a_{i}dt/2
-        self.uvw += self.uvw_dot*self.dt/2.
-        self.pqr += self.pqr_dot*self.dt/2.
-        self.uvw_q[1:] = self.uvw[:]
-        self.pqr_q[1:] = self.pqr[:]
-
+        self.uvw[1:] += self.uvw_dot*self.dt/2.
+        self.pqr[1:] += self.pqr_dot*self.dt/2.
+        
         # drift: x_{i+1} = x_{i}+v_{i+0.5}dt
-        q_dot = -0.5*Q.dot(self.pqr_q)
+        q_dot = -0.5*Q.dot(self.pqr)
         self.q = self.q_norm(self.q+q_dot*self.dt)
         Q_inv = self.q_conj(self.q)
-        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw_q).dot(self.q))[1:]
+        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw).dot(self.q))[1:]
         self.xyz += xyz_dot*self.dt
         self.zeta = self.q_to_euler(self.q)
 
         # kick: v_{i+1} = v_{i+0.5}+a_{i+1}dt/2
-        self.uvw += uvw_dot*self.dt/2.
-        self.pqr += pqr_dot*self.dt/2.
+        self.uvw[1:] += uvw_dot*self.dt/2.
+        self.pqr[1:] += pqr_dot*self.dt/2.
         self.uvw_dot = uvw_dot
         self.pqr_dot = pqr_dot
         if not return_acceleration:
-            return self.xyz, self.zeta, self.q, self.uvw, self.pqr
+            return self.xyz, self.zeta, self.q, self.uvw[:1], self.pqr[:1]
         else:    
-            return self.xyz, self.zeta, self.q, self.uvw, self.pqr, xyz_dot, q_dot, uvw_dot, pqr_dot
+            return self.xyz, self.zeta, self.q, self.uvw[:1], self.pqr[:1], xyz_dot, q_dot, uvw_dot, pqr_dot

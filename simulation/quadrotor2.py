@@ -75,7 +75,7 @@ class Quadrotor:
             Returns the current state space
         """
 
-        return self.xyz, self.zeta, self.q, self.uvw, self.pqr
+        return self.xyz, self.zeta, self.q, self.uvw[1:], self.pqr[1:]
     
     def reset(self):
         """
@@ -144,9 +144,9 @@ class Quadrotor:
         phi = atan2(2.*(q0*q1+q2*q3),q0**2-q1**2-q2**2+q3**2)
         theta = asin(2.*q0*q2-q3*q1)
         psi = atan2(2.*(q0*q3+q1*q2),q0**2+q1**2-q2**2-q3**2)
-        return np.array([phi,
-                        theta,
-                        psi])
+        return np.array([[phi],
+                        [theta],
+                        [psi]])
     
     def euler_to_q(self, zeta):
         """
@@ -265,6 +265,6 @@ class Quadrotor:
         self.uvw_dot = uvw_dot
         self.pqr_dot = pqr_dot
         if not return_acceleration:
-            return self.xyz, self.zeta, self.q, self.uvw[:1], self.pqr[:1]
+            return self.xyz, self.zeta, self.q, self.uvw[1:], self.pqr[1:]
         else:    
-            return self.xyz, self.zeta, self.q, self.uvw[:1], self.pqr[:1], xyz_dot, q_dot, uvw_dot, pqr_dot
+            return self.xyz, self.zeta, self.q, self.uvw[1:], self.pqr[1:], xyz_dot, q_dot, uvw_dot, pqr_dot

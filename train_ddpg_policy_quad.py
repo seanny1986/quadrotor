@@ -38,12 +38,12 @@ hidden_dim = 32
 
 params = cfg.params
 iris = quad.Quadrotor(params)
-hover_thrust = iris.mass*9.81/4.0
-hover_rpm = sqrt(hover_thrust/iris.kt)
+hover_rpm = iris.hov_rpm
 trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
 action_bound = iris.max_rpm
+dt = iris.dt
 T = 15
-steps = int(T/iris.dt)
+steps = int(T/dt)
 
 actor = ddpg.Actor(state_dim, action_dim)
 target_actor = ddpg.Actor(state_dim, action_dim)
@@ -58,7 +58,7 @@ noise = OUNoise(action_dim)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 
-goal = Tensor([[0., 0., 3.], 
+goal = Tensor([[0., 0., 0.], 
                 [0., 0., 0.]])
 
 vis = ani.Visualization(iris, 10)
@@ -98,7 +98,7 @@ def main():
                 axis3d.set_xlabel('West/East [m]')
                 axis3d.set_ylabel('South/North [m]')
                 axis3d.set_zlabel('Down/Up [m]')
-                axis3d.set_title("Time %.3f s" %t)
+                axis3d.set_title("Time %.3f s" %(t*dt))
                 pl.pause(0.001)
                 pl.draw()
             if ep < args.warmup:
@@ -127,7 +127,7 @@ def main():
                 uvw_dot = uvw_dot.cuda()
                 pqr_dot = pqr_dot.cuda()
             next_state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
-            r = reward(xyz, zeta)+100.-(uvw_dot.pow(2).sum()+pqr_dot.pow(2).sum())/1e4-action.pow(2).sum()/1e6
+            r = reward(xyz, zeta)-(uvw_dot.pow(2).sum()+pqr_dot.pow(2).sum())/1e4-action.pow(2).sum()/1e6
             running_reward += r
             memory.push(state.squeeze(0), action.squeeze(0), next_state.squeeze(0), r.unsqueeze(0))
             if ep >= args.warmup:

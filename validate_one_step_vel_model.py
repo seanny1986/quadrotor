@@ -1,5 +1,6 @@
 import torch
 import simulation.quadrotor as quad
+import simulation.animation as ani
 import simulation.config as cfg
 import math
 import numpy as np
@@ -9,9 +10,18 @@ import matplotlib.style as style
 style.use("seaborn-deep")
 
 cuda = True
+if cuda:
+    Tensor = torch.cuda.FloatTensor
+else:
+    Tensor = torch.nn.Tensor
 
 def main():
     
+    plt.close("all")
+    plt.ion()
+    fig = plt.figure(0)
+    axis3d = fig.add_subplot(111, projection='3d')
+
     print("=> Loading one_step_vel.pth.tar")
     dyn = torch.load("/home/seanny/quadrotor/models/one_step.pth.tar")
 
@@ -19,15 +29,17 @@ def main():
     params = cfg.params
     iris = quad.Quadrotor(params)
     hover_rpm = iris.hov_rpm
-    trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
+    trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])+50.
+    dt = iris.dt
     H = 1.5
-    steps = int(H/iris.dt)
+    steps = int(H/dt)
+    vis = ani.Visualization(iris, 10)
 
     print("HOVER RPM: ", trim)
     input("Press to continue")
     
     xyz, zeta, uvw, pqr = iris.get_state()
-    action = trim+50
+    action = trim
     xyz_nn = xyz.reshape((1,-1))
     zeta_nn = zeta.reshape((1,-1))
     uvw_nn = uvw.reshape((1,-1))
@@ -35,10 +47,10 @@ def main():
     action_nn = action.reshape((1,-1))
 
     xyz_nn = torch.from_numpy(xyz_nn).float()
-    zeta_nn = torch.from_numpy(zeta_nn).float()/dyn.zeta_norm
-    uvw_nn = torch.from_numpy(uvw_nn).float()/dyn.uvw_norm
-    pqr_nn = torch.from_numpy(pqr_nn).float()/dyn.pqr_norm
-    action_nn = torch.from_numpy(action_nn).float()/dyn.action_norm
+    zeta_nn = torch.from_numpy(zeta_nn).float()
+    uvw_nn = torch.from_numpy(uvw_nn).float()
+    pqr_nn = torch.from_numpy(pqr_nn).float()
+    action_nn = torch.from_numpy(action_nn).float()
     
     if cuda:
         xyz_nn = xyz_nn.cuda()
@@ -51,17 +63,36 @@ def main():
     data_actual = []
     time = []
 
-    for i in range(0,steps):
+    increment = np.array([0., 0., 0., 0.25])
+    counter = 0
+    frames = 100
+    for i in range(steps):
         data_nn.append(xyz_nn.tolist()[0])
         data_actual.append(xyz.reshape((1,-1)).tolist()[0])
         time.append(i*dt)
         state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
         state_action = torch.cat([state, action_nn],dim=1)
-        xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, iris.dt)
+        xyz_nn, zeta_nn, uvw_nn, pqr_nn = dyn.transition(xyz_nn, state_action, dt)
         xyz, zeta, uvw, pqr = iris.step(action)
-        zeta_nn = zeta_nn/dyn.zeta_norm
-        uvw_nn = uvw_nn/dyn.uvw_norm
-        pqr_nn = pqr_nn/dyn.pqr_norm
+        if counter%frames == 0:
+            plt.figure(0)
+            axis3d.cla()
+            vis.draw3d(axis3d)
+            axis3d.set_xlim(-3, 3)
+            axis3d.set_ylim(-3, 3)
+            axis3d.set_zlim(0, 6)
+            axis3d.set_xlabel('West/East [m]')
+            axis3d.set_ylabel('South/North [m]')
+            axis3d.set_zlabel('Down/Up [m]')
+            axis3d.set_title("Time %.3f s" %(i*dt))
+            plt.pause(0.001)
+            plt.draw()
+        action += increment
+        action_nn = torch.from_numpy(action).float()
+        action_nn = action_nn.reshape((1,-1))
+        if cuda:
+            action_nn = action_nn.cuda()
+
     
     print("=> Plotting trajectory")
 
@@ -74,9 +105,9 @@ def main():
     ax1.set_ylabel("X (m)")
     ax2.set_ylabel("Y (m)")
     ax3.set_ylabel("Z (m)")
-    ax1.set_ylim([-3, 3])
-    ax2.set_ylim([-3, 3])
-    ax3.set_ylim([-3, 3])
+    ax1.set_ylim([-0.5, 0.5])
+    ax2.set_ylim([-0.5, 0.5])
+    ax3.set_ylim([-0.5, 0.5])
     fig1.subplots_adjust(hspace=0.3)
     fig1.subplots_adjust(wspace=0.3)
 

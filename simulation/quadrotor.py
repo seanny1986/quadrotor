@@ -61,7 +61,7 @@ class Quadrotor:
         self.pqr = np.array([[0.],
                             [0.],
                             [0.]])
-        self.g = np.array([[0.],
+        self.G = np.array([[0.],
                             [0.],
                             [-self.g]])
         self.rpm = np.array([0.0, 0., 0., 0.])
@@ -72,10 +72,10 @@ class Quadrotor:
             Sets the state space of our vehicle
         """
 
-        self.xyz = xyz
-        self.zeta = zeta
-        self. uvw = uvw
-        self.pqr = pqr
+        self.xyz = xyz.copy()
+        self.zeta = zeta.copy()
+        self. uvw = uvw.copy()
+        self.pqr = pqr.copy()
     
     def get_state(self):
         """
@@ -243,7 +243,7 @@ class Quadrotor:
         fa = self.aero_forces()
         ta = self.aero_moments()
         H = self.J.dot(self.pqr)
-        uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.g)-np.cross(self.pqr, self.uvw, axis=0)
+        uvw_dot = (fm+fa)/self.mass+r1.T.dot(self.G)-np.cross(self.pqr, self.uvw, axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(tm+ta-np.cross(self.pqr, H, axis=0))
         self.uvw += uvw_dot*self.dt
         self.pqr += pqr_dot*self.dt

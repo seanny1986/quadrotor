@@ -12,10 +12,10 @@ style.use("seaborn-deep")
 
 def main():
 
-    epochs = 25000
+    epochs = 500000
     state_dim = 12
     action_dim = 4
-    hidden_dim = 256
+    hidden_dim = 128
     dyn = model.Transition(state_dim, action_dim, hidden_dim, True)
 
     params = cfg.params
@@ -57,7 +57,7 @@ def main():
         
         # generate random state
         xyz_rand = np.random.uniform(low=-15, high=15, size=(3,1))
-        zeta_rand = np.random.uniform(low=-pi,high=pi,size=(3,1))
+        zeta_rand = np.random.uniform(low=-2*pi,high=2*pi,size=(3,1))
         uvw_rand = np.random.uniform(low=-20, high=20, size=(3,1))
         pqr_rand = np.random.uniform(low=-6, high=6, size=(3,1))
 

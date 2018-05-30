@@ -12,7 +12,7 @@ def main():
     
     params = cfg.params
     iris = quad.Quadrotor(params)
-    T = 3
+    T = 1.5
     time = np.linspace(0, T, T/iris.dt)
     hover_rpm = iris.hov_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
@@ -38,6 +38,8 @@ def main():
             pl.pause(0.001)
             pl.draw()
         rpm += np.array([0., 0., 0., 0.25])
+    
+    input("Paused")
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ import copy
 import random
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, neurons=64):
+    def __init__(self, state_dim, action_dim, neurons=32):
         super(Actor, self).__init__()
         self.affine1 = nn.Linear(state_dim, neurons)
         self.action_head = nn.Linear(neurons, action_dim)
@@ -20,7 +20,7 @@ class Actor(nn.Module):
         return F.sigmoid(mu)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, neurons=64):
+    def __init__(self, state_dim, action_dim, neurons=32):
         super(Critic, self).__init__()
         self.affine1 = nn.Linear(state_dim+action_dim, neurons)
         self.value_head = nn.Linear(neurons, 1)

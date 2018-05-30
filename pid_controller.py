@@ -4,21 +4,22 @@ import simulation.animation as ani
 import simulation.config as cfg
 import matplotlib.pyplot as pl
 import scipy.optimize as opt
+import copy
 from math import pi
 
 class PID_Controller:
-    def __init__(self, aircraft, gains):
+    def __init__(self, aircraft, pids):
         self.aircraft = aircraft
-        self.p_lin = gains.linear.p
-        self.i_lin = gains.linear.i
-        self.d_lin = gains.linear.d
-        self.p_ang = gains.angular.p
-        self.i_ang = gains.angular.i
-        self.d_ang = gains.angular.d
-        self.last_lin_error = 0.
-        self.last_ang_error = 0.
-        self.lin_i_error = 0.
-        self.ang_i_error = 0.
+        self.p_xyz = pids["linear"]["p"]
+        self.i_xyz = pids["linear"]["i"]
+        self.d_xyz = pids["linear"]["d"]
+        self.p_zeta = pids["angular"]["p"]
+        self.i_zeta = pids["angular"]["i"]
+        self.d_zeta = pids["angular"]["d"]
+        self.last_error_xyz = 0.
+        self.i_error_xyz = 0.
+        self.last_error_zeta = 0.
+        self.i_error_zeta = 0.
         
         self.kt = aircraft.kt
         self.kq = aircraft.kq
@@ -27,40 +28,84 @@ class PID_Controller:
         self.g = aircraft.g
         self.dt = aircraft.dt
         self.hov_rpm = aircraft.hov_rpm
-        self.min_rpm = 0.
         self.max_rpm = aircraft.max_rpm
+        self.lin_bnd = ((-15., 15),
+                        (-15., 15),
+                        (-15., 15),
+                        (-15., 15))
+        self.ang_bnd = ((-2.5, 2.5),
+                        (-2.5, 2.5),
+                        (-2.5, 2.5),
+                        (-2.5, 2.5))
+        self.weight = self.mass*self.aircraft.G
     
-    def compute_lin_pid(self, state, target):
+    def compute_lin(self, state, target):
         error = target-state
         p_error = error
-        self.lin_i_error += (error + self.last_lin_error)*self.dt
-        d_error = (error-self.last_lin_error)/self.dt
-        p_output = self.p_lin*p_error
-        i_output = self.i_lin*self.lin_i_error
-        d_output = self.d_lin*d_error
-        self.last_lin_error = error
+        self.i_error_xyz += (error + self.last_error_xyz)*self.dt
+        i_error = self.i_error_xyz
+        d_error = (error-self.last_error_xyz)/self.dt
+        p_output = self.p_xyz*p_error
+        i_output = self.i_xyz*i_error
+        d_output = self.d_xyz*d_error
+        self.last_error_xyz = error
+        print(p_output+i_output+d_output)
         return p_output+i_output+d_output
     
-    def compute_ang_pid(self, state, target, lin_pid):
+    def compute_ang(self, state, target):
         error = target-state
         p_error = error
-        self.ang_i_error += (error + self.last_ang_error)*self.dt
-        d_error = (error-self.last_ang_error)/self.dt
-        p_output = self.p_ang*p_error
-        i_output = self.i_ang*self.ang_i_error
-        d_output = self.d_ang*d_error
-        self.last_ang_error = error
+        self.i_error_zeta += (error + self.last_error_zeta)*self.dt
+        i_error = self.i_error_zeta
+        d_error = (error-self.last_error_zeta)/self.dt
+        p_output = self.p_zeta*p_error
+        i_output = self.i_zeta*i_error
+        d_output = self.d_zeta*d_error
+        self.last_error_zeta = error
+        print(p_output+i_output+d_output)
         return p_output+i_output+d_output
     
     def action(self, state, target):
-        u1 = -self.compute_lin_pid(state.xyz, target.xyz)
-        u2 = -self.compute_ang_pid(state.zeta, target.zeta, u1)
-        throttle = u1[2,0]
-        o1 = throttle+u2[0,0]-u2[2,0]
-        o2 = throttle+u2[1,0]+u2[2,0]
-        o3 = throttle-u2[0,0]-u2[2,0]
-        o4 = throttle-u2[1,0]+u2[2,0]
-        return np.array([o1, o2, o3, o4])
+        xyz = state["xyz"]
+        zeta = state["zeta"]
+        target_xyz = target["xyz"]
+        target_zeta = target["zeta"]
+        forces = self.compute_lin(xyz, target_xyz)
+        moments = -self.compute_ang(zeta, target_zeta)#+forces*np.array([[1.],
+                                                                        #[1.],
+                                                                        #[0.]])
+        z = forces*np.array([[0.],
+                            [0.],
+                            [1.]])
+        x0 = np.array([0., 0., 0., 0.])
+        rpm_f = opt.minimize(self.force_cost, x0, args=(z, zeta), method='L-BFGS-B', bounds=self.lin_bnd)
+        rpm_m = opt.minimize(self.moment_cost, x0, args=(moments, zeta), method='L-BFGS-B', bounds=self.ang_bnd)
+        print(rpm_f.x)
+        print(rpm_m.x)
+        print(self.hov_rpm+rpm_f.x+rpm_m.x)
+        input("Pause")
+        return self.hov_rpm+rpm_f.x+rpm_m.x
+    
+    def force_cost(self, rpm, req_forces, zeta):
+        print("req forces:")
+        print(req_forces)
+        forces = self.aircraft.thrust_forces(self.hov_rpm+rpm)
+        mapped = self.aircraft.R1(zeta).T.dot(forces)*np.array([[0.],
+                                                                [0.],
+                                                                [1.]])
+        print("mapped:")
+        mapped -= self.weight
+        print(mapped)
+        force_cost = -0.5*(req_forces-mapped)**2
+        print("force cost")
+        print(force_cost)
+        return np.sum(force_cost)
+
+    def moment_cost(self, rpm, req_moments, zeta):
+        moments = self.aircraft.thrust_moments(self.hov_rpm+rpm)
+        mapped = np.linalg.inv(self.aircraft.R2(zeta)).dot(moments)
+        moment_cost = -0.5*(req_moments-mapped)**2
+        return np.sum(moment_cost)
 
 def terminal(xyz, zeta, uvw, pqr):
     mask1 = zeta > pi/2.
@@ -83,14 +128,14 @@ def main():
     hover_rpm = iris.hov_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
     vis = ani.Visualization(iris, 10)
-    rpm = trim+50
+    rpm = trim
 
     goal_zeta = np.array([[0.],
                         [0.],
                         [0.]])
     goal_xyz = np.array([[0.],
                         [0.],
-                        [2.]])
+                        [3.]])
     xyz_init = np.array([[0.],
                         [0.],
                         [1.5]])
@@ -101,19 +146,32 @@ def main():
                         [0.],
                         [0.]])
 
-    eps = np.random.rand(3,1)
+    eps = np.random.rand(3,1)/10.
     zeta_init = goal_zeta+eps
     iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
     xyz, zeta, uvw, pqr = iris.get_state()
-    gains = {"linear":{"p": 1.,
-                        "i": 1.,
-                        "d": 1.},
-            "angular":{"p": 1.,
-                        "i": 1.,
-                        "d": 1.}}
+    
+    pids = {"linear":{"p": np.array([[1.],
+                                    [1.],
+                                    [1.]]), 
+                    "i": np.array([[1.],
+                                    [1.],
+                                    [1.]]), 
+                    "d": np.array([[1.],
+                                    [1.],
+                                    [1.]])},
+            "angular":{"p": np.array([[1.],
+                                    [1.],
+                                    [1.]]), 
+                    "i": np.array([[1.],
+                                    [1.],
+                                    [1.]]), 
+                    "d": np.array([[1.],
+                                    [1.],
+                                    [1.]])}}
     targets = {"xyz": goal_xyz,
                 "zeta": goal_zeta}
-    controller = PID_Controller(iris, gains)
+    controller = PID_Controller(iris, pids)
 
     counter = 0
     frames = 100
@@ -122,6 +180,8 @@ def main():
     t = 0
     
     while running:
+        states = {"xyz": xyz,
+                "zeta": zeta}
         if counter%frames == 0:
             pl.figure(0)
             axis3d.cla()
@@ -135,16 +195,15 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        states = {"xyz": xyz,
-                "zeta": zeta}
         rpm = controller.action(states, targets)
         xyz, zeta, uvw, pqr = iris.step(rpm)
         done = terminal(xyz, zeta, uvw, pqr)
         t += iris.dt
         if done:
-            print("Resetting vehicle")
+            print("Resetting vehicle to: {}, {}, {}, {}".format(xyz_init, zeta_init, uvw_init, pqr_init))
             iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
             xyz, zeta, uvw, pqr = iris.get_state()
+            print(xyz)
             t = 0
             counter = 0
             done = False

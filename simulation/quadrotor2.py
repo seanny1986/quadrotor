@@ -171,7 +171,9 @@ class Quadrotor:
 
         mag = np.linalg.norm(self.uvw[:1])
         if mag == 0:
-            return np.array([[0.0],[0.0],[0.0]])
+            return np.array([[0.],
+                            [0.],
+                            [0.]])
         else:
             norm = self.uvw[:1]/mag
             return -(self.kd*mag**2)*norm
@@ -183,7 +185,9 @@ class Quadrotor:
 
         mag = np.linalg.norm(self.pqr[:1])
         if mag == 0:
-            return np.array([[0.0],[0.0],[0.0]])
+            return np.array([[0.],
+                            [0.],
+                            [0.]])
         else:
             norm = self.pqr[:1]/mag
             return -(self.km*mag**2)*norm
@@ -231,7 +235,7 @@ class Quadrotor:
         fa = self.aero_forces()
         ma = self.aero_moments()
 
-        # calc angular momentum
+        # calculate angular momentum
         H = self.J.dot(self.pqr[1:])
         
         # rotate gravity vector from inertial frame to body frame using qpq^-1

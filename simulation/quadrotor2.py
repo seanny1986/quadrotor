@@ -26,9 +26,16 @@ class Quadrotor:
         self.g = params["g"]
         self.dt = params["dt"]
 
+        # physical parameters
         self.J = np.array([[self.Jxx, 0., 0.],
                             [0., self.Jyy, 0.],
                             [0., 0., self.Jzz]])
+        self.G = np.array([[0.],
+                            [0.],
+                            [0.],
+                            [-self.g]])
+        
+        # state space
         self.xyz = np.array([[0.],
                             [0.],
                             [0.]])
@@ -43,20 +50,33 @@ class Quadrotor:
                             [0.],
                             [0.],
                             [0.]])
-        self.G = np.array([[0.],
-                            [0.],
-                            [0.],
-                            [-self.g]])
+        
+        # action space
         self.rpm = np.array([0.0, 0., 0., 0.])
+
+        # accelerations -- required for leapfrog integration
         self.uvw_dot = np.array([[0.],
                                 [0.],
                                 [0.]])
         self.pqr_dot = np.array([[0.],
                                 [0.],
                                 [0.]])
+
+        # we use these matrices to convert from a thrust/moment input to an rpm input
+        self.rpm_translation = np.linalg.inv(np.array([[1., 1., 1., 1.],
+                                                        [0., 1., 0., -1.],
+                                                        [-1., 0., 1., 0.],
+                                                        [-1., 1., -1., 1.]]))
+        self.const = np.array([[1./self.kt],
+                                [1./self.l/self.kt],
+                                [1./self.l/self.kt],
+                                [1./self.kq]])
         
+        # important physical limits
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
+        
+        # all rotation math handled by quaternions. This is secretly part of the state space.
         self.q = self.euler_to_q(self.zeta)
         
     def set_state(self, xyz, zeta, uvw, pqr):

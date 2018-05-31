@@ -58,8 +58,8 @@ def main():
         # generate random state
         xyz_rand = np.random.uniform(low=-15, high=15, size=(3,1))
         zeta_rand = np.random.uniform(low=-2*pi,high=2*pi,size=(3,1))
-        uvw_rand = np.random.uniform(low=-20, high=20, size=(3,1))
-        pqr_rand = np.random.uniform(low=-6, high=6, size=(3,1))
+        uvw_rand = np.random.uniform(low=-30, high=30, size=(3,1))
+        pqr_rand = np.random.uniform(low=-15, high=15, size=(3,1))
 
         # set random state
         iris.set_state(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
@@ -87,7 +87,6 @@ def main():
         average_wdot = float(sum(av_wdot))/float(len(av_wdot))
         data_vdot.append(average_vdot)
         data_wdot.append(average_wdot)
-        iterations.append(counter)
         
         if counter%100 == 0:
             ax1.clear()
@@ -104,6 +103,9 @@ def main():
             ax2.set_ylabel("Loss")
             fig2.canvas.draw()
 
+            iterations.append(counter)
+            counter += 1
+
         print(v_loss, w_loss)
 
         if counter > epochs:
@@ -114,7 +116,7 @@ def main():
             print("Saving model")
             torch.save(dyn, "/home/seanny/quadrotor/models/one_step.pth.tar")
 
-        counter += 1
+        
 
 if __name__ == "__main__":
     main()

@@ -62,7 +62,6 @@ class PID_Controller:
         i_output = self.i_zeta*i_error
         d_output = self.d_zeta*d_error
         self.last_error_zeta = error
-        print(p_output+i_output+d_output)
         return p_output+i_output+d_output
     
     def action(self, state, target):
@@ -90,14 +89,11 @@ class PID_Controller:
         print("req forces:")
         print(req_forces)
         forces = self.aircraft.thrust_forces(self.hov_rpm+rpm)
-        mapped = self.aircraft.R1(zeta).T.dot(forces)*np.array([[0.],
-                                                                [0.],
-                                                                [1.]])
+        mapped = self.aircraft.R1(zeta).dot(forces)*np.array([[0.],[0.],[1.]])
         print("mapped:")
-        mapped -= self.weight
+        mapped += self.weight
         print(mapped)
         force_cost = -0.5*(req_forces-mapped)**2
-        print("force cost")
         print(force_cost)
         return np.sum(force_cost)
 

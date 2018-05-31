@@ -66,18 +66,16 @@ class Transition(nn.Module):
 
     def transition(self, x0, state_action, dt):
         # state_action is [sin(zeta), cos(zeta), v, w, a]
-        xyz = x0.clone()
-        uvw_pqr = state_action[:,6:12].clone()
+        xyz = x0
         zeta = state_action[:,0:3].asin()
-        uvw = uvw_pqr[:,0:3]
-        pqr = uvw_pqr[:,3:]
+        uvw = state_action[:,6:9]
+        pqr = state_action[:,9:]
         uvw_next = self.lin_vel(state_action)
         pqr_next = self.ang_vel(state_action)
         xyz_dot = torch.mm(self.R1(zeta), uvw_next.t()).t()
         zeta_dot = torch.mm(self.R2(zeta), pqr_next.t()).t()
-        dx, dzeta = xyz_dot*dt, zeta_dot*dt
-        xyz = xyz+dx
-        zeta = zeta+dzeta
+        xyz = xyz+xyz_dot*dt
+        zeta = zeta+zeta_dot*dt
         return xyz, zeta, uvw, pqr
 
     def update(self, zeta, uvw, pqr, action, uvw_next, pqr_next):

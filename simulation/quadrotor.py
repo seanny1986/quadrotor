@@ -43,8 +43,7 @@ class Quadrotor:
 
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
-
-        self.thrust = None
+        self.max_thrust = self.kt*self.max_rpm
 
         self.J = np.array([[self.Jxx,   0.,         0.],
                             [0.,    self.Jyy,       0.],
@@ -65,7 +64,18 @@ class Quadrotor:
                             [0.],
                             [-self.g]])
         self.rpm = np.array([0.0, 0., 0., 0.])
-        
+
+        self.rpm_translation = np.linalg.inv(np.array([[1., 1., 1., 1.],
+                                                        [0., 1., 0., -1.],
+                                                        [-1., 0., 1., 0.],
+                                                        [-1., 1., -1., 1.]]))
+        self.const = np.array([[1./self.kt],
+                                [1./self.l/self.kt],
+                                [1./self.l/self.kt],
+                                [1./self.kq]])
+
+        self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
+        self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
 
     def set_state(self, xyz, zeta, uvw, pqr):
         """
@@ -198,7 +208,7 @@ class Quadrotor:
                         [t_body_y],
                         [t_body_z]])
     
-    def step(self, rpm, return_acceleration=False):
+    def step(self, control_signal, rpm_commands=True, return_acceleration=False):
         """
             Semi-implicit Euler update of the non-linear equations of motion. Uses the
             matrix form since it's much nicer to work with. Our state space equations 
@@ -234,6 +244,13 @@ class Quadrotor:
             and angular velocities using a forward Euler step, and then updates position and
             attitude using v_{t+1} and omega_{t+1} (as opposed to using v_{t} and omega_{t}).
         """
+
+        if not rpm_commands:
+            u = self.const*control_signal.reshape(-1,1)
+            rpm_sq = self.rpm_translation.dot(u)
+            rpm = (rpm_sq**0.5).reshape(1,)
+        else:
+            rpm = control_signal
         
         rpm = np.clip(rpm, 0., self.max_rpm)
         r1 = self.R1(self.zeta)

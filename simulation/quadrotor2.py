@@ -75,6 +75,8 @@ class Quadrotor:
         # important physical limits
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
+        self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
+        self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
         
         # all rotation math handled by quaternions. This is secretly part of the state space.
         self.q = self.euler_to_q(self.zeta)
@@ -238,7 +240,7 @@ class Quadrotor:
                         [t_body_y],
                         [t_body_z]])
     
-    def step(self, rpm, return_acceleration=False):
+    def step(self, control_signal, rpm_commands=True, return_acceleration=False):
         """
             Updating the EOMs using second order leapfrog integration (kick-drift-kick
             form) with quaternion rotations. Should be far more accurate than quadrotor,
@@ -246,6 +248,13 @@ class Quadrotor:
             at pitch +-90 degrees.
         """
         
+        if not rpm_commands:
+            u = self.const*control_signal.reshape(-1,1)
+            rpm_sq = self.rpm_translation.dot(u)
+            rpm = (rpm_sq**0.5).reshape(1,)
+        else:
+            rpm = control_signal
+
         # clip rpm values
         rpm = np.clip(rpm, 0., self.max_rpm)
         

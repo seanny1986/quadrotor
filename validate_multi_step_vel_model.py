@@ -17,7 +17,7 @@ else:
 
 def main():
 
-    print("=> Loading one_step_vel.pth.tar")
+    print("=> Loading multi_step_vel.pth.tar")
     dyn = torch.load("/home/seanny/quadrotor/models/one_step.pth.tar")
 
     print("=> Initializing aircraft from config")
@@ -119,8 +119,8 @@ def main():
     fig1.legend((p5, p6), ('Actual', 'Predicted'))
     plt.show()
     input("Paused")
-    print("=> Saving figure as position_error.pdf")
-    fig1.savefig('/home/seanny/quadrotor/figures/position_error.pdf', bbox_inches='tight')
+    print("=> Saving figure as multi_step_position_error.pdf")
+    fig1.savefig('/home/seanny/quadrotor/figures/multi_step_position_error.pdf', bbox_inches='tight')
 
 
 if __name__ == "__main__":

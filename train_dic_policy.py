@@ -12,7 +12,8 @@ import torch.nn.functional as F
 import simulation.quadrotor as quad
 import simulation.config as cfg
 import simulation.animation as ani
-
+import models.one_step_velocity as model
+import policies.dic as dic
 
 parser = argparse.ArgumentParser(description='PyTorch MBPS Node')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G', help='discount factor (default: 0.99)')
@@ -38,10 +39,13 @@ state_dim = 12
 action_dim = 4
 hidden_dim = 32
 goal_dim = 12
+epochs = 1500
 
-dyn = mbps_utils.resume('/home/seanny/quadrotor/models/one_step.pth.tar')
-pol = policy.FeedForwardPolicy(state_dim+goal_dim, 32, action_dim, dyn, args.cuda)
+dyn = model.Transition(state_dim, action_dim, hidden_dim)
+pol = dic.FeedForwardPolicy(state_dim+goal_dim, hidden_dim, action_dim, dyn, args.cuda)
 pol_opt = torch.optim.Adam(pol.parameters(), lr=1e-4)
+
+memory = dic.ReplayMemory(1000000)
 
 with open('maneuvers.csv', 'r') as f:
   reader = csv.reader(f)
@@ -55,65 +59,76 @@ for i, m in enumerate(maneuvers):
         maneuver_list.append([x0, g0])
 maneuvers = maneuver_list
 
-pl.close("all")
-pl.ion()
-fig = pl.figure(0)
+plt.close("all")
+plt.ion()
+fig = plt.figure(0)
 axis3d = fig.add_subplot(111, projection='3d')
 params = cfg.params
 iris = quad.Quadrotor(params)
 dt = iris.dt
-vis = ani.Visualization(iris)
+vis = ani.Visualization(iris,10)
 
 def main():                                                                        
-    env.reset()
+    
+    for i in range(epochs):
+        # run policy on the aircraft
+        run_policy(maneuvers, True)
 
-    # optimization of policy under the model
-    pol.eval()
-    optimize_policy(maneuvers, pol_opt, dt)
-    print()
-    input("Press any key to continue")
+        # optimization of policy under the model
+        train_policy(maneuvers)
+        print()
+        input("Press any key to continue")
 
-    # run policy on the aircraft
-    pol.train()
-    run_policy(maneuvers, True, True)
-
-    # reset environment
-    env.reset()
+        # reset environment
+        iris.reset()
 
     # save policy
-    mbps_utils.save(pol, filename='policy.pth.tar')
+    mbps_utils.save(pol, filename="dic_policy.pth.tar")
+    mbps_utils.save(dyn, filename="one_step_vel_model.pth.tar")
 
-def optimize_policy(maneuvers, pol_opt, dt):
-    err = 1
-    count = 1
-    av = []
-    while err > 1e-2:
-        loss = pol.update(maneuvers, pol_opt, dt)
-        print("Policy Loss: {}".format(-loss))
-        err = loss
-        count += 1
+def train_policy(maneuvers):
+    T = int(g[-1])
+    for i in range(T):
+        pass
+    
 
-        if len(av)<10: 
-            av.append(-loss)
-        else:
-            del av[0]
-            av.append(-loss)
-        
-        moving_average = Tensor(av).sum(dim=0)/float(len(av))
-        
-        if count % 10 == 0:
-            logger.update_policy_info(moving_average.tolist())
-            logger.plot_policy_graphs()
-
-def run_policy(maneuvers, noise=True, push_to_mem=True, set_state=True):
+def run_policy(maneuvers, set_state=True):
     for m in maneuvers:
-        x0 = m[0]
-        g = m[1]
+        xyz_init = m[0][0:3]
+        zeta_init = m[0][3:6]
+        uvw_init = m[0][6:9]
+        pqr_init = [0][9:12]
+        
+        xyz_g = m[1][0:3]
+        zeta_g = m[1][3:6]
+        uvw_g = m[1][6:9]
+        pqr_g = m[1][9:12]
+
         if set_state:
-            env.set_state(x0)
-        state = env.get_state()
+            iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
+        xyz, zeta, uvw, pqr = iris.get_state()
+        state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr], dim=1)
         T = int(g[-1])
-        state = evaluate_maneuver(x0, g, T, dt, noise, push_to_mem)
+        for t in range(T):
+            dist_xyz = xyz_g-xyz
+            dist_zeta = zeta_g-zeta
+            dist_uvw = uvw_g-uvw
+            dist_pqr = pqr_g-pqr
+            goal = torch.cat([dist_xyz, dist_zeta, dist_uvw, dist_pqr],dim=1)
+            action = pol.select_action(state, goal)
+            xyz_next, zeta_next, uvw_next, pqr_next = iris.step(action)
+            next_state = torch.cat([zeta_next.sin(), zeta_next.cos(), uvw_next, pqr_next],dim=1)
+            memory.push(state.squeeze(0), action.squeeze(0), next_state.squeeze(0))
+            for i in range(5):
+                transitions = memory.sample(args.batch_size)
+                batch = dic.Transition(*zip(*transitions))
+                dyn.batch_update(state, action, next_state)
+            state = next_state
+            xyz = xyz_next
+            zeta = zeta_next
+            uvw = uvw_next
+            pqr = pqr_next
+
         print("Maneuver Loss: {}".format(((state-Tensor(g[:-1])).pow(2)).mean()))
 
 if __name__ == "__main__":

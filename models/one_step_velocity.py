@@ -12,8 +12,8 @@ class Transition(nn.Module):
         self.lin_vel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
         self.ang_vel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
     
-        self.lin_vel_opt = torch.optim.Adam(self.lin_vel.parameters(),lr=1e-4)
-        self.ang_vel_opt = torch.optim.Adam(self.ang_vel.parameters(),lr=1e-4)
+        self.lin_vel_opt = torch.optim.Adam(self.lin_vel.parameters(),lr=1e-5)
+        self.ang_vel_opt = torch.optim.Adam(self.ang_vel.parameters(),lr=1e-5)
         self.GPU = GPU
 
         if GPU:
@@ -68,15 +68,54 @@ class Transition(nn.Module):
         # state_action is [sin(zeta), cos(zeta), v, w, a]
         xyz = x0
         zeta = state_action[:,0:3].asin()
-        uvw = state_action[:,6:9]
-        pqr = state_action[:,9:]
         uvw_next = self.lin_vel(state_action)
         pqr_next = self.ang_vel(state_action)
         xyz_dot = torch.mm(self.R1(zeta), uvw_next.t()).t()
         zeta_dot = torch.mm(self.R2(zeta), pqr_next.t()).t()
         xyz = xyz+xyz_dot*dt
         zeta = zeta+zeta_dot*dt
-        return xyz, zeta, uvw, pqr
+        return xyz, zeta, uvw_next, pqr_next
+    
+    def batch_R1(self, zetas):
+        phis = zetas[:,0]
+        thetas = zetas[:,1]
+        psis = zetas[:,2]
+        one = torch.ones(phis.size())
+        zero = torch.zeros(phis.size())
+        R_z1 = torch.cat([psis.cos(),      -psis.sin(),          zero], dim=1)
+        R_z2 = torch.cat([psis.sin(),      psis.cos(),           zero],dim=1)
+        R_z3 = torch.cat([zero,                zero,             one],dim=1)
+        R_z = torch.cat([R_z1, R_z2, R_z3], dim=2)
+        R_y1 = torch.cat([thetas.cos(),        zero,     thetas.sin()],dim=1)
+        R_y2 = torch.cat([zero,                one,             zero], dim=1)
+        R_y3 = torch.cat([-thetas.sin(),       zero,     thetas.cos()], dim=1)
+        R_y = torch.cat([R_y1, R_y2, R_y3],dim=2)
+        R_x1 = torch.cat([one,               zero,             zero],dim=1)
+        R_x2 = torch.cat([zero,            phis.cos(),       -phis.sin()],dim=1)
+        R_x3 = torch.cat([zero,            phis.sin(),       phis.cos()],dim=1)
+        R_x =  torch.cat([R_x1, R_x2, R_x3],dim=2)
+        return torch.bmm(R_z, torch.bmm(R_y, R_x))
+    
+    def batch_R2(self, zetas):
+        thetas = zetas[:,1]
+        psis = zetas[:,2]
+        one = torch.ones(phis.size())
+        zero = torch.zeros(phis.size())
+        R_1 = torch.cat([psis.cos()/thetas.cos(),      psis.cos()/thetas.cos(),             zero], dim=1)
+        R_2 = torch.cat([-psis.sin(),                       psis.cos(),                     zero],dim=1)
+        R_3 = torch.cat([psis.cos()*thetas.tan(),      psis.sin()*thetas.tan(),             one],dim=1)
+        return torch.cat([R_1, R_2, R_3],dim=2)
+
+    def batch_transition(self, x0s, state_actions, dt):
+        xyzs = x0s
+        zetas = state_actions[:,0:3].asin()
+        uvw_next = self.lin_vel(state_actions).t()
+        pqr_next = self.ang_vel(state_actions).t()
+        xyz_dots = torch.bmm(self.batch_R1(zetas), uvw_next.unsqueeze(2)).t().squeeze(2)
+        zeta_dots = torch.mm(self.batch_R2(zetas), pqr_next.unsqueeze(2)).t().squeeze(2)
+        xyzs = xyzs+xyz_dots*dt
+        zetas = zetas+zeta_dots*dt
+        return xyzs, zetas, uvw_next, pqr_next
 
     def update(self, zeta, uvw, pqr, action, uvw_next, pqr_next):
         zeta = zeta.reshape((1,-1))
@@ -109,6 +148,31 @@ class Transition(nn.Module):
 
         v_next_loss = F.mse_loss(v_next, uvw_next)
         w_next_loss = F.mse_loss(w_next, pqr_next)
+
+        self.lin_vel_opt.zero_grad()
+        self.ang_vel_opt.zero_grad()
+
+        v_next_loss.backward()
+        w_next_loss.backward()
+
+        self.lin_vel_opt.step()
+        self.ang_vel_opt.step()
+
+        return v_next_loss.item(), w_next_loss.item()
+    
+    def batch_update(self, batch):
+        state = Variable(torch.stack(batch.state))
+        action = Variable(torch.stack(batch.action))
+        next_state = Variable(torch.stack(batch.next_state))
+        reward = Variable(torch.cat(batch.reward))
+        reward = torch.unsqueeze(reward, 1)
+        state_action = torch.cat([state, action],dim=1)
+
+        v_next = self.lin_vel(state_action)
+        w_next = self.ang_vel(state_action)
+
+        v_next_loss = F.mse_loss(v_next, next_state[6:9])
+        w_next_loss = F.mse_loss(w_next, next_state[9:12])
 
         self.lin_vel_opt.zero_grad()
         self.ang_vel_opt.zero_grad()

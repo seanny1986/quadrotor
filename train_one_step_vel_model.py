@@ -12,10 +12,10 @@ style.use("seaborn-deep")
 
 def main():
 
-    epochs = 500000
+    epochs = 1000000
     state_dim = 12
     action_dim = 4
-    hidden_dim = 128
+    hidden_dim = 32
     dyn = model.Transition(state_dim, action_dim, hidden_dim, True)
 
     params = cfg.params
@@ -25,12 +25,14 @@ def main():
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
 
     print("HOVER RPM: ", trim)
+    print("Terminal Velocity: ", iris.terminal_velocity)
+    print("Terminal Rotation: ", iris.terminal_rotation)
     input("Press to continue")
 
     fig1 = plt.figure()
     ax1 = fig1.add_subplot(111)
-    ax1.set_title("Linear Acceleration Loss")
-    ax1.set_xlabel(r"Iterations $\times 10^2$")
+    ax1.set_title("Linear Velocity Loss")
+    ax1.set_xlabel("Iterations")
     ax1.set_ylabel("Loss")
     fig1.subplots_adjust(hspace=0.3)
     fig1.subplots_adjust(wspace=0.3)
@@ -38,8 +40,8 @@ def main():
 
     fig2 = plt.figure()
     ax2 = fig2.add_subplot(111)
-    ax2.set_title("Angular Acceleration Loss")
-    ax2.set_xlabel(r"Iterations $\times 10^2$")
+    ax2.set_title("Angular Velocity Loss")
+    ax2.set_xlabel("Iterations")
     ax2.set_ylabel("Loss")
     fig2.subplots_adjust(hspace=0.3)
     fig2.subplots_adjust(wspace=0.3)
@@ -58,8 +60,8 @@ def main():
         # generate random state
         xyz_rand = np.random.uniform(low=-15, high=15, size=(3,1))
         zeta_rand = np.random.uniform(low=-2*pi,high=2*pi,size=(3,1))
-        uvw_rand = np.random.uniform(low=-30, high=30, size=(3,1))
-        pqr_rand = np.random.uniform(low=-15, high=15, size=(3,1))
+        uvw_rand = np.random.uniform(low=-iris.terminal_velocity, high=iris.terminal_velocity, size=(3,1))
+        pqr_rand = np.random.uniform(low=-iris.terminal_rotation, high=iris.terminal_rotation, size=(3,1))
 
         # set random state
         iris.set_state(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
@@ -85,26 +87,25 @@ def main():
 
         average_vdot = float(sum(av_vdot))/float(len(av_vdot))
         average_wdot = float(sum(av_wdot))/float(len(av_wdot))
-        data_vdot.append(average_vdot)
-        data_wdot.append(average_wdot)
         
         if counter%100 == 0:
+            data_vdot.append(average_vdot)
+            data_wdot.append(average_wdot)
+            iterations.append(counter/100.)
             ax1.clear()
             ax1.plot(iterations,data_vdot)
-            ax1.set_title("Linear Acceleration Loss")
-            ax1.set_xlabel(r"Iterations $\times 10^2$")
+            ax1.set_title("Linear Velocity Loss")
+            ax1.set_xlabel(r"Iterations $\times 10^{2}$")
             ax1.set_ylabel("Loss")
             fig1.canvas.draw()
 
             ax2.clear()
             ax2.plot(iterations,data_wdot)
-            ax2.set_title("Angular Acceleration Loss")
-            ax2.set_xlabel(r"Iterations $\times 10^2$")
+            ax2.set_title("Angular Velocity Loss")
+            ax2.set_xlabel(r"Iterations $\times 10^{2}$")
             ax2.set_ylabel("Loss")
             fig2.canvas.draw()
-
-            iterations.append(counter)
-            counter += 1
+        counter += 1
 
         print(v_loss, w_loss)
 

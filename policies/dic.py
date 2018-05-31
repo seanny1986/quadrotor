@@ -5,6 +5,8 @@ import torch.optim as optim
 from torch.autograd import Variable
 from torch.distributions import Normal
 import mbps_utils
+from collections import namedtuple
+import random
 
 """
     Contains classes for the different types of policy we might want to run. At the moment, only a basic MLP
@@ -100,6 +102,21 @@ class FeedForwardPolicy(nn.Module):
     def set_transition_model(self, transition_model):
         self.transition_model = transition_model
 
-class Recurrent(nn.Module):
-    def __init__(self):
-        pass
+Transition = namedtuple('Transition', ['state', 'action', 'next_state'])
+class ReplayMemory(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position+1)%self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)

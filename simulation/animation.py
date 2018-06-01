@@ -109,3 +109,7 @@ class Visualization:
         return np.array([[x11, x12, x13],
                         [x21, x22, x23],
                         [x31, x32, x33]])
+    
+    def draw_goal(self, ax, goal):
+        ax.scatter(goal[0,0], goal[0,1], goal[0,2], color='green')
+

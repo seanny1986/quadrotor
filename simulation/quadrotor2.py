@@ -75,6 +75,7 @@ class Quadrotor:
         # important physical limits
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
+        self.max_thrust = self.kt*self.max_rpm
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
         
@@ -251,7 +252,7 @@ class Quadrotor:
         if not rpm_commands:
             u = self.const*control_signal.reshape(-1,1)
             rpm_sq = self.rpm_translation.dot(u)
-            rpm = (rpm_sq**0.5).reshape(1,)
+            rpm = (rpm_sq**0.5).flatten()
         else:
             rpm = control_signal
 

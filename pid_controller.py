@@ -29,16 +29,9 @@ class PID_Controller:
         self.dt = aircraft.dt
         self.hov_rpm = aircraft.hov_rpm
         self.max_rpm = aircraft.max_rpm
-        self.lin_bnd = ((-15., 15),
-                        (-15., 15),
-                        (-15., 15),
-                        (-15., 15))
-        self.ang_bnd = ((-2.5, 2.5),
-                        (-2.5, 2.5),
-                        (-2.5, 2.5),
-                        (-2.5, 2.5))
-        self.weight = self.mass*self.aircraft.G
-    
+        self.n_motors = aircraft.n_motors
+        print(self.hov_rpm)
+        
     def compute_lin(self, state, target):
         error = target-state
         p_error = error
@@ -69,39 +62,17 @@ class PID_Controller:
         zeta = state["zeta"]
         target_xyz = target["xyz"]
         target_zeta = target["zeta"]
-        forces = self.compute_lin(xyz, target_xyz)
-        moments = -self.compute_ang(zeta, target_zeta)#+forces*np.array([[1.],
-                                                                        #[1.],
-                                                                        #[0.]])
-        z = forces*np.array([[0.],
-                            [0.],
-                            [1.]])
-        x0 = np.array([0., 0., 0., 0.])
-        rpm_f = opt.minimize(self.force_cost, x0, args=(z, zeta), method='L-BFGS-B', bounds=self.lin_bnd)
-        rpm_m = opt.minimize(self.moment_cost, x0, args=(moments, zeta), method='L-BFGS-B', bounds=self.ang_bnd)
-        print(rpm_f.x)
-        print(rpm_m.x)
-        print(self.hov_rpm+rpm_f.x+rpm_m.x)
-        input("Pause")
-        return self.hov_rpm+rpm_f.x+rpm_m.x
-    
-    def force_cost(self, rpm, req_forces, zeta):
-        print("req forces:")
-        print(req_forces)
-        forces = self.aircraft.thrust_forces(self.hov_rpm+rpm)
-        mapped = self.aircraft.R1(zeta).dot(forces)*np.array([[0.],[0.],[1.]])
-        print("mapped:")
-        mapped += self.weight
-        print(mapped)
-        force_cost = -0.5*(req_forces-mapped)**2
-        print(force_cost)
-        return np.sum(force_cost)
-
-    def moment_cost(self, rpm, req_moments, zeta):
-        moments = self.aircraft.thrust_moments(self.hov_rpm+rpm)
-        mapped = np.linalg.inv(self.aircraft.R2(zeta)).dot(moments)
-        moment_cost = -0.5*(req_moments-mapped)**2
-        return np.sum(moment_cost)
+        u_s = self.compute_lin(xyz, target_xyz)
+        roll = u_s[0,0]
+        pitch = -u_s[1,0]
+        yaw = 0.0
+        throttle = self.n_motors*self.kt*self.hov_rpm**2+u_s[2,0]
+        print(throttle)
+        print(u_s)
+        return np.array([[throttle],
+                        [roll],
+                        [pitch],
+                        [yaw]])
 
 def terminal(xyz, zeta, uvw, pqr):
     mask1 = zeta > pi/2.
@@ -147,24 +118,24 @@ def main():
     iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
     xyz, zeta, uvw, pqr = iris.get_state()
     
-    pids = {"linear":{"p": np.array([[1.],
-                                    [1.],
-                                    [1.]]), 
-                    "i": np.array([[1.],
-                                    [1.],
-                                    [1.]]), 
-                    "d": np.array([[1.],
-                                    [1.],
-                                    [1.]])},
-            "angular":{"p": np.array([[1.],
-                                    [1.],
-                                    [1.]]), 
-                    "i": np.array([[1.],
-                                    [1.],
-                                    [1.]]), 
-                    "d": np.array([[1.],
-                                    [1.],
-                                    [1.]])}}
+    pids = {"linear":{"p": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]]), 
+                    "i": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]]), 
+                    "d": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]])},
+            "angular":{"p": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]]), 
+                    "i": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]]), 
+                    "d": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]])}}
     targets = {"xyz": goal_xyz,
                 "zeta": goal_zeta}
     controller = PID_Controller(iris, pids)
@@ -191,15 +162,14 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        rpm = controller.action(states, targets)
-        xyz, zeta, uvw, pqr = iris.step(rpm)
+        actions = controller.action(states, targets)
+        xyz, zeta, uvw, pqr = iris.step(actions, rpm_commands=False)
         done = terminal(xyz, zeta, uvw, pqr)
         t += iris.dt
         if done:
             print("Resetting vehicle to: {}, {}, {}, {}".format(xyz_init, zeta_init, uvw_init, pqr_init))
             iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
             xyz, zeta, uvw, pqr = iris.get_state()
-            print(xyz)
             t = 0
             counter = 0
             done = False

@@ -7,22 +7,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.style as style
 import torch
+import torch.optim as optim
+import torch.nn.functional as F
+import utils
 
 style.use("seaborn-deep")
 
 def main():
 
-    epochs = 1000000
+    epochs = 500000
     state_dim = 12
     action_dim = 4
     hidden_dim = 32
     dyn = model.Transition(state_dim, action_dim, hidden_dim, True)
+    opt = optim.LBFGS_C(dyn.parameters(), line_search_fn="backtracking")
+    cuda = True
 
     params = cfg.params
     iris = quad.Quadrotor(params)
     hover_rpm = iris.hov_rpm
     max_rpm = iris.max_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
+    dt = iris.dt
 
     print("HOVER RPM: ", trim)
     print("Terminal Velocity: ", iris.terminal_velocity)
@@ -65,14 +71,38 @@ def main():
 
         # set random state
         iris.set_state(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
+        xyz_0, zeta_0, uvw_0, pqr_0 = utils.numpy_to_pytorch(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
 
         # generate random action, assume hover at 50%
         action = np.random.uniform(low=0, high=max_rpm, size=(4,))
+        
+        action_nn = torch.from_numpy(action).float().unsqueeze(0)
+        if cuda:
+            action_nn = action_nn.cuda()
+        
         xyz, zeta, uvw, pqr = iris.step(action)
+        xyz_1, zeta_1, uvw_1, pqr_1 = utils.numpy_to_pytorch(xyz, zeta, uvw, pqr)
 
         # update network
-        v_loss, w_loss = dyn.update(zeta_rand, uvw_rand, pqr_rand, action, uvw, pqr)
+        state = torch.cat([zeta_0.sin(), zeta_0.cos(), uvw_0, pqr_0],dim=1)
+        state_action = torch.cat([state, action_nn],dim=1)
 
+        def closure():
+            opt.zero_grad()
+            xyz_pred, zeta_pred, uvw_pred, pqr_pred = dyn.transition(xyz_0, state_action, dt)
+            xyz_loss = F.mse_loss(xyz_pred, xyz_1)
+            zeta_loss = F.mse_loss(zeta_pred, zeta_1)
+            uvw_loss = F.mse_loss(uvw_pred, uvw_1)
+            pqr_loss = F.mse_loss(pqr_pred, pqr_1)
+            loss = xyz_loss+zeta_loss+uvw_loss+pqr_loss
+        
+            print('loss:', loss.item())
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+
+        """
         if len(av_vdot)>10:
             del av_vdot[0]
             av_vdot.append(v_loss)
@@ -105,15 +135,16 @@ def main():
             ax2.set_xlabel(r"Iterations $\times 10^{2}$")
             ax2.set_ylabel("Loss")
             fig2.canvas.draw()
+        """
         counter += 1
 
-        print(v_loss, w_loss)
+        #print(v_loss, w_loss)
 
         if counter > epochs:
             running = False
-            print("Saving figures")
-            fig1.savefig('vdot_loss.pdf', bbox_inches='tight')
-            fig2.savefig('wdot_loss.pdf', bbox_inches='tight')
+            #print("Saving figures")
+            #fig1.savefig('vdot_loss.pdf', bbox_inches='tight')
+            #fig2.savefig('wdot_loss.pdf', bbox_inches='tight')
             print("Saving model")
             torch.save(dyn, "/home/seanny/quadrotor/models/one_step.pth.tar")
 

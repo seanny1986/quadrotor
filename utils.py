@@ -20,6 +20,18 @@ style.use('seaborn-white')
 #plt.rc('legend',fontsize=10)
 #plt.rc('figure',facecolor='white')
 
+def numpy_to_pytorch(xyz, zeta, uvw, pqr, cuda=True):
+    xyz = torch.from_numpy(xyz.T).float()
+    zeta = torch.from_numpy(zeta.T).float()
+    uvw = torch.from_numpy(uvw.T).float()
+    pqr = torch.from_numpy(pqr.T).float()
+    if cuda:
+        xyz = xyz.cuda()
+        zeta = zeta.cuda()
+        uvw = uvw.cuda()
+        pqr = pqr.cuda()
+    return xyz, zeta, uvw, pqr
+
 def get_trajectories(df, state_dim, action_dim, batchsize, H, dt):
     seq_len = int(H/dt)
     states = np.zeros((seq_len, batchsize, state_dim+1))
@@ -212,5 +224,5 @@ def mean_std_groups(x, y, group_size):
 
 def set_lr(optimizer, lr):
     for param_group in optimizer.param_groups:
-param_group['lr'] = lr
+        param_group['lr'] = lr
     

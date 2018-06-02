@@ -141,7 +141,7 @@ def main():
     controller = PID_Controller(iris, pids)
 
     counter = 0
-    frames = 100
+    frames = 5
     running = True
     done = False
     t = 0
@@ -166,6 +166,7 @@ def main():
         xyz, zeta, uvw, pqr = iris.step(actions, rpm_commands=False)
         done = terminal(xyz, zeta, uvw, pqr)
         t += iris.dt
+        #counter += 1
         if done:
             print("Resetting vehicle to: {}, {}, {}, {}".format(xyz_init, zeta_init, uvw_init, pqr_init))
             iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)

@@ -12,8 +12,8 @@ class Transition(nn.Module):
         self.lin_vel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
         self.ang_vel = MLP(state_dim+action_dim, hidden_dim, 3, GPU)
     
-        self.lin_vel_opt = torch.optim.Adam(self.lin_vel.parameters(),lr=1e-5)
-        self.ang_vel_opt = torch.optim.Adam(self.ang_vel.parameters(),lr=1e-5)
+        self.lin_vel_opt = torch.optim.Adam(self.lin_vel.parameters(),lr=1e-4)
+        self.ang_vel_opt = torch.optim.Adam(self.ang_vel.parameters(),lr=1e-4)
         self.GPU = GPU
 
         if GPU:

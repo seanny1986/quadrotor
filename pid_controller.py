@@ -123,15 +123,15 @@ def main():
                     "d": np.array([[1.],
                                     [1.],
                                     [1.]])},
-            "angular":{"p": np.array([[0.01],
-                                    [0.01],
+            "angular":{"p": np.array([[0.1],
+                                    [0.1],
                                     [0.01]]), 
                     "i": np.array([[0.001],
                                     [0.001],
                                     [0.001]]), 
-                    "d": np.array([[0.01],
-                                    [0.01],
-                                    [0.01]])}}
+                    "d": np.array([[0.1],
+                                    [0.1],
+                                    [0.1]])}}
     targets = {"xyz": goal_xyz,
                 "zeta": goal_zeta}
     controller = PID_Controller(iris, pids)

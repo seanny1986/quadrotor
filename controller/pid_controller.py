@@ -11,11 +11,9 @@ from math import sin, cos
 
     Where u1 is our thrust in the body z-direction, u2 is the commanded roll, u3 is the commanded
     pitch, and u4 is the commanded yaw. To do this, we calculate the PID error in xyz, which gives
-    us a force vector in the body frame. For small angles, we assume this lines up with the inertial
-    axis, and take the z-component of this vector to be u1. Next, we rotate the x and y components 
-    of this vector about the z-axis to get our roll and pitch commands. We feed this into the zeta 
-    PID controller as our target, along with a desired yaw of 0. The returned PID error is our U2 
-    vector, where:
+    us a force vector in the body frame. Next, we rotate the x and y components of this vector about 
+    the z-axis to get our roll and pitch commands. We feed this into the zeta PID controller as our 
+    target, along with a desired yaw of 0. The returned PID error is our U2 vector, where:
 
     U2 = [u2, u3, u4]^T
 

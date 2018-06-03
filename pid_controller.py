@@ -74,10 +74,10 @@ class PID_Controller:
         return np.vstack((u_1, u_2))
 
 def terminal(xyz, zeta, uvw, pqr):
-    mask1 = zeta > pi/2.
-    mask2 = zeta < -pi/2.
+    mask1 = zeta[:2] > pi/2.
+    mask2 = zeta[:2] < -pi/2.
     mask3 = np.abs(xyz) > 6.
-    term = np.sum(mask1+mask2+mask3)
+    term = np.sum(mask1+mask2)+np.sum(mask3)
     if term > 0: 
         return True
     else: 

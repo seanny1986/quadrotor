@@ -3,9 +3,7 @@ import simulation.quadrotor as quad
 import simulation.animation as ani
 import simulation.config as cfg
 import matplotlib.pyplot as pl
-import scipy.optimize as opt
-import copy
-from math import pi
+from math import pi, sin, cos
 
 class PID_Controller:
     def __init__(self, aircraft, pids):
@@ -20,7 +18,9 @@ class PID_Controller:
         self.i_error_xyz = 0.
         self.last_error_zeta = 0.
         self.i_error_zeta = 0.
-        
+        self.i_limit_xyz = 50.
+        self.i_limit_zeta = 50.
+
         self.kt = aircraft.kt
         self.kq = aircraft.kq
         self.mass = aircraft.mass
@@ -30,25 +30,25 @@ class PID_Controller:
         self.hov_rpm = aircraft.hov_rpm
         self.max_rpm = aircraft.max_rpm
         self.n_motors = aircraft.n_motors
-        print(self.hov_rpm)
         
-    def compute_lin(self, state, target):
+    def compute_lin_pid(self, target, state):
         error = target-state
         p_error = error
         self.i_error_xyz += (error + self.last_error_xyz)*self.dt
+        self.i_error_xyz = np.clip(self.i_error_xyz, 0., self.i_limit_xyz)
         i_error = self.i_error_xyz
         d_error = (error-self.last_error_xyz)/self.dt
         p_output = self.p_xyz*p_error
         i_output = self.i_xyz*i_error
         d_output = self.d_xyz*d_error
         self.last_error_xyz = error
-        print(p_output+i_output+d_output)
         return p_output+i_output+d_output
     
-    def compute_ang(self, state, target):
+    def compute_ang_pid(self, target, state):
         error = target-state
         p_error = error
         self.i_error_zeta += (error + self.last_error_zeta)*self.dt
+        self.i_error_zeta = np.clip(self.i_error_zeta, 0., self.i_limit_zeta)
         i_error = self.i_error_zeta
         d_error = (error-self.last_error_zeta)/self.dt
         p_output = self.p_zeta*p_error
@@ -62,17 +62,16 @@ class PID_Controller:
         zeta = state["zeta"]
         target_xyz = target["xyz"]
         target_zeta = target["zeta"]
-        u_s = self.compute_lin(xyz, target_xyz)
-        roll = u_s[0,0]
-        pitch = -u_s[1,0]
-        yaw = 0.0
-        throttle = self.n_motors*self.kt*self.hov_rpm**2+u_s[2,0]
-        print(throttle)
-        print(u_s)
-        return np.array([[throttle],
-                        [roll],
-                        [pitch],
-                        [yaw]])
+        u_s = self.compute_lin_pid(target_xyz, xyz)
+        u_1 = np.array([[self.mass*(self.g+u_s[2,0])]])
+        phi_c = 1./self.g*(u_s[0,0]*sin(target_zeta[2,0])-u_s[1,0]*cos(target_zeta[2,0]))
+        theta_c = 1./self.g*(u_s[0,0]*cos(target_zeta[2,0])+u_s[1,0]*sin(target_zeta[2,0]))
+        psi_c = 0.
+        angs = np.array([[phi_c],
+                        [theta_c],
+                        [psi_c]])
+        u_2 = self.compute_ang_pid(angs, zeta)
+        return np.vstack((u_1, u_2))
 
 def terminal(xyz, zeta, uvw, pqr):
     mask1 = zeta > pi/2.
@@ -92,10 +91,7 @@ def main():
     
     params = cfg.params
     iris = quad.Quadrotor(params)
-    hover_rpm = iris.hov_rpm
-    trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
     vis = ani.Visualization(iris, 10)
-    rpm = trim
 
     goal_zeta = np.array([[0.],
                         [0.],
@@ -118,24 +114,24 @@ def main():
     iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
     xyz, zeta, uvw, pqr = iris.get_state()
     
-    pids = {"linear":{"p": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]]), 
-                    "i": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]]), 
-                    "d": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]])},
-            "angular":{"p": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]]), 
-                    "i": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]]), 
-                    "d": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]])}}
+    pids = {"linear":{"p": np.array([[1.],
+                                    [1.],
+                                    [1.]]), 
+                    "i": np.array([[0.01],
+                                    [0.01],
+                                    [0.01]]), 
+                    "d": np.array([[1.],
+                                    [1.],
+                                    [1.]])},
+            "angular":{"p": np.array([[0.01],
+                                    [0.01],
+                                    [0.01]]), 
+                    "i": np.array([[0.001],
+                                    [0.001],
+                                    [0.001]]), 
+                    "d": np.array([[0.01],
+                                    [0.01],
+                                    [0.01]])}}
     targets = {"xyz": goal_xyz,
                 "zeta": goal_zeta}
     controller = PID_Controller(iris, pids)
@@ -153,6 +149,7 @@ def main():
             pl.figure(0)
             axis3d.cla()
             vis.draw3d(axis3d)
+            vis.draw_goal(axis3d, goal_xyz.T)
             axis3d.set_xlim(-3, 3)
             axis3d.set_ylim(-3, 3)
             axis3d.set_zlim(0, 6)

@@ -242,8 +242,8 @@ class Quadrotor:
         """
 
         if not rpm_commands:
-            control_signal = np.clip(control_signal, 0., self.n_motors*self.max_thrust)
             rpm_sq = self.u_to_rpm.dot(control_signal)
+            rpm_sq = np.clip(rpm_sq, 0, self.max_rpm**2)
             rpm = (rpm_sq**0.5).flatten()
         else:
             rpm = control_signal

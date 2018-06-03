@@ -29,7 +29,7 @@ def main():
     goal_zeta = np.array([[0.],
                         [0.],
                         [0.]])
-    goal_xyz = np.array([[0.],
+    goal_xyz = np.array([[1.],
                         [0.],
                         [3.]])
     xyz_init = np.array([[0.],
@@ -42,11 +42,13 @@ def main():
                         [0.],
                         [0.]])
 
+    # add some noise to the initial attitude of the aircraft
     eps = np.random.rand(3,1)/10.
     zeta_init = goal_zeta+eps
     iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)
     xyz, zeta, uvw, pqr = iris.get_state()
     
+    # initialize a PD controller by setting the I term to zero
     pids = {"linear":{"p": np.array([[1.],
                                     [1.],
                                     [1.]]), 
@@ -92,7 +94,7 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-        actions = controller.action(states, targets)
+        actions = controller.action(targets, states)
         xyz, zeta, uvw, pqr = iris.step(actions, rpm_commands=False)
         done = terminal(xyz, zeta, uvw, pqr)
         t += iris.dt

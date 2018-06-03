@@ -1,6 +1,28 @@
 import numpy as np
 from math import sin, cos
 
+"""
+    Implements a linearized hover pid controller for a quadrotor. We want to solve the equation:
+
+    [[u1],      [[kt,   kt,     kt,     kt],    [[w_1^2], 
+    [u2],   =   [0.,    lkt,    0.,   -lkt],     [w_2^2],
+    [u3],       [-lkt,  0.,     lkt,    0.],     [w_3^2],
+    [u4]]       [-kq,   kq,    -kq,     kq]]     [w_4^2]]
+
+    Where u1 is our thrust in the body z-direction, u2 is the commanded roll, u3 is the commanded
+    pitch, and u4 is the commanded yaw. To do this, we calculate the PID error in xyz, which gives
+    us a force vector in the body frame. For small angles, we assume this lines up with the inertial
+    axis, and take the z-component of this vector to be u1. Next, we rotate the x and y components 
+    of this vector about the z-axis to get our roll and pitch commands. We feed this into the zeta 
+    PID controller as our target, along with a desired yaw of 0. The returned PID error is our U2 
+    vector, where:
+
+    U2 = [u2, u3, u4]^T
+
+    We stack u1 on top of this vector to get [u1, u2, u3, u4]^T, and solve the above equation to
+    get the RPM values.
+"""
+
 class PID_Controller:
     def __init__(self, aircraft, pids):
         self.aircraft = aircraft
@@ -17,15 +39,9 @@ class PID_Controller:
         self.i_limit_xyz = 50.
         self.i_limit_zeta = 50.
 
-        self.kt = aircraft.kt
-        self.kq = aircraft.kq
         self.mass = aircraft.mass
-        self.J = aircraft.J
         self.g = aircraft.g
         self.dt = aircraft.dt
-        self.hov_rpm = aircraft.hov_rpm
-        self.max_rpm = aircraft.max_rpm
-        self.n_motors = aircraft.n_motors
         
     def compute_lin_pid(self, target, state):
         error = target-state
@@ -53,7 +69,7 @@ class PID_Controller:
         self.last_error_zeta = error
         return p_output+i_output+d_output
     
-    def action(self, state, target):
+    def action(self, target, state):
         xyz = state["xyz"]
         zeta = state["zeta"]
         target_xyz = target["xyz"]

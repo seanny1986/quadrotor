@@ -65,8 +65,9 @@ vis = ani.Visualization(iris, 10)
 
 def reward(xyz, zeta):
     return -10.*F.mse_loss(xyz[0], goal[0,:])-30.*F.mse_loss(zeta[0], goal[1,:])
-
+kk = 1
 def main():
+    global kk
     pl.close("all")
     pl.ion()
     fig = pl.figure(0)
@@ -74,7 +75,6 @@ def main():
 
     interval_avg = []
     avg = 0
-    i = 1
     for ep in count(1):
         noise.reset()
         running_reward = 0
@@ -89,21 +89,24 @@ def main():
             pqr = pqr.cuda()
         state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
         for t in range(steps):
-            if ep % args.log_interval == 0:
-                pl.figure(0)
-                axis3d.cla()
-                vis.draw3d(axis3d)
-                axis3d.set_xlim(-3, 3)
-                axis3d.set_ylim(-3, 3)
-                axis3d.set_zlim(0, 6)
-                axis3d.set_xlabel('West/East [m]')
-                axis3d.set_ylabel('South/North [m]')
-                axis3d.set_zlabel('Down/Up [m]')
-                axis3d.set_title("Time %.3f s" %(t*dt))
-                pl.pause(0.001)
-                pl.draw()
-                pl.savefig('frame'+str(i)+".jpg")
-                i += 1
+            if ep > args.warmup:
+                if ep % args.log_interval == 0:
+                    pl.figure(0)
+                    axis3d.cla()
+                    vis.draw3d(axis3d)
+                    axis3d.set_xlim(-3, 3)
+                    axis3d.set_ylim(-3, 3)
+                    axis3d.set_zlim(0, 6)
+                    axis3d.set_xlabel('West/East [m]')
+                    axis3d.set_ylabel('South/North [m]')
+                    axis3d.set_zlabel('Down/Up [m]')
+                    axis3d.set_title("Time %.3f s" %(t*dt))
+                    pl.savefig('frame'+str(kk)+".jpg")
+                    pl.pause(0.001)
+                    pl.draw()
+                    kk += 1
+                    print(kk)
+                    
             if ep < args.warmup:
                 action = agent.random_action(noise)
                 action = action.data

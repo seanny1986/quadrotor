@@ -58,7 +58,7 @@ noise = OUNoise(action_dim)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 
-goal = Tensor([[0., 0., 0.], 
+goal = Tensor([[0., 0., 2.5], 
                 [0., 0., 0.]])
 
 vis = ani.Visualization(iris, 10)
@@ -74,6 +74,7 @@ def main():
 
     interval_avg = []
     avg = 0
+    i = 1
     for ep in count(1):
         noise.reset()
         running_reward = 0
@@ -101,6 +102,8 @@ def main():
                 axis3d.set_title("Time %.3f s" %(t*dt))
                 pl.pause(0.001)
                 pl.draw()
+                pl.savefig('frame'+str(i)+".jpg")
+                i += 1
             if ep < args.warmup:
                 action = agent.random_action(noise)
                 action = action.data
@@ -108,8 +111,8 @@ def main():
                 action = agent.select_action(state,noise=noise)
                 action = action.data
             xyz, zeta, uvw, pqr, _, _, uvw_dot, pqr_dot = iris.step(action.cpu().numpy()[0], return_acceleration=True)
-            mask1 = zeta > pi/2
-            mask2 = zeta < -pi/2
+            mask1 = zeta[:1] > pi/2
+            mask2 = zeta[:1] < -pi/2
             mask3 = np.abs(xyz) > 6
             if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
                 break
@@ -127,7 +130,7 @@ def main():
                 uvw_dot = uvw_dot.cuda()
                 pqr_dot = pqr_dot.cuda()
             next_state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
-            r = reward(xyz, zeta)-(uvw_dot.pow(2).sum()+pqr_dot.pow(2).sum())/1e4-action.pow(2).sum()/1e6
+            r = reward(xyz, zeta)+100.-(uvw_dot.pow(2).sum()+pqr_dot.pow(2).sum())/1e4-action.pow(2).sum()/1e6
             running_reward += r
             memory.push(state.squeeze(0), action.squeeze(0), next_state.squeeze(0), r.unsqueeze(0))
             if ep >= args.warmup:

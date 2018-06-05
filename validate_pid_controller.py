@@ -29,7 +29,7 @@ def main():
     goal_zeta = np.array([[0.],
                         [0.],
                         [0.]])
-    goal_xyz = np.array([[1.],
+    goal_xyz = np.array([[3.],
                         [0.],
                         [3.]])
     xyz_init = np.array([[0.],
@@ -58,15 +58,15 @@ def main():
                     "d": np.array([[1.],
                                     [1.],
                                     [1.]])},
-            "angular":{"p": np.array([[0.1],
-                                    [0.1],
-                                    [0.01]]), 
+            "angular":{"p": np.array([[0.5],
+                                    [0.5],
+                                    [0.05]]), 
                     "i": np.array([[0.],
                                     [0.],
                                     [0.]]), 
-                    "d": np.array([[0.1],
-                                    [0.1],
-                                    [0.1]])}}
+                    "d": np.array([[0.2],
+                                    [0.2],
+                                    [0.2]])}}
     targets = {"xyz": goal_xyz,
                 "zeta": goal_zeta}
     controller = ctrl.PID_Controller(iris, pids)
@@ -75,8 +75,9 @@ def main():
     frames = 5
     running = True
     done = False
-    t = 0
-    
+    t = 0.
+    i = 1
+    H = 5
     while running:
         states = {"xyz": xyz,
                 "zeta": zeta}
@@ -94,11 +95,15 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
+            pl.savefig('frame'+str(i)+".jpg")
+            i += 1
         actions = controller.action(targets, states)
         xyz, zeta, uvw, pqr = iris.step(actions, rpm_commands=False)
         done = terminal(xyz, zeta, uvw, pqr)
         t += iris.dt
         #counter += 1
+        if t > H:
+            break 
         if done:
             print("Resetting vehicle to: {}, {}, {}, {}".format(xyz_init, zeta_init, uvw_init, pqr_init))
             iris.set_state(xyz_init, zeta_init, uvw_init, pqr_init)

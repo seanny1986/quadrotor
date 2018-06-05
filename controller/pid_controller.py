@@ -77,8 +77,8 @@ class PID_Controller:
         phi_c = 1./self.g*(u_s[0,0]*sin(target_zeta[2,0])-u_s[1,0]*cos(target_zeta[2,0]))
         theta_c = 1./self.g*(u_s[0,0]*cos(target_zeta[2,0])+u_s[1,0]*sin(target_zeta[2,0]))
         psi_c = 0.
-        angs = np.array([[phi_c],
+        zeta_c = np.array([[phi_c],
                         [theta_c],
                         [psi_c]])
-        u_2 = self.compute_ang_pid(angs, zeta)
+        u_2 = self.compute_ang_pid(zeta_c, zeta)*np.array([[1.],[1.],[-1.]])
         return np.vstack((u_1, u_2))

@@ -35,7 +35,7 @@ class Quadrotor:
                             [0.],
                             [-self.g]])
         
-        # state space
+        # state space. uvw and pqr are 4 element vectors of the form [0, uvw]^T, and [0, pqr]^T
         self.xyz = np.array([[0.],
                             [0.],
                             [0.]])
@@ -51,10 +51,13 @@ class Quadrotor:
                             [0.],
                             [0.]])
         
+        # all rotation math handled by quaternions. This is secretly part of the state space.
+        self.q = self.euler_to_q(self.zeta)
+        
         # action space
         self.rpm = np.array([0.0, 0., 0., 0.])
 
-        # accelerations -- required for leapfrog integration
+        # accelerations -- memory is required here required for leapfrog integration.
         self.uvw_dot = np.array([[0.],
                                 [0.],
                                 [0.]])
@@ -62,15 +65,11 @@ class Quadrotor:
                                 [0.],
                                 [0.]])
 
-        # we use these matrices to convert from a thrust/moment input to an rpm input
-        self.rpm_translation = np.linalg.inv(np.array([[1., 1., 1., 1.],
-                                                        [0., 1., 0., -1.],
-                                                        [-1., 0., 1., 0.],
-                                                        [-1., 1., -1., 1.]]))
-        self.const = np.array([[1./self.kt],
-                                [1./self.l/self.kt],
-                                [1./self.l/self.kt],
-                                [1./self.kq]])
+        # we use this matrix to convert from a thrust/moment input to an rpm input.
+        self.u_to_rpm = np.linalg.inv(np.array([[self.kt, self.kt, self.kt, self.kt],
+                                                [0., self.l*self.kt, 0., -self.l*self.kt],
+                                                [-self.l*self.kt, 0., self.l*self.kt, 0.],
+                                                [-self.kq, self.kq, -self.kq, self.kq]]))
         
         # important physical limits
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
@@ -78,9 +77,6 @@ class Quadrotor:
         self.max_thrust = self.kt*self.max_rpm
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
-        
-        # all rotation math handled by quaternions. This is secretly part of the state space.
-        self.q = self.euler_to_q(self.zeta)
         
     def set_state(self, xyz, zeta, uvw, pqr):
         """
@@ -144,10 +140,11 @@ class Quadrotor:
 
     def q_conj(self, q):
         """
-            Returns the conjugate of quaternion q. q* = q'/|q|, where q is the
-            magnitude, and q' is the inverse [p0, -p1, -p2, -p3]^T. Since we
+            Returns the conjugate q* of quaternion q. q* = q'/|q|, where q is the
+            magnitude, and q' is the inverse: q' = [p0, -p1, -p2, -p3]^T. Since we
             always normalize after updating q, we should always have a unit
-            quaternion. This means we don't have to normalize in this routine.
+            quaternion. This means we don't have to normalize in this routine. That
+            is, for a unit quaternion, q* = q'
         """
 
         q0, q1, q2, q3 = q
@@ -250,14 +247,12 @@ class Quadrotor:
         """
         
         if not rpm_commands:
-            u = self.const*control_signal.reshape(-1,1)
-            rpm_sq = self.rpm_translation.dot(u)
+            rpm_sq = self.u_to_rpm.dot(control_signal)
+            rpm_sq = np.clip(rpm_sq, 0, self.max_rpm**2)
             rpm = (rpm_sq**0.5).flatten()
         else:
             rpm = control_signal
-
-        # clip rpm values
-        rpm = np.clip(rpm, 0., self.max_rpm)
+            rpm = np.clip(rpm, 0., self.max_rpm)
         
         # thrust forces and moments, aerodynamic forces and moments
         ft = self.thrust_forces(rpm)
@@ -277,19 +272,23 @@ class Quadrotor:
         uvw_dot = (ft+fa)/self.mass+g_b-np.cross(self.pqr[1:], self.uvw[1:], axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(((mt+ma)-np.cross(self.pqr[1:], H, axis=0)))
         
-        # kick: v_{i+0.5} = v_{i}+a_{i}dt/2
+        # kick: v_{i+0.5} = v_{i}+a_{i}dt/2 -- update velocity by half step
         self.uvw[1:] += self.uvw_dot*self.dt/2.
         self.pqr[1:] += self.pqr_dot*self.dt/2.
         
-        # drift: x_{i+1} = x_{i}+v_{i+0.5}dt
+        # drift: x_{i+1} = x_{i}+v_{i+0.5}dt -- update q using q_dot*dt, and normalize
         q_dot = -0.5*Q.dot(self.pqr)
         self.q = self.q_norm(self.q+q_dot*self.dt)
+        
+        # update zeta using quaternion to Euler angle conversion
+        self.zeta = self.q_to_euler(self.q)
+
+        # rotate linear velocity to inertial frame using q^-1pq to get xyz_dot, and update xyz
         Q_inv = self.q_conj(self.q)
         xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw).dot(self.q))[1:]
         self.xyz += xyz_dot*self.dt
-        self.zeta = self.q_to_euler(self.q)
 
-        # kick: v_{i+1} = v_{i+0.5}+a_{i+1}dt/2
+        # kick: v_{i+1} = v_{i+0.5}+a_{i+1}dt/2 -- update velocity by half step
         self.uvw[1:] += uvw_dot*self.dt/2.
         self.pqr[1:] += pqr_dot*self.dt/2.
         self.uvw_dot = uvw_dot

@@ -12,7 +12,7 @@ def main():
     
     params = cfg.params
     iris = quad.Quadrotor(params)
-    T = 3
+    T = 2.5
     time = np.linspace(0, T, T/iris.dt)
     hover_rpm = iris.hov_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])

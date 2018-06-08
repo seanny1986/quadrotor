@@ -1,6 +1,6 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.config as cfg
-import models.multi_step_vel as model
+import models.multi_step_vel2 as model
 import math
 from math import pi
 import numpy as np

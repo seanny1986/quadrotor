@@ -65,9 +65,8 @@ vis = ani.Visualization(iris, 10)
 
 def reward(xyz, zeta):
     return -10.*F.mse_loss(xyz[0], goal[0,:])-30.*F.mse_loss(zeta[0], goal[1,:])
-kk = 1
+
 def main():
-    global kk
     pl.close("all")
     pl.ion()
     fig = pl.figure(0)
@@ -101,11 +100,8 @@ def main():
                     axis3d.set_ylabel('South/North [m]')
                     axis3d.set_zlabel('Down/Up [m]')
                     axis3d.set_title("Time %.3f s" %(t*dt))
-                    pl.savefig('frame'+str(kk)+".jpg")
                     pl.pause(0.001)
                     pl.draw()
-                    kk += 1
-                    print(kk)
                     
             if ep < args.warmup:
                 action = agent.random_action(noise)

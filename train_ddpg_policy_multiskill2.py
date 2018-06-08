@@ -163,14 +163,20 @@ def main():
     global last_uvw_dist
     global last_pqr_dist
     for ep in count(1):
+        # reset noise, last distance to None, running reward to zero
         last_xyz_dist = None
         last_zeta_dist = None
         last_uvw_dist = None
         last_pqr_dist = None
         noise.reset()
         running_reward = 0
+
+        # reset to [0,0,0], [0,0,0], [0,0,0], [0,0,0]
         xyz, zeta, uvw, pqr = iris.reset()
         xyz, zeta, uvw, pqr = numpy_to_pytorch(xyz, zeta, uvw, pqr)
+        state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
+
+        # generate random goal state
         radius = Tensor(1).uniform_(0,max_rad)
         xyz_g, zeta_g, uvw_g, pqr_g = generate_goal(radius) 
         rel_dist = xyz_g-xyz
@@ -178,38 +184,58 @@ def main():
         rel_uvw = uvw_g-uvw
         rel_pqr = pqr_g-pqr
         goal_init = torch.cat([rel_dist, rel_ang.sin(), rel_ang.cos(), rel_uvw, rel_pqr], dim=1)
-        state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
+        
         for t in range(steps):
+            
+            # initialize goal to relative distance
             if t == 0:
                 goal = goal_init
+            
+            # render the episode
             if ep % args.log_interval == 0:
                 if counter%frames == 0:
                     render(axis3d, goal_init, t)
+                    counter = 0
+            
+            # select an action using either random policy or trained policy
             if ep < args.warmup:
                 action = agent.random_action(noise).data
             else:
                 state_goal = torch.cat([state, goal], dim=1)
                 action = agent.select_action(state_goal,noise=noise).data
+            
+            # step simulation forward
             xyz, zeta, uvw, pqr = iris.step(action.cpu().numpy()[0])
             xyz_nn, zeta_nn, uvw_nn, pqr_nn = numpy_to_pytorch(xyz, zeta, uvw, pqr)
+            next_state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
+
+            # get new relative distance
             rel_dist = xyz_g-xyz_nn
             rel_ang = zeta_g-zeta_nn
             rel_uvw = uvw_g-uvw_nn
             rel_pqr = pqr_g-pqr_nn
             goal = torch.cat([rel_dist, rel_ang.sin(), rel_ang.cos(), rel_uvw, rel_pqr], dim=1)
-            next_state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
+            
+            # calc reward
             r = reward(rel_dist, rel_ang, rel_uvw, rel_pqr, action)
             running_reward += r
+            
+            # push to replay memory
             memory.push(state.squeeze(0), action.squeeze(0), next_state.squeeze(0), r.unsqueeze(0), goal.squeeze(0))
+            
+            # online training if out of warmup phase
             if ep >= args.warmup:
                 for i in range(5):
                     transitions = memory.sample(args.batch_size)
                     batch = ddpg.Transition(*zip(*transitions))
                     agent.update(batch)
-            state = next_state
+            
+            # check if terminate
             if terminate(xyz, zeta, uvw, pqr, rel_dist):
                 break
+            state = next_state
             counter += 1
+
         interval_avg.append(running_reward)
         avg = (avg*(ep-1)+running_reward)/ep   
         if ep % args.log_interval == 0:

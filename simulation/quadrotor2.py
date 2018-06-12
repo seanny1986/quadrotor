@@ -189,13 +189,13 @@ class Quadrotor:
             Calculates drag in the body xyz axis (E-N-U) due to linear velocity
         """
 
-        mag = np.linalg.norm(self.uvw)
+        mag = np.linalg.norm(self.uvw[1:])
         if mag == 0:
             return np.array([[0.],
                             [0.],
                             [0.]])
         else:
-            norm = self.uvw/mag
+            norm = self.uvw[1:]/mag
             return -(self.kd*mag**2)*norm
 
     def aero_moments(self):
@@ -203,13 +203,13 @@ class Quadrotor:
             Models aero moments about the body xyz axis (E-N-U) as a function of angular velocity
         """
 
-        mag = np.linalg.norm(self.pqr)
+        mag = np.linalg.norm(self.pqr[1:])
         if mag == 0:
             return np.array([[0.],
                             [0.],
                             [0.]])
         else:
-            norm = self.pqr/mag
+            norm = self.pqr[1:]/mag
             return -(self.km*mag**2)*norm
 
     def thrust_forces(self, rpm):

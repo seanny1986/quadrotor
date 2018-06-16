@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
 import utils
-from math import atan2, asin
+from math import atan2, asin, sin, cos
 import torch.nn.utils as ut
 
 class Transition(nn.Module):
@@ -24,6 +24,8 @@ class Transition(nn.Module):
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
+        
+        self.zero = self.Tensor([[0.]])
 
     def step(self, x0, zeta, uvw, pqr, dt):
         # state_action is [sin(zeta), cos(zeta), v, w, a]
@@ -37,8 +39,8 @@ class Transition(nn.Module):
         return xyz.view(1,-1), zeta.view(1,-1)
         
     def rotate(self, uvw, pqr, q):
-        uvw_q = torch.cat([self.zero, uvw],dim=0)
-        pqr_q = torch.cat([self.zero, pqr],dim=0)
+        uvw_q = torch.cat([self.Tensor([[0.]]), uvw.t()],dim=0)
+        pqr_q = torch.cat([self.Tensor([[0.]]), pqr.t()],dim=0)
         q_inv = self.q_conj(q)
         xyz_dot = torch.mm(self.q_mult(q_inv), torch.mm(self.q_mult(uvw_q), q))
         q_dot = -0.5*self.q_mult(q).dot(pqr_q)
@@ -84,14 +86,29 @@ class Transition(nn.Module):
                             [psi]])
     
     def euler_to_q(self, zeta):
-        return None
+        """
+            Converts a set of Euler angles to a quaternion. We do this at the very
+            start, since we initialize the vehicle with Euler angles zeta.
+        """
+        
+        phi, theta, psi = zeta[:,0], zeta[:,1], zeta[:,2]
+        q0 = cos(phi/2.)*cos(theta/2.)*cos(psi/2.)+sin(phi/2.)*sin(theta/2.)*sin(psi/2.)
+        q1 = sin(phi/2.)*cos(theta/2.)*cos(psi/2.)-cos(phi/2.)*sin(theta/2.)*sin(psi/2.)
+        q2 = cos(phi/2.)*sin(theta/2.)*cos(psi/2.)+sin(phi/2.)*cos(theta/2.)*sin(psi/2.)
+        q3 = cos(phi/2.)*cos(theta/2.)*sin(psi/2.)-sin(phi/2.)*sin(theta/2.)*cos(psi/2.)
+        return self.Tensor([[q0],
+                            [q1],
+                            [q2],
+                            [q3]])
 
-    def forward(self, state_action, H):
+    def forward(self, state_action):
         outputs = []
         h_t = torch.zeros(1, self.hidden_dim, dtype=torch.float).cuda()
         c_t = torch.zeros(1, self.hidden_dim, dtype=torch.float).cuda()
-        for i in range(H-1):
-            h_t, c_t = self.lstm(state_action[i], (h_t, c_t))
+        H = state_action.size()[0]
+        for i in range(H):
+            net_input = state_action[i].unsqueeze(0)
+            h_t, c_t = self.lstm(net_input, (h_t, c_t))
             uvw = self.uvw_out(h_t)
             pqr = self.pqr_out(h_t)
             outputs.append(torch.cat([uvw, pqr],dim=1))
@@ -102,8 +119,8 @@ class Transition(nn.Module):
         xs, ys = [], []
         H = len(xyzs)
         i = 0
-        print("Update uvw: ", uvws)
-        input("Paused")
+        #print("Update uvw: ", uvws)
+        #input("Paused")
         # process data
         for xyz, zeta, uvw, pqr in zip(xyzs, zetas, uvws, pqrs):   
             _, zeta_nn, uvw_nn, pqr_nn = utils.numpy_to_pytorch(xyz, zeta, uvw, pqr)
@@ -122,14 +139,14 @@ class Transition(nn.Module):
 
         # update
         optimizer.zero_grad()
-        ys_pred = self.forward(xs, H)
+        ys_pred = self.forward(xs)
         ys_pred = torch.stack(ys_pred)
         ys = torch.stack(ys)
         loss = criterion(ys_pred, ys)
-        print("PREDICTED: ", ys_pred)
-        print("ACTUAL: ",ys)
-        print("LOSS: ", loss.item())
-        input("Paused")
+        #print("PREDICTED: ", ys_pred)
+        #print("ACTUAL: ",ys)
+        #print("LOSS: ", loss.item())
+        #input("Paused")
         loss.backward()
         ut.clip_grad_norm_(self.parameters(),0.1)
         optimizer.step()

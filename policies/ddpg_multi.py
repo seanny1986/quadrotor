@@ -97,7 +97,7 @@ class DDPG(nn.Module):
         reward = torch.unsqueeze(reward, 1)
 
         next_state_goal = torch.cat([next_state, goal],dim=1)
-        next_action = self.target_actor(next_state_goal)                                            # take off-policy action
+        next_action = self.actor(next_state_goal)                                            # take off-policy action
         next_state_action_goal = torch.cat([next_state, next_action, goal],dim=1)                   # next state-action batch
         next_state_action_goal_value = self.target_critic(next_state_action_goal)                   # target q-value
         with torch.no_grad():
@@ -112,7 +112,11 @@ class DDPG(nn.Module):
         
         self.pol_opt.zero_grad()                                                                    # zero gradients in optimizer
         state_goal = torch.cat([state, goal],dim=1)
+<<<<<<< Updated upstream
         policy_loss = -self.critic(torch.cat([state, self.actor(state_goal), goal],dim=1))          # use critic to estimate pol gradient
+=======
+        policy_loss = -self.critic(torch.cat([state, self.actor(state_goal), goal],dim=1))           # use critic to estimate pol gradient
+>>>>>>> Stashed changes
         policy_loss = policy_loss.mean()                                                            # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(),0.1)                                 # clip policy gradient

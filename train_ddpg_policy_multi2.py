@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.animation as ani
 import simulation.config as cfg
 from math import sqrt, pi
@@ -41,11 +41,13 @@ iris = quad.Quadrotor(params)
 hover_rpm = iris.hov_rpm
 trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
 action_bound = iris.max_rpm
-dt = iris.dt
-T = 15
-steps = int(T/dt)
-dist_thresh = 1e-3
+sim_dt = iris.dt
+ctrl_dt = 0.05
+T = 2.5
+steps = int(T/ctrl_dt)
+dist_thresh = 1e-4
 max_rad = 1.5
+sim_steps = int(ctrl_dt/sim_dt)
 
 actor = ddpg.Actor(state_dim, action_dim)
 target_actor = ddpg.Actor(state_dim, action_dim)
@@ -60,13 +62,13 @@ noise = OUNoise(action_dim)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 
-vis = ani.Visualization(iris, 10)
+vis = ani.Visualization(iris, 10, quaternion=True)
 
 def terminate(xyz, zeta, uvw, uvw_dot, rel_dist):
-    mask1 = zeta > pi/2
-    mask2 = zeta < -pi/2
+    #mask1 = zeta[:2] > pi/2
+    #mask2 = zeta[:2] < -pi/2
     mask3 = np.abs(xyz) > 6
-    if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
+    if np.sum(mask3) > 0:
         return True
     if (rel_dist**2).sum() < dist_thresh:
         return True
@@ -76,39 +78,36 @@ last_zeta_dist = None
 last_uvw_dist = None
 last_pqr_dist = None
 def reward(rel_xyz, rel_zeta, rel_uvw, rel_pqr, action):
+    
     global last_xyz_dist
     global last_zeta_dist
     global last_uvw_dist
     global last_pqr_dist
-    err_xyz = (rel_xyz**2).sum(1).mean()
-    err_zeta = (rel_zeta**2).sum(1).mean()
-    err_uvw = (rel_uvw**2).sum(1).mean()
-    err_pqr = (rel_pqr**2).sum(1).mean()
-    if last_xyz_dist is not None:
-        xyz_loss = err_xyz-last_xyz_dist
-    else:
-        xyz_loss = -err_xyz
-    if last_zeta_dist is not None:
-        zeta_loss = err_zeta-last_zeta_dist
-    else:
-        zeta_loss = -err_zeta
-    if last_uvw_dist is not None:
-        uvw_loss = err_uvw-last_uvw_dist
-    else:
-        uvw_loss = -err_uvw
-    if last_pqr_dist is not None:
-        pqr_loss = err_pqr-last_pqr_dist
-    else:
-        pqr_loss = -err_pqr
+    
+    err_xyz = (rel_xyz**2).mean()
+    err_zeta = (rel_zeta**2).mean()
+    err_uvw = (rel_uvw**2).mean()
+    err_pqr = (rel_pqr**2).mean()
+    
+    xyz_loss = last_xyz_dist-err_xyz
+    zeta_loss = last_zeta_dist-err_zeta
+    uvw_loss = last_uvw_dist-err_uvw
+    pqr_loss = last_pqr_dist-err_pqr
+    
     last_xyz_dist = err_xyz
     last_zeta_dist = err_zeta
     last_uvw_dist = err_uvw
     last_pqr_dist = err_pqr
-    action_loss = -(action**2).sum()/400000.
-    r = 0.
+    
+    action_rew = -(action**2).sum()/400000.
+    
+    bonus = 0.
     if err_xyz < dist_thresh:
-        r = 1000.
-    return xyz_loss+zeta_loss+uvw_loss+pqr_loss+action_loss+r
+        bonus = 1000.
+    
+    dist_rew = (-err_xyz).exp()+(-err_zeta).exp()+(-err_uvw).exp()+(-err_pqr).exp()
+    ctrl_rew = xyz_loss+zeta_loss+uvw_loss/100.+pqr_loss/100.
+    return dist_rew+ctrl_rew+action_rew+bonus+5.
 
 def numpy_to_pytorch(xyz, zeta, uvw, pqr):
     xyz = torch.from_numpy(xyz.T).float()
@@ -136,7 +135,7 @@ def generate_goal(r):
 def render(axis3d, goal, t):
     pl.figure(0)
     axis3d.cla()
-    vis.draw3d(axis3d)
+    vis.draw3d_quat(axis3d)
     vis.draw_goal(axis3d, goal)
     axis3d.set_xlim(-3, 3)
     axis3d.set_ylim(-3, 3)
@@ -144,7 +143,7 @@ def render(axis3d, goal, t):
     axis3d.set_xlabel('West/East [m]')
     axis3d.set_ylabel('South/North [m]')
     axis3d.set_zlabel('Down/Up [m]')
-    axis3d.set_title("Time %.3f s" %(t*dt))
+    axis3d.set_title("Time %.3f s" %(t*ctrl_dt))
     pl.pause(0.001)
     pl.draw()
 
@@ -163,16 +162,9 @@ def main():
     global last_uvw_dist
     global last_pqr_dist
     for ep in count(1):
-        # reset noise, last distance to None, running reward to zero
-        last_xyz_dist = None
-        last_zeta_dist = None
-        last_uvw_dist = None
-        last_pqr_dist = None
-        noise.reset()
-        running_reward = 0
 
         # reset to [0,0,0], [0,0,0], [0,0,0], [0,0,0]
-        xyz, zeta, uvw, pqr = iris.reset()
+        xyz, zeta, _, uvw, pqr = iris.reset()
         xyz, zeta, uvw, pqr = numpy_to_pytorch(xyz, zeta, uvw, pqr)
         state = torch.cat([zeta.sin(), zeta.cos(), uvw, pqr],dim=1)
 
@@ -185,6 +177,13 @@ def main():
         rel_pqr = pqr_g-pqr
         goal_init = torch.cat([rel_dist, rel_ang.sin(), rel_ang.cos(), rel_uvw, rel_pqr], dim=1)
         
+        # reset noise, last distance to None, running reward to zero
+        last_xyz_dist = (rel_dist**2).mean()
+        last_zeta_dist = (rel_ang**2).mean()
+        last_uvw_dist = (rel_uvw**2).mean()
+        last_pqr_dist = (rel_pqr**2).mean()
+        noise.reset()
+        running_reward = 0
         for t in range(steps):
             
             # initialize goal to relative distance
@@ -205,7 +204,9 @@ def main():
                 action = agent.select_action(state_goal,noise=noise).data
             
             # step simulation forward
-            xyz, zeta, uvw, pqr = iris.step(action.cpu().numpy()[0])
+            for j in range(sim_steps):
+                xyz, zeta, _, uvw, pqr = iris.step(action.cpu().numpy()[0])
+            
             xyz_nn, zeta_nn, uvw_nn, pqr_nn = numpy_to_pytorch(xyz, zeta, uvw, pqr)
             next_state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
 
@@ -225,7 +226,7 @@ def main():
             
             # online training if out of warmup phase
             if ep >= args.warmup:
-                for i in range(5):
+                for i in range(3):
                     transitions = memory.sample(args.batch_size)
                     batch = ddpg.Transition(*zip(*transitions))
                     agent.update(batch)

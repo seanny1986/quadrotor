@@ -26,7 +26,9 @@ def main():
     hover_rpm = iris.hov_rpm
     max_rpm = iris.max_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    dt = iris.dt
+    sim_dt = iris.dt
+    model_dt = 0.05
+    model_steps = int(model_dt/sim_dt)
 
     print("HOVER RPM: ", trim)
     print("Terminal Velocity: ", iris.terminal_velocity)
@@ -49,7 +51,7 @@ def main():
 
     running = True
     trajectory_len = 10
-    optimizer = optim.Adam(dyn.parameters(),lr=1e-7)
+    optimizer = optim.Adam(dyn.parameters(),lr=1e-4)
     criterion = torch.nn.MSELoss(size_average=True)
     while running:
         
@@ -57,14 +59,14 @@ def main():
         xyz_rand = np.random.uniform(low=-15, high=15, size=(3,1))
         zeta_rand = np.random.uniform(low=-2*pi,high=2*pi,size=(3,1))
         uvw_rand = np.random.uniform(low=-iris.terminal_velocity, high=iris.terminal_velocity, size=(3,1))
-        pqr_rand = np.random.uniform(low=-iris.terminal_rotation, high=iris.terminal_rotation, size=(3,1))
+        pqr_rand = np.random.uniform(low=-1, high=1, size=(3,1))
 
-        print("XYZ: ", xyz_rand)
-        print("ZETA: ", zeta_rand)
-        print("UVW: ", uvw_rand)
-        print("PQR: ", pqr_rand)
+        #print("XYZ: ", xyz_rand)
+        #print("ZETA: ", zeta_rand)
+        #print("UVW: ", uvw_rand)
+        #print("PQR: ", pqr_rand)
 
-        input("Paused")
+        #input("Paused")
 
         # set random state
         iris.set_state(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
@@ -83,7 +85,8 @@ def main():
         # run trajectory
         for i in range(trajectory_len):
             action = np.random.uniform(low=0, high=max_rpm, size=(4,))        
-            xyz, zeta, _, uvw, pqr = iris.step(action)
+            for j in range(model_steps):
+                xyz, zeta, _, uvw, pqr = iris.step(action)
 
             print("XYZ: ", xyz)
             print("ZETA: ", zeta)

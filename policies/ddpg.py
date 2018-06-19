@@ -31,10 +31,8 @@ class Critic(nn.Module):
         return q
 
 class DDPG(nn.Module):
-    def __init__(self, action_bound, actor, target_actor, critic, target_critic, gamma=0.99, tau=0.001, GPU=True):
-        super(DDPG, self).__init__()
-        self.action_bound = action_bound
-        
+    def __init__(self, actor, target_actor, critic, target_critic, gamma=0.99, tau=0.001, GPU=True):
+        super(DDPG, self).__init__() 
         self.actor = actor
         self.target_actor = target_actor
 
@@ -71,13 +69,13 @@ class DDPG(nn.Module):
             if self.GPU:
                 sigma = sigma.cuda()
             mu += sigma
-        return self.action_bound*mu
+        return mu
 
     def random_action(self, noise):
         action = Variable(torch.Tensor([noise.noise()]))
         if self.GPU:
             action = action.cuda()
-        return self.action_bound*action
+        return action
     
     def soft_update(self, target, source, tau):
 	    for target_param, param in zip(target.parameters(), source.parameters()):

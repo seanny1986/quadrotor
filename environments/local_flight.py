@@ -22,6 +22,7 @@ class Environment:
         pl.ion()
         self.fig = pl.figure(0)
         self.axis3d = fig.add_subplot(111, projection='3d')
+        self.vis = ani.Visualization(iris, 10)
 
 
     def reward(self, xyz, action):

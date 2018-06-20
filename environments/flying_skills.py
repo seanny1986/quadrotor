@@ -7,7 +7,7 @@ import random
 from math import pi, sin, cos
 
 class Environment:
-    def __init__(self, args):
+    def __init__(self):
         
         # environment parameters
         self.goal = self.generate_goal(1.5)

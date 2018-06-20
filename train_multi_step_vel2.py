@@ -88,12 +88,12 @@ def main():
             for j in range(model_steps):
                 xyz, zeta, _, uvw, pqr = iris.step(action)
 
-            print("XYZ: ", xyz)
-            print("ZETA: ", zeta)
-            print("UVW: ", uvw)
-            print("PQR: ", pqr)
+            #print("XYZ: ", xyz)
+            #print("ZETA: ", zeta)
+            #print("UVW: ", uvw)
+            #print("PQR: ", pqr)
 
-            input("Paused")
+            #input("Paused")
 
             xyzs.append(xyz.copy())
             zetas.append(zeta.copy())

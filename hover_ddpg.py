@@ -4,7 +4,7 @@ from ounoise import OUNoise
 import torch
 import torch.nn.functional as F
 from itertools import count
-import envs
+import environments.envs as envs
 
 parser = argparse.ArgumentParser(description='PyTorch MBPS Node')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G', help='discount factor (default: 0.99)')

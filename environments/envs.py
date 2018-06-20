@@ -1,13 +1,13 @@
-import local_flight
-import maneuvers
-import box_world
-import hover
-import perching
-import rapid_descent
+import environments.flying_skills as flying_skills
+import environments.maneuvers as maneuvers
+import environments.box_world as box_world
+import environments.hover as hover
+import environments.perching as perching
+import environments.rapid_descent as rapid_descent
 
 def make(name):
-    if name == "local_flight":
-        return local_flight.Environment()
+    if name == "flying_skills":
+        return flying_skills.Environment()
     if name == "maneuvers":
         return maneuvers.Environment()
     if name == "box_world":

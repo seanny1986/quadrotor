@@ -139,9 +139,10 @@ class Transition(nn.Module):
 
         # update
         optimizer.zero_grad()
-        ys_pred = self.forward(xs)
-        ys_pred = torch.stack(ys_pred)
-        ys = torch.stack(ys)
+        ys_pred = self.forward(torch.stack(xs).squeeze(1))
+        #print(torch.stack(ys_pred).size())
+        ys_pred = torch.stack(ys_pred).squeeze(1)
+        ys = torch.stack(ys).squeeze(1)
         loss = criterion(ys_pred, ys)
         #print("PREDICTED: ", ys_pred)
         #print("ACTUAL: ",ys)

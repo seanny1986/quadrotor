@@ -1,12 +1,11 @@
-import environments.envs as envs 
-import policies.ddpg as ddpg
+import policies.ppo as ppo
+import environments.envs as envs
 import argparse
-from ounoise import OUNoise
 import torch
 import torch.nn.functional as F
 from itertools import count
 
-parser = argparse.ArgumentParser(description='PyTorch MBPS Node')
+parser = argparse.ArgumentParser(description='PyTorch PPO hover experiment')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G', help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=543, metavar='N', help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true', help='render the environment')
@@ -26,66 +25,37 @@ if args.cuda:
 else:
     Tensor = torch.Tensor
 
-env = envs.make("local_flight")
+env = envs.make("hover")
 
 epochs = 250000
-state_dim = 27
-action_dim = 4
+state_dim = env.observation_space
+action_dim = env.action_space
 hidden_dim = 32
 
-actor = ddpg.Actor(state_dim, action_dim)
-target_actor = ddpg.Actor(state_dim, action_dim)
-critic = ddpg.Critic(state_dim, action_dim)
-target_critic = ddpg.Critic(state_dim, action_dim)
-agent = ddpg.DDPG(actor,target_actor,critic,target_critic)
+actor = ppo.Actor(state_dim, action_dim)
+target_actor = ppo.Actor(state_dim, action_dim)
+critic = ppo.Critic(state_dim, action_dim)
+agent = ppo.PPO(actor,target_actor,critic)
 
 if args.cuda:
     agent = agent.cuda()
-
-noise = OUNoise(action_dim)
-noise.set_seed(args.seed)
-memory = ddpg.ReplayMemory(1000000)
-
-
 
 def main():
     interval_avg = []
     avg = 0
     for ep in count(1):
-
-        state = env.reset()
-        noise.reset()
         running_reward = 0
+        state = env.reset()
         for t in range(env.T):
-            
-            # render the episode
             if ep % args.log_interval == 0:
                 env.render()
-            
-            # select an action using either random policy or trained policy
-            if ep < args.warmup:
-                action = agent.random_action(noise).data
-            else:
-                action = agent.select_action(state, noise=noise).item()
-            
-            # step simulation forward
+            action = agent.select_action(state)
             next_state, reward, done, _ = env.step(action)
-
-            # push to replay memory
-            memory.push(state, action, next_state, reward)
-            
-            # online training if out of warmup phase
-            if ep >= args.warmup:
-                for i in range(5):
-                    transitions = memory.sample(args.batch_size)
-                    batch = ddpg.Transition(*zip(*transitions))
-                    agent.update(batch)
-            
-            # check if terminate
+            running_reward += reward
             if done:
                 break
             state = next_state
-
+        agent.update()
         interval_avg.append(running_reward)
         avg = (avg*(ep-1)+running_reward)/ep   
         if ep % args.log_interval == 0:

@@ -23,19 +23,22 @@ class Environment:
         # simulation parameters
         self.params = cfg.params
         self.iris = quad.Quadrotor(self.params)
-        self.ctrl_dt = self.params["dt"]
-        self.sim_dt = 0.05
-        self.steps = range(int(self.sim_dt/self.ctrl_dt))
+        self.sim_dt = self.params["dt"]
+        self.ctrl_dt = 0.05
+        self.steps = range(int(self.ctrl_dt/self.sim_dt))
+        self.action_bound = [0, self.iris.max_rpm]
+        self.H = int(self.T/self.ctrl_dt)
 
         # rendering parameters
         pl.close("all")
         pl.ion()
         self.fig = pl.figure(0)
         self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, self.r)
+        self.vis = ani.Visualization(self.iris, 6)
 
         self.vec = None
         self.dist_sq = None
+        self.goal_achieved = False
 
     def reward(self, xyz, action):
         self.vec = self.iris.xyz-self.goal
@@ -55,27 +58,34 @@ class Environment:
         mask3 = np.abs(xyz) > 6
         if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
             return True
-        if self.goal_achieved:
+        elif self.goal_achieved:
+            print("Goal Achieved!")
             return True
+        elif self.t == self.T:
+            print("Sim time reached")
         else:
             return False
 
     def step(self, action):
         for _ in self.steps:
             xyz, zeta, uvw, pqr = self.iris.step(np.array(action))
-        tmp = zeta.T.tolist()
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()+pqr.T.tolist()
+        tmp = zeta.T.tolist()[0]
+        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
         reward = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
         info = None
         self.t += self.ctrl_dt
-        return next_state+self.vec.T.tolist(), reward, done, info
+        next_state = [next_state+self.vec.T.tolist()[0]]
+        return next_state, reward, done, info
 
     def reset(self):
+        self.goal_achieved = False
+        self.t = 0.
         xyz, zeta, uvw, pqr = self.iris.reset()
         self.vec = xyz-self.goal
-        tmp = zeta.T.tolist()
-        return [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()+pqr.T.tolist()
+        tmp = zeta.T.tolist()[0]
+        state = [[sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec.T.tolist()[0]]
+        return state
     
     def render(self):
         pl.figure(0)
@@ -88,7 +98,7 @@ class Environment:
         self.axis3d.set_xlabel('West/East [m]')
         self.axis3d.set_ylabel('South/North [m]')
         self.axis3d.set_zlabel('Down/Up [m]')
-        self.axis3d.set_title("Time %.3f s" %(self.t*self.ctrl_dt))
+        self.axis3d.set_title("Time %.3f s" %(self.t))
         pl.pause(0.001)
         pl.draw()
 

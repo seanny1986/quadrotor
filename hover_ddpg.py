@@ -45,6 +45,7 @@ noise = OUNoise(action_dim)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 
+action_bound = env.action_bound[1]
 
 def main():
     interval_avg = []
@@ -52,21 +53,22 @@ def main():
     for ep in count(1):
         noise.reset()
         running_reward = 0
-        state = env.reset()
-        for t in range(env.T):
+        state = Tensor(env.reset())
+        for t in range(env.H):
             if ep > args.warmup:
                 if ep % args.log_interval == 0:
-                    env.render()
-                    
+                    env.render()      
             if ep < args.warmup:
-                action = agent.random_action(noise)
+                action = agent.random_action(noise)*action_bound
                 action = action.data
             else:    
-                action = agent.select_action(state,noise=noise)
-                action = action.item()
-            next_state, reward, done, _ = env.step(action)
+                action = agent.select_action(state,noise=noise)*action_bound
+                action = action.data
+            next_state, reward, done, _ = env.step(action[0].cpu().numpy())
             running_reward += reward
-            memory.push(state, action, next_state, reward)
+            next_state = Tensor(next_state)
+            reward = Tensor([reward])
+            memory.push(state[0], action[0], next_state[0], reward)
             if ep >= args.warmup:
                 for i in range(5):               
                     transitions = memory.sample(args.batch_size)

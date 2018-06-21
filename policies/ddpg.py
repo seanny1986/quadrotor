@@ -68,8 +68,9 @@ class DDPG(nn.Module):
             sigma = Variable(torch.Tensor(noise.noise()))
             if self.GPU:
                 sigma = sigma.cuda()
-            mu += sigma
-        return mu
+            return mu+sigma
+        else:
+            return mu
 
     def random_action(self, noise):
         action = Variable(torch.Tensor([noise.noise()]))

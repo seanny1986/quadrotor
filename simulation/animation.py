@@ -111,5 +111,5 @@ class Visualization:
                         [x31, x32, x33]])
     
     def draw_goal(self, ax, goal):
-        ax.scatter(goal[0,0], goal[0,1], goal[0,2], color='green')
+        ax.scatter(goal[0,0], goal[1,0], goal[2,0], color='green')
 

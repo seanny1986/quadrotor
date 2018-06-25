@@ -21,7 +21,7 @@ class Environment:
         
         self.lower_upper = zip(self.lower_bnd, self.upper_bnd)
         self.box_range = range(n_boxes)
-        
+
         self.params = cfg.params
         self.iris = quad.Quadrotor(self.params)
 
@@ -33,6 +33,9 @@ class Environment:
     
         self.observation_space = 12+self.lidar_lines+3
         self.action_space = 4
+
+        self.vec = None
+        self.dist_sq = None
 
     def generate_map(self):
         # TODO: ensure boxes don't immediately impinge on the aircraft, ensure goal is reachable
@@ -80,8 +83,8 @@ class Environment:
         return None
 
     def terminal(self, pos):
-        col = self.detect_collision(pos)
-        dist_sq = [(x-g)**2 for x, g in zip(pos, self.goal)]
+        col = self.detect_collision(pos.T.tolist())
+        dist_sq = [(x-g)**2 for x, g in zip(pos, self.goal.T.tolist())]
         goal_achieved = sum([self.goal_thresh > x for x in dist_sq])
         if goal_achieved > 0.: goal_achieved = True
         if col or goal_achieved:

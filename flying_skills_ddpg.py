@@ -29,7 +29,7 @@ else:
 env = envs.make("flying_skills")
 
 epochs = 250000
-state_dim = env.observation_spaces
+state_dim = env.observation_space
 action_dim = env.action_space
 hidden_dim = 32
 
@@ -51,7 +51,7 @@ def main():
     avg = 0
     for ep in count(1):
 
-        state = env.reset()
+        state = Tensor(env.reset())
         noise.reset()
         running_reward = 0
         for t in range(env.T):
@@ -64,13 +64,15 @@ def main():
             if ep < args.warmup:
                 action = agent.random_action(noise).data
             else:
-                action = agent.select_action(state, noise=noise).item()
+                action = agent.select_action(state, noise=noise).data
             
             # step simulation forward
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, _ = env.step(action[0].cpu().numpy())
+            next_state = Tensor(next_state)
+            reward = Tensor([reward])
 
             # push to replay memory
-            memory.push(state, action, next_state, reward)
+            memory.push(state[0], action[0], next_state[0], reward)
             
             # online training if out of warmup phase
             if ep >= args.warmup:

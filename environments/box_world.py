@@ -8,7 +8,7 @@ from math import pi, sin, cos
 class Environment:
     """
         Environment where we spawn boxes randomly and a LIDAR-equipped aircraft must navigate them
-        to get to a given goal.
+        to get to a given goal. Still under construction.
     """
     def __init__(self, size=25, n_boxes=15, b_max=1.5):
         self.size = size

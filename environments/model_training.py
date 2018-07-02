@@ -7,13 +7,17 @@ import random
 from math import pi, sin, cos
 
 class Environment:
+    """
+        Environment wrapper for training aircraft transition models. This might not seem particularly
+        useful (you can easily do this without the wrapper), but it cleans things up a fair bit. Can
+        set deterministic or non-deterministic starting conditions. Deterministic conditions make the
+        model easy to learn, but makes the model less useful overall.
+    """
+    
     def __init__(self):
         
         # environment parameters
-        self.goal = np.array([[0.],
-                            [0.],
-                            [1.5]])
-        self.goal_thresh = 0.05
+        self.deterministic_s0 = True
         self.t = 0
         self.T = 15
         self.r = 1.5
@@ -29,12 +33,29 @@ class Environment:
         self.action_bound = [0, self.iris.max_rpm]
         self.H = int(self.T/self.ctrl_dt)
 
+        # define bounds here
+        self.xzy_bound = 1.
+        self.zeta_bound = pi/2
+        self.uvw_bound = 10
+        self.pqr_bound = 1.
+
         # rendering parameters
         pl.close("all")
         pl.ion()
         self.fig = pl.figure(0)
         self.axis3d = self.fig.add_subplot(111, projection='3d')
         self.vis = ani.Visualization(self.iris, 6)
+
+    def set_nondeterministic_s0(self):
+        self.deterministic_s0 = False
+
+    def generate_s0(self):
+        xyz = np.random.uniform(low=-self.xzy_bound, high=self.xzy_bound, size=(3,1))
+        zeta = np.random.uniform(low=-self.zeta_bound, high=self.zeta_bound, size=(3,1))
+        uvw = np.random.uniform(low=-self.uvw_bound, high=self.uvw_bound, size=(3,1))
+        pqr = np.random.uniform(low=-self.pqr_bound, high=self.pqr_bound, size=(3,1))
+        xyz[2,:] = abs(xyz[2,:])
+        return xyz, zeta, uvw, pqr
 
     def step(self, action):
         for _ in self.steps:
@@ -44,12 +65,18 @@ class Environment:
         return next_state, None, None, None
 
     def reset(self):
-        self.goal_achieved = False
         self.t = 0.
-        xyz, zeta, q, uvw, pqr = self.iris.reset()
+        if self.deterministic_s0:
+            xyz, zeta, uvw, pqr = self.iris.reset()
+        else:
+            xyz, zeta, uvw, pqr = self.generate_s0()
+            self.iris.set_state(xyz, zeta, uvw, pqr)
         state = [xyz.T.tolist()[0]+zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]]
         return state
-    
+
+    def set_random(self):
+        pass
+
     def set_state(self, xyz, zeta, uvw, pqr):
         self.iris.set_state(xyz, zeta, uvw, pqr)
     

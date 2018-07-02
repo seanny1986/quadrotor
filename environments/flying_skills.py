@@ -7,9 +7,15 @@ import random
 from math import pi, sin, cos
 
 class Environment:
+    """
+        Environment wrapper for training low-level flying skills. In this environment, the aircraft
+        has a deterministic starting state by default. We can switch it to have non-deterministic 
+        initial states. This is obviously much harder.
+    """
     def __init__(self):
         
         # environment parameters
+        self.deterministic_s0 = True
         self.goal = self.generate_goal(1.5)
         self.goal_thresh = 0.1
         self.t = 0
@@ -25,15 +31,32 @@ class Environment:
         self.sim_dt = 0.05
         self.steps = range(int(self.sim_dt/self.ctrl_dt))
 
+        # define bounds here
+        self.xzy_bound = 1.
+        self.zeta_bound = pi/2
+        self.uvw_bound = 10
+        self.pqr_bound = 1.
+
         # rendering parameters
         pl.close("all")
         pl.ion()
         self.fig = pl.figure(0)
         self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, self.r)
+        self.vis = ani.Visualization(self.iris, 6)
 
         self.vec = None
         self.dist_sq = None
+    
+    def set_nondeterministic_s0(self):
+        self.deterministic_s0 = False
+
+    def generate_s0(self):
+        xyz = np.random.uniform(low=-self.xzy_bound, high=self.xzy_bound, size=(3,1))
+        zeta = np.random.uniform(low=-self.zeta_bound, high=self.zeta_bound, size=(3,1))
+        uvw = np.random.uniform(low=-self.uvw_bound, high=self.uvw_bound, size=(3,1))
+        pqr = np.random.uniform(low=-self.pqr_bound, high=self.pqr_bound, size=(3,1))
+        xyz[2,:] = abs(xyz[2,:])
+        return xyz, zeta, uvw, pqr
 
     def reward(self, xyz, action):
         self.vec = self.iris.xyz-self.goal
@@ -60,22 +83,29 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, uvw, pqr = self.iris.step(np.array(action))
-        tmp = zeta.T.tolist()
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()+pqr.T.tolist()
+            xyz, zeta, uvw, pqr = self.iris.step(action)
+        tmp = zeta.T.tolist()[0]
+        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
         reward = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
         info = None
         self.t += self.ctrl_dt
-        return next_state+self.vec.T.tolist(), reward, done, info
+        next_state = [next_state+self.vec.T.tolist()[0]]
+        return next_state, reward, done, info
 
     def reset(self):
-        xyz, zeta, uvw, pqr = self.iris.reset()
+        self.goal_achieved = False
+        self.t = 0.
+        if self.deterministic_s0:
+            xyz, zeta, uvw, pqr = self.iris.reset()
+        else:
+            xyz, zeta, uvw, pqr = self.generate_s0()
+            self.iris.set_state(xyz, zeta, uvw, pqr)
         self.goal = self.generate_goal(self.r)
         self.vec = xyz-self.goal
-        tmp = zeta.T.tolist()
-        return [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()+pqr.T.tolist()
-
+        tmp = zeta.T.tolist()[0]
+        state = [[sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec.T.tolist()[0]]
+        return state
 
     def generate_goal(self, r):
         phi = random.uniform(-2*pi, 2*pi)
@@ -98,7 +128,7 @@ class Environment:
         self.axis3d.set_xlabel('West/East [m]')
         self.axis3d.set_ylabel('South/North [m]')
         self.axis3d.set_zlabel('Down/Up [m]')
-        self.axis3d.set_title("Time %.3f s" %(self.t*self.ctrl_dt))
+        self.axis3d.set_title("Time %.3f s" %(self.t))
         pl.pause(0.001)
         pl.draw()
 

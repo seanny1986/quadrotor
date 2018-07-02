@@ -52,18 +52,18 @@ class UPG(torch.nn.Module):
         reward = torch.stack(batch.reward)
         next_state = torch.stack(batch.next_state)
 
-        # update state-action value function
+        # update state-action value function off-policy
         with torch.no_grad():
             next_action_mu, _  = self.target_actor(next_state)
             q_next = self.target_critic(torch.cat([next_state, next_action_mu], dim=1))
         target = reward+self.gamma*q_next
-
         q = self.critic(torch.cat([state, action],dim=1))
         q_loss = self.crit_loss(q, target)
         self.crit_opt.zero_grad()
         q_loss.backward()
         self.crit_opt.step()
 
+        # soft update of critic (polyak averaging)
         self.soft_update(self.target_critic, self.critic, self.tau)
 
     def offline_update(self, trajectory):
@@ -84,7 +84,7 @@ class UPG(torch.nn.Module):
         q_hat = q_act-q_vals.detach()
         q_hat = (q_hat-q_hat.mean())/q_hat.std()
         self.pol_opt.zero_grad()
-        loss = -(action_logprobs.sum(dim=1, keepdim=True)*q_hat+q_vals).sum()
+        loss = -(action_logprobs.sum(dim=1, keepdim=True)*(q_hat+q_vals)).sum()
         loss.backward()
         self.pol_opt.step()
         self.soft_update(self.target_actor, self.actor, self.tau)

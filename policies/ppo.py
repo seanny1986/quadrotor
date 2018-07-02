@@ -103,7 +103,7 @@ class PPO(torch.nn.Module):
         a_hat = (advantage-advantage.mean())/advantage.std()
 
         # compute probability ratio
-        mu_pi, logvar_pi = self.pi_old(state)
+        mu_pi, logvar_pi = self.pi(state)
         dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
         pi_log_prob = dist_pi.log_prob(action)
         ratio = (pi_log_prob-beta_log_prob).sum(dim=1, keepdim=True).exp()

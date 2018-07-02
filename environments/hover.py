@@ -68,7 +68,7 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, uvw, pqr = self.iris.step(np.array(action))
+            xyz, zeta, uvw, pqr = self.iris.step(action)
         tmp = zeta.T.tolist()[0]
         next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
         reward = self.reward(xyz, action)

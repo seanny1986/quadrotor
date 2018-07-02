@@ -1,6 +1,3 @@
-import simulation.quadrotor2 as quad
-import simulation.config as cfg
-import models.multi_step_vel2 as model
 import math
 from math import pi
 import numpy as np
@@ -10,30 +7,36 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 import utils
+import numpy as np
+import environments.envs as envs
+import models.multi_step_vel2 as model
 
 style.use("seaborn-deep")
 GPU = True
-def main():
 
+def kernel(a, b, param):
+    sqdist = np.sum(a**2,1).reshape(-1,1) + np.sum(b**2,1) - 2*np.dot(a, b.T)
+    return np.exp(-.5 * (1/param) * sqdist)
+
+def generate_action(vector, n):
+    param = 2
+    K_ss = kernel(vector, vector, param)
+    L = np.linalg.cholesky(K_ss + 1e-15*np.eye(n))
+    action = np.dot(L, np.random.normal(size=(n,4)))
+    return action
+
+def main():
     epochs = 100000
     input_dim, hidden_dim, output_dim = 16, 32, 3
     dyn = model.Transition(input_dim, hidden_dim, output_dim, GPU)
     if GPU:
         dyn = dyn.cuda()
+        Tensor = torch.cuda.FloatTensor
+    else:
+        Tensor = torch.nn.Tensor
 
-    params = cfg.params
-    iris = quad.Quadrotor(params)
-    hover_rpm = iris.hov_rpm
-    max_rpm = iris.max_rpm
-    trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
-    sim_dt = iris.dt
-    model_dt = 0.05
-    model_steps = int(model_dt/sim_dt)
-
-    print("HOVER RPM: ", trim)
-    print("Terminal Velocity: ", iris.terminal_velocity)
-    print("Terminal Rotation: ", iris.terminal_rotation)
-    input("Press to continue")
+    env = envs.make("model_training")
+    max_rpm = env.action_bound[1]
 
     fig1 = plt.figure()
     ax1 = fig1.add_subplot(111)
@@ -50,58 +53,36 @@ def main():
     counter = 0
 
     running = True
-    trajectory_len = 10
     optimizer = optim.Adam(dyn.parameters(),lr=1e-4)
     criterion = torch.nn.MSELoss(size_average=True)
+
+    H = 20
     while running:
         
-        # generate random state
-        xyz_rand = np.random.uniform(low=-15, high=15, size=(3,1))
-        zeta_rand = np.random.uniform(low=-2*pi,high=2*pi,size=(3,1))
-        uvw_rand = np.random.uniform(low=-iris.terminal_velocity, high=iris.terminal_velocity, size=(3,1))
-        pqr_rand = np.random.uniform(low=-1, high=1, size=(3,1))
-
-        #print("XYZ: ", xyz_rand)
-        #print("ZETA: ", zeta_rand)
-        #print("UVW: ", uvw_rand)
-        #print("PQR: ", pqr_rand)
-
-        #input("Paused")
+        # generate smooth random actions
+        baseline = np.random.uniform(low=0.4*max_rpm, high=max_rpm)
+        input_vector = np.linspace(-5, 5, H).reshape(-1,1)
+        action_vector = generate_action(input_vector, H)
 
         # set random state
-        iris.set_state(xyz_rand, zeta_rand, uvw_rand, pqr_rand)
-                
-        xyzs = []
-        zetas = []
-        uvws = []
-        pqrs = []
-        actions = []
-
-        xyzs.append(xyz_rand)
-        zetas.append(zeta_rand)
-        uvws.append(uvw_rand)
-        pqrs.append(pqr_rand)
-
+        state = Tensor(env.reset())      
+        state_actions = []
+        next_states = []
+        
         # run trajectory
-        for i in range(trajectory_len):
-            action = np.random.uniform(low=0, high=max_rpm, size=(4,))        
-            for j in range(model_steps):
-                xyz, zeta, _, uvw, pqr = iris.step(action)
-
-            #print("XYZ: ", xyz)
-            #print("ZETA: ", zeta)
-            #print("UVW: ", uvw)
-            #print("PQR: ", pqr)
-
-            #input("Paused")
-
-            xyzs.append(xyz.copy())
-            zetas.append(zeta.copy())
-            uvws.append(uvw.copy())
-            pqrs.append(pqr.copy())
-            actions.append(action)
+        for i in range(H):
+            action = action_vector[i,:]+baseline
+            action_tensor = torch.from_numpy(np.expand_dims(action,axis=0))
+            if GPU:
+                action_tensor = action_tensor.float().cuda()
+            state_action = torch.cat([state, action_tensor],dim=1)
+            next_state, _, _, _ = env.step(action)
+            next_state = Tensor(next_state)
+            state_actions.append(state_action)
+            next_states.append(next_state)
+            state = next_state
             
-        loss = dyn.update(optimizer, criterion, xyzs, zetas, uvws, pqrs, actions)
+        loss = dyn.update(optimizer, criterion, state_actions, next_states)
 
         if len(av)>10:
             del av[0]
@@ -130,8 +111,6 @@ def main():
             fig1.savefig('multi_step_loss.pdf', bbox_inches='tight')
             print("Saving model")
             torch.save(dyn, "/home/seanny/quadrotor/models/multi_step.pth.tar")
-
-        
 
 if __name__ == "__main__":
     main()

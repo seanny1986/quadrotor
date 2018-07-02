@@ -50,11 +50,11 @@ class Critic(torch.nn.Module):
         return value
 
 class PPO(torch.nn.Module):
-    def __init__(self, pi, critic, beta, gamma=0.99, lmbd=0.92, eps=0.2, GPU=True):
+    def __init__(self, actor, critic, target_actor, gamma=0.99, lmbd=0.92, eps=0.02, GPU=True):
         super(PPO,self).__init__()
-        self.pi = pi
+        self.actor = actor
         self.critic = critic
-        self.beta = beta
+        self.pi_old = target_actor
 
         self.gamma = gamma
         self.lmbd = lmbd
@@ -64,14 +64,15 @@ class PPO(torch.nn.Module):
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
-            self.pi = self.pi.cuda()
+            self.actor = self.actor.cuda()
             self.critic = self.critic.cuda()
-            self.beta = self.beta.cuda()
+            self.pi_old = self.pi_old.cuda()
         else:
             self.Tensor = torch.Tensor
 
+
     def select_action(self, x):
-        mu, logvar = self.beta(x)
+        mu, logvar = self.actor(x)
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
@@ -83,8 +84,7 @@ class PPO(torch.nn.Module):
 
     def update(self, optim, trajectory):
         state = torch.stack(trajectory["states"])
-        action = torch.stack(trajectory["actions"])
-        beta_log_prob = torch.stack(trajectory["log_probs"])
+        log_prob = torch.stack(trajectory["log_probs"])
         reward = trajectory["rewards"]
         next_state = torch.stack(trajectory["next_states"])
 
@@ -102,16 +102,11 @@ class PPO(torch.nn.Module):
         advantage = ret-value
         a_hat = (advantage-advantage.mean())/advantage.std()
 
-        # compute probability ratio
-        mu_pi, logvar_pi = self.pi_old(state)
-        dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
-        pi_log_prob = dist_pi.log_prob(action)
-        ratio = (pi_log_prob-beta_log_prob).sum(dim=1, keepdim=True).exp()
+        # calculate gradient and backprop
         optim.zero_grad()
-        actor_loss = -torch.min(ratio*a_hat, torch.clamp(ratio, 1-self.eps, 1+self.eps)*a_hat).sum()
+        actor_loss = -(log_prob*a_hat).sum()
         critic_loss = advantage.pow(2).sum()
         loss = actor_loss+critic_loss
-        self.hard_update(self.beta, self.pi)
         loss.backward()
         optim.step()
 

@@ -51,6 +51,7 @@ class Environment:
         return sum(col) > 0
     
     def detect_intersection(self, pos, ds):
+        # TODO: finish logic here
         l1 = pos
         l2 = pos+ds
         for l, u in self.lower_upper:

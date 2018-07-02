@@ -114,40 +114,12 @@ class Transition(nn.Module):
             outputs.append(torch.cat([uvw, pqr],dim=1))
         return outputs
 
-    def update(self, optimizer, criterion, xyzs, zetas, uvws, pqrs, actions):
-
-        xs, ys = [], []
-        H = len(xyzs)
-        i = 0
-        #print("Update uvw: ", uvws)
-        #input("Paused")
-        # process data
-        for xyz, zeta, uvw, pqr in zip(xyzs, zetas, uvws, pqrs):   
-            _, zeta_nn, uvw_nn, pqr_nn = utils.numpy_to_pytorch(xyz, zeta, uvw, pqr)
-            if i < H-1:
-                action = actions[i].reshape((1,-1))
-                action = torch.from_numpy(action).float()
-                if self.GPU:
-                    action = action.cuda()
-                state = torch.cat([zeta_nn.sin(), zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
-                state_action = torch.cat([state, action],dim=1)
-                xs.append(state_action)
-            if i > 0:
-                velocities = torch.cat([uvw_nn, pqr_nn],dim=1)
-                ys.append(velocities)
-            i += 1
-
-        # update
+    def update(self, optimizer, criterion, state_actions, next_states):
         optimizer.zero_grad()
-        ys_pred = self.forward(torch.stack(xs).squeeze(1))
-        #print(torch.stack(ys_pred).size())
+        ys_pred = self.forward(torch.stack(state_actions).squeeze(1))
         ys_pred = torch.stack(ys_pred).squeeze(1)
-        ys = torch.stack(ys).squeeze(1)
+        ys = torch.stack([x[:,6:] for x in next_states]).squeeze(1)
         loss = criterion(ys_pred, ys)
-        #print("PREDICTED: ", ys_pred)
-        #print("ACTUAL: ",ys)
-        #print("LOSS: ", loss.item())
-        #input("Paused")
         loss.backward()
         ut.clip_grad_norm_(self.parameters(),0.1)
         optimizer.step()

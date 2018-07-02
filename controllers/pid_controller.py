@@ -2,7 +2,7 @@ import numpy as np
 from math import sin, cos
 
 """
-    Implements a linearized hover pid controller for a quadrotor. We want to solve the equation:
+    Implements a linearized hover/waypoint PID controller for a quadrotor. We want to solve the equation:
 
     [[u1],      [[kt,   kt,     kt,     kt],    [[w_1^2], 
     [u2],   =   [0.,    lkt,    0.,   -lkt],     [w_2^2],
@@ -11,14 +11,21 @@ from math import sin, cos
 
     Where u1 is our thrust in the body z-direction, u2 is the commanded roll, u3 is the commanded
     pitch, and u4 is the commanded yaw. To do this, we calculate the PID error in xyz, which gives
-    us a force vector in the body frame. Next, we rotate the x and y components of this vector about 
-    the z-axis to get our roll and pitch commands. We feed this into the zeta PID controller as our 
-    target, along with a desired yaw of 0. The returned PID error is our U2 vector, where:
+    us a force vector. We take the z-axis components to be our thrust force, and rotate the x and 
+    y components of this vector about the target z-axis to get our roll and pitch targets. We feed 
+    this into the zeta PID controller as our target, along with a desired yaw of 0. The returned 
+    angular PID error is our U2 vector, where:
 
     U2 = [u2, u3, u4]^T
 
-    We stack u1 on top of this vector to get [u1, u2, u3, u4]^T, and solve the above equation to
-    get the RPM values.
+    and:
+
+    U = [u1, u2, u3, u4]^T = [u1, U2]^T
+
+    We stack u1 on top of U2 to get [u1, u2, u3, u4]^T, and solve equation 1 to get the RPM values.
+
+    In We clip the integral to a finite value to prevent the controller from winding up. In practice,
+    only a PD controller has been used in the validation script (i-gain of zero).
 """
 
 class PID_Controller:
@@ -42,6 +49,12 @@ class PID_Controller:
         self.dt = aircraft.dt
         
     def compute_lin_pid(self, target, state):
+        """
+            Computes pids in xyz. We are using a deterministic simulation with a discrete timestep,
+            so taking finite differences should in this case give us the exact dv that was output
+            by the sim.
+        """
+
         error = target-state
         p_error = error
         self.i_error_xyz += (error + self.last_error_xyz)*self.dt
@@ -55,6 +68,12 @@ class PID_Controller:
         return p_output+i_output+d_output
     
     def compute_ang_pid(self, target, state):
+        """
+            Computes pids in zeta. We are using a deterministic simulation with a discrete timestep,
+            so taking finite differences should in this case give us the exact dv that was output
+            by the sim.
+        """
+        
         error = target-state
         p_error = error
         self.i_error_zeta += (error + self.last_error_zeta)*self.dt
@@ -68,6 +87,10 @@ class PID_Controller:
         return p_output+i_output+d_output
     
     def action(self, target, state):
+        """
+            Takes two dictionaries as arguments, and calculates the required action vector. 
+        """
+
         xyz = state["xyz"]
         zeta = state["zeta"]
         target_xyz = target["xyz"]

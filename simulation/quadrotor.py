@@ -248,6 +248,7 @@ class Quadrotor:
         else:
             rpm = control_signal
             rpm = np.clip(rpm, 0., self.max_rpm)
+            
         r1 = self.R1(self.zeta)
         r2 = self.R2(self.zeta)
         fm = self.thrust_forces(rpm)

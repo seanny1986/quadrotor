@@ -51,7 +51,7 @@ class Transition(nn.Module):
             zeta = self.zeta_out(h2_t)
             pqr = self.pqr_out(h2_t)
 
-            outputs.append(torch.cat([xyz, zeta, uvw, pqr],dim=1))
+            outputs.append(torch.cat([xyz, zeta.cos(), uvw, pqr],dim=1))
         return outputs
 
     def update(self, optimizer, criterion, xyzs, zetas, uvws, pqrs, actions):
@@ -73,7 +73,7 @@ class Transition(nn.Module):
                 state_action = torch.cat([state, action],dim=1)
                 xs.append(state_action)
             if i > 0:
-                outputs = torch.cat([xyz_nn, zeta_nn, uvw_nn, pqr_nn],dim=1)
+                outputs = torch.cat([xyz_nn, zeta_nn.cos(), uvw_nn, pqr_nn],dim=1)
                 ys.append(outputs)
             i += 1
 

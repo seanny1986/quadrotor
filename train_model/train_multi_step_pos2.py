@@ -129,7 +129,7 @@ def main():
             print("Saving figures")
             fig1.savefig('multi_step_loss.pdf', bbox_inches='tight')
             print("Saving model")
-            torch.save(dyn, "/home/seanny/quadrotor/models/multi_step.pth.tar")
+            torch.save(dyn, "/home/seanny/quadrotor/models/multi_step_pos.pth.tar")
 
         
 

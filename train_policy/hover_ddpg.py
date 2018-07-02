@@ -1,10 +1,10 @@
 import policies.ddpg as ddpg
 import argparse
-from ounoise import OUNoise
 import torch
 import torch.nn.functional as F
 from itertools import count
 import environments.envs as envs
+import utils
 
 parser = argparse.ArgumentParser(description='PyTorch MBPS Node')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G', help='discount factor (default: 0.99)')
@@ -41,7 +41,7 @@ agent = ddpg.DDPG(actor,target_actor,critic,target_critic)
 if args.cuda:
     agent = agent.cuda()
 
-noise = OUNoise(action_dim)
+noise = utils.OUNoise(action_dim)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 

@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -36,62 +36,30 @@ class Environment:
         self.axis3d = self.fig.add_subplot(111, projection='3d')
         self.vis = ani.Visualization(self.iris, 6)
 
-        self.vec = None
-        self.dist_sq = None
-        self.goal_achieved = False
-
-    def reward(self, xyz, action):
-        self.vec = self.iris.xyz-self.goal
-        self.dist_sq = np.linalg.norm(self.vec)
-        dist_rew = np.exp(-self.dist_sq)
-        ctrl_rew = -np.sum((action**2))/400000.
-        cmplt_rew = 0.
-        if self.dist_sq < self.goal_thresh:
-            cmplt_rew = 1000.
-            self.goal_achieved = True
-        return dist_rew+ctrl_rew+cmplt_rew
-
-    def terminal(self, pos):
-        xyz, zeta = pos
-        mask1 = zeta[0:2] > pi/2
-        mask2 = zeta[0:2] < -pi/2
-        mask3 = np.abs(xyz) > 6
-        if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
-            return True
-        elif self.goal_achieved:
-            print("Goal Achieved!")
-            return True
-        elif self.t == self.T:
-            print("Sim time reached")
-        else:
-            return False
-
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, uvw, pqr = self.iris.step(np.array(action))
-        tmp = zeta.T.tolist()[0]
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
-        reward = self.reward(xyz, action)
-        done = self.terminal((xyz, zeta))
-        info = None
+            xyz, zeta, q, uvw, pqr = self.iris.step(np.array(action))
+        next_state = [xyz.T.tolist()[0]+zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]]
         self.t += self.ctrl_dt
-        next_state = [next_state+self.vec.T.tolist()[0]]
-        return next_state, reward, done, info
+        return next_state, None, None, None
 
     def reset(self):
         self.goal_achieved = False
         self.t = 0.
-        xyz, zeta, uvw, pqr = self.iris.reset()
-        self.vec = xyz-self.goal
-        tmp = zeta.T.tolist()[0]
-        state = [[sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec.T.tolist()[0]]
+        xyz, zeta, q, uvw, pqr = self.iris.reset()
+        state = [xyz.T.tolist()[0]+zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]]
         return state
+    
+    def set_state(self, xyz, zeta, uvw, pqr):
+        self.iris.set_state(xyz, zeta, uvw, pqr)
+    
+    def get_aircraft_state(self):
+        return self.iris.get_state()
     
     def render(self):
         pl.figure(0)
         self.axis3d.cla()
         self.vis.draw3d(self.axis3d)
-        self.vis.draw_goal(self.axis3d, self.goal)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)
         self.axis3d.set_zlim(0, 6)

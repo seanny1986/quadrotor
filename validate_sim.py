@@ -12,18 +12,22 @@ def main():
     
     params = cfg.params
     iris = quad.Quadrotor(params)
-    T = 2.5
-    time = np.linspace(0, T, T/iris.dt)
+    T = 3.5
+    sim_dt = iris.dt
+    ctrl_dt = 0.05
+    dt_ratio = int(ctrl_dt/sim_dt)
+    time = np.linspace(0, T, T/ctrl_dt)
     hover_rpm = iris.hov_rpm
     trim = np.array([hover_rpm, hover_rpm, hover_rpm, hover_rpm])
     vis = ani.Visualization(iris, 10)
 
     counter = 0
-    frames = 100
+    frames = 2
     rpm = trim+50
 
     for t in time:
-        iris.step(rpm)
+        for k in range(dt_ratio):
+            iris.step(rpm)
         if counter%frames == 0:
             pl.figure(0)
             axis3d.cla()
@@ -38,8 +42,6 @@ def main():
             pl.pause(0.001)
             pl.draw()
         rpm += np.array([0., 0., 0., 0.25])
-    
-    input("Paused")
 
 if __name__ == "__main__":
     main()

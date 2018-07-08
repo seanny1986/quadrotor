@@ -3,6 +3,10 @@ import random
 import torch.nn.functional as F
 from torch.distributions import Normal
 
+"""
+    Pytorch implementation of Generalized Advantage Implementation (Schulman, 2015).
+"""
+
 class Actor(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
         super(Actor,self).__init__()
@@ -49,16 +53,16 @@ class Critic(torch.nn.Module):
         value = self.v(x)
         return value
 
-class PPO(torch.nn.Module):
-    def __init__(self, actor, critic, target_actor, gamma=0.99, lmbd=0.92, eps=0.02, GPU=True):
-        super(PPO,self).__init__()
+class GAE(torch.nn.Module):
+    def __init__(self, actor, critic, env, gamma=0.99, lmbd=0.92, GPU=True):
+        super(GAE,self).__init__()
         self.actor = actor
         self.critic = critic
-        self.pi_old = target_actor
+        self.env = env
+        self.action_bound = env.action_bound
 
         self.gamma = gamma
         self.lmbd = lmbd
-        self.eps = eps
     
         self.GPU = GPU
 
@@ -66,17 +70,15 @@ class PPO(torch.nn.Module):
             self.Tensor = torch.cuda.FloatTensor
             self.actor = self.actor.cuda()
             self.critic = self.critic.cuda()
-            self.pi_old = self.pi_old.cuda()
         else:
             self.Tensor = torch.Tensor
-
 
     def select_action(self, x):
         mu, logvar = self.actor(x)
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
-        return action, log_prob
+        return F.sigmoid(action)*self.action_bound[1], log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):

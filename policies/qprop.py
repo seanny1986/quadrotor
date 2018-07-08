@@ -4,14 +4,21 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 from collections import namedtuple
 
-class UPG(torch.nn.Module):
-    def __init__(self, actor, critic, memory, target_actor, target_critic, gamma=0.99, tau=0.01, GPU=False):
-        super(UPG,self).__init__()
+"""
+    Pytorch implementation of Q-Prop (Gu et al., 2017). The paper implements the advantage estimation function
+    though we can also use the Q-function directly. This implementation uses the Q-function form. 
+"""
+
+class QPROP(torch.nn.Module):
+    def __init__(self, actor, critic, memory, target_actor, target_critic, env, gamma=0.99, tau=0.01, GPU=False):
+        super(QPROP,self).__init__()
         self.actor = actor
         self.critic = critic
         self.memory = memory
         self.target_actor = target_actor
         self.target_critic = target_critic
+        self.env = env
+        self.action_bound = env.action_bound
 
         self.crit_loss = torch.nn.L1Loss()
 
@@ -44,7 +51,7 @@ class UPG(torch.nn.Module):
         a = Normal(mu, (logvar.exp()).sqrt())
         action = a.sample()
         logprob = a.log_prob(action)
-        return action, logprob
+        return F.sigmoid(action)*self.action_bound[1], logprob
     
     def online_update(self, batch):
         state = torch.stack(batch.state)
@@ -77,9 +84,10 @@ class UPG(torch.nn.Module):
             R = r.float()+self.gamma*R
             rewards.insert(0, R)
         q_act = torch.stack(rewards)
-        state = torch.stack(state)
-        action = torch.stack(action)
-        action_logprobs = torch.stack(action_logprobs)
+        state = torch.stack(state).squeeze(1)
+        action = torch.stack(action).squeeze(1)
+        action_logprobs = torch.stack(action_logprobs).squeeze(1)
+
         q_vals = self.critic(torch.cat([state, action],dim=1))
         q_hat = q_act-q_vals.detach()
         q_hat = (q_hat-q_hat.mean())/q_hat.std()
@@ -116,26 +124,6 @@ class Actor(torch.nn.Module):
 class Critic(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, GPU=False):
         super(Critic,self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
-
-        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.l2 = torch.nn.Linear(hidden_dim, output_dim)
-    
-    def forward(self, x):
-        x = F.relu(self.l1(x))
-        return self.l2(x)
-
-class Dynamics(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=False):
-        super(Dynamics,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim

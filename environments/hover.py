@@ -6,6 +6,12 @@ import numpy as np
 import random
 from math import pi, sin, cos
 
+
+"""
+    Environment wrapper for a hover task. The goal of this task is for the agent to climb from [0, 0, 0]^T
+    to [0, 0, 1.5]^T, and to remain at that altitude until the the episode terminates at T=15s.
+"""
+
 class Environment:
     def __init__(self):
         
@@ -15,7 +21,7 @@ class Environment:
                             [1.5]])
         self.goal_thresh = 0.05
         self.t = 0
-        self.T = 15
+        self.T = 5
         self.r = 1.5
         self.action_space = 4
         self.observation_space = 15
@@ -49,7 +55,8 @@ class Environment:
         if self.dist_sq < self.goal_thresh:
             cmplt_rew = 1000.
             self.goal_achieved = True
-        return dist_rew+ctrl_rew+cmplt_rew
+        time_rew = 0.5
+        return dist_rew+ctrl_rew+cmplt_rew+time_rew
 
     def terminal(self, pos):
         xyz, zeta = pos

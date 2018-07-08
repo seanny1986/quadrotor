@@ -1,11 +1,11 @@
-import policies.ppo as ppo
+import policies.gae as gae
 import argparse
 import torch
 import torch.nn.functional as F
 from itertools import count
 import environments.envs as envs
 
-parser = argparse.ArgumentParser(description='PyTorch PPO Hover Example')
+parser = argparse.ArgumentParser(description='PyTorch GAE Hover Example')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G', help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=543, metavar='N', help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true', help='render the environment')
@@ -24,17 +24,16 @@ if args.cuda:
 else:
     Tensor = torch.Tensor
 
-env = envs.make("straight_and_level")
+env = envs.make("hover")
 
 state_dim = env.observation_space
 action_dim = env.action_space
 hidden_dim = 32
 action_bound = env.action_bound[1]
 
-actor = ppo.Actor(state_dim, hidden_dim, action_dim)
-target_actor = ppo.Actor(state_dim, hidden_dim, action_dim)
-critic = ppo.Critic(state_dim, hidden_dim, 1)
-agent = ppo.PPO(actor, critic, target_actor, env)
+actor = gae.Actor(state_dim, hidden_dim, action_dim)
+critic = gae.Critic(state_dim, hidden_dim, 1)
+agent = gae.GAE(actor, critic, env)
 
 if args.cuda:
     agent = agent.cuda()

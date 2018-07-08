@@ -2,7 +2,7 @@ import numpy as np
 import simulation.quadrotor as quad
 import simulation.animation as ani
 import simulation.config as cfg
-import controller.pid_controller as ctrl
+import controllers.pid_controller as ctrl
 import matplotlib.pyplot as pl
 from math import pi
 
@@ -72,12 +72,15 @@ def main():
     controller = ctrl.PID_Controller(iris, pids)
 
     counter = 0
-    frames = 5
+    frames = 100
     running = True
     done = False
     t = 0.
     i = 1
     H = 5
+    sim_dt = iris.dt
+    ctrl_dt = 0.001
+    sim_steps = int(ctrl_dt/sim_dt)
     while running:
         states = {"xyz": xyz,
                 "zeta": zeta}
@@ -85,7 +88,7 @@ def main():
             pl.figure(0)
             axis3d.cla()
             vis.draw3d(axis3d)
-            vis.draw_goal(axis3d, goal_xyz.T)
+            vis.draw_goal(axis3d, goal_xyz)
             axis3d.set_xlim(-3, 3)
             axis3d.set_ylim(-3, 3)
             axis3d.set_zlim(0, 6)
@@ -95,13 +98,13 @@ def main():
             axis3d.set_title("Time %.3f s" %t)
             pl.pause(0.001)
             pl.draw()
-            pl.savefig('frame'+str(i)+".jpg")
             i += 1
         actions = controller.action(targets, states)
-        xyz, zeta, uvw, pqr = iris.step(actions, rpm_commands=False)
+        for j in range(sim_steps):
+            xyz, zeta, uvw, pqr = iris.step(actions, rpm_commands=False)
         done = terminal(xyz, zeta, uvw, pqr)
-        t += iris.dt
-        #counter += 1
+        t += ctrl_dt
+        counter += 1
         if t > H:
             break 
         if done:

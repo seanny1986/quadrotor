@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from itertools import count
 import environments.envs as envs
 
-parser = argparse.ArgumentParser(description='PyTorch MBPS Node')
+parser = argparse.ArgumentParser(description='PyTorch PPO Hover Example')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G', help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=543, metavar='N', help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true', help='render the environment')
@@ -34,7 +34,7 @@ action_bound = env.action_bound[1]
 actor = ppo.Actor(state_dim, hidden_dim, action_dim)
 target_actor = ppo.Actor(state_dim, hidden_dim, action_dim)
 critic = ppo.Critic(state_dim, hidden_dim, 1)
-agent = ppo.PPO(actor, critic, target_actor)
+agent = ppo.PPO(actor, critic, target_actor, env)
 
 if args.cuda:
     agent = agent.cuda()

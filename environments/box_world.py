@@ -38,7 +38,9 @@ class Environment:
         self.dist_sq = None
 
     def generate_map(self):
-        # TODO: ensure boxes don't immediately impinge on the aircraft, ensure goal is reachable
+        # TODO: ensure boxes don't immediately impinge on the aircraft, ensure goal is reachable. Use importance
+        # sampling for this
+        
         obs_xyz = [[random.uniform(-self.size/2., self.size/2.) for x in range(3)] for b in self.box_range]
         obs_sizes = [random.uniform(0., self.b_max) for s in self.box_range]
         xyz_sizes = zip(obs_xyz, obs_sizes)

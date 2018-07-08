@@ -31,13 +31,17 @@ class Critic(nn.Module):
         return q
 
 class DDPG(nn.Module):
-    def __init__(self, actor, target_actor, critic, target_critic, gamma=0.99, tau=0.001, GPU=True):
+    def __init__(self, actor, target_actor, critic, target_critic, env, gamma=0.99, tau=0.001, GPU=True):
         super(DDPG, self).__init__() 
         self.actor = actor
         self.target_actor = target_actor
 
         self.critic = critic
         self.target_critic = target_critic
+
+        self.env = env
+        self.action_bound = env.action_bound
+
         self.gamma = gamma
         self.tau = tau
 
@@ -68,7 +72,7 @@ class DDPG(nn.Module):
             sigma = Variable(torch.Tensor(noise.noise()))
             if self.GPU:
                 sigma = sigma.cuda()
-            return mu+sigma
+            return F.sigmoid(mu+sigma)*self.action_bound[1]
         else:
             return mu
 
@@ -108,10 +112,10 @@ class DDPG(nn.Module):
         self.crit_opt.step()                                                                        # update value function
         
         self.pol_opt.zero_grad()                                                                    # zero gradients in optimizer
-        policy_loss = -self.critic(torch.cat([state, self.actor(state)],1))                         # use critic to estimate pol gradient
-        policy_loss = policy_loss.mean()                                                            # sum losses
+        policy_loss = self.critic(torch.cat([state, self.actor(state)],1))                          # use critic to estimate pol gradient
+        policy_loss = -policy_loss.mean()                                                           # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(),0.1)                                  # clip policy gradient
+        #torch.nn.utils.clip_grad_norm_(self.actor.parameters(),0.1)                                 # clip policy gradient
         self.pol_opt.step()                                                                         # update policy function
         
         self.soft_update(self.target_critic, self.critic, self.tau)                                 # soft update of target networks

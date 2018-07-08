@@ -3,6 +3,10 @@ import random
 import torch.nn.functional as F
 from torch.distributions import Normal
 
+"""
+    PyTorch implementation of Proximal Policy Optimization (Schulman, 2017).
+"""
+
 class Actor(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
         super(Actor,self).__init__()
@@ -22,7 +26,7 @@ class Actor(torch.nn.Module):
             self.Tensor = torch.Tensor
 
     def forward(self, x):
-        x = F.relu(self.l1(x))
+        x = F.tanh(self.l1(x))
         mu = self.mu(x)
         logvar = self.logvar(x)
         return mu, logvar 
@@ -45,16 +49,18 @@ class Critic(torch.nn.Module):
             self.Tensor = torch.Tensor
 
     def forward(self, x):
-        x = F.relu(self.l1(x))
+        x = F.tanh(self.l1(x))
         value = self.v(x)
         return value
 
 class PPO(torch.nn.Module):
-    def __init__(self, pi, critic, beta, gamma=0.99, lmbd=0.92, eps=0.2, GPU=True):
+    def __init__(self, pi, critic, beta, env, gamma=0.99, lmbd=0.92, eps=0.2, GPU=True):
         super(PPO,self).__init__()
         self.pi = pi
         self.critic = critic
         self.beta = beta
+        self.env = env
+        self.action_bound = env.action_bound
 
         self.gamma = gamma
         self.lmbd = lmbd
@@ -75,7 +81,7 @@ class PPO(torch.nn.Module):
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
-        return action, log_prob
+        return F.sigmoid(action)*self.action_bound[1], log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):

@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import utils
 import numpy as np
 import environments.envs as envs
-import models.multi_step_vel2 as model
+import models.multi_step_vel2_stochastic as model
 
 style.use("seaborn-deep")
 GPU = True
@@ -110,7 +110,7 @@ def main():
             print("Saving figures")
             fig1.savefig('multi_step_loss.pdf', bbox_inches='tight')
             print("Saving model")
-            torch.save(dyn, "/home/seanny/quadrotor/models/multi_step.pth.tar")
+            torch.save(dyn, "/home/seanny/quadrotor/models/stochastic_multi_step.pth.tar")
 
 if __name__ == "__main__":
     main()

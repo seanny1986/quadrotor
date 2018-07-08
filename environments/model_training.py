@@ -44,7 +44,7 @@ class Environment:
         pl.ion()
         self.fig = pl.figure(0)
         self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6)
+        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
 
     def set_nondeterministic_s0(self):
         self.deterministic_s0 = False
@@ -67,9 +67,9 @@ class Environment:
     def reset(self):
         self.t = 0.
         if self.deterministic_s0:
-            xyz, zeta, uvw, pqr = self.iris.reset()
+            xyz, zeta, _, uvw, pqr = self.iris.reset()
         else:
-            xyz, zeta, uvw, pqr = self.generate_s0()
+            xyz, zeta, _, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
         state = [xyz.T.tolist()[0]+zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]]
         return state

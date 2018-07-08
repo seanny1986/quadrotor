@@ -7,6 +7,7 @@ import numpy as np
 import utils
 from math import atan2, asin, sin, cos
 import torch.nn.utils as ut
+from torch.distributions import Normal
 
 class Transition(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
@@ -16,8 +17,12 @@ class Transition(nn.Module):
         self.output_dim = output_dim
 
         self.lstm = nn.LSTMCell(input_dim, hidden_dim)
-        self.uvw_out = nn.Linear(hidden_dim, output_dim)
+        
+        self.uvw_mu = nn.Linear(hidden_dim, output_dim)
+        self.uvw_logvar = nn.Linear(hidden_dim, output_dim)
+
         self.pqr_out = nn.Linear(hidden_dim, output_dim)
+        self.pqr_logvar = nn.Linear(hidden_dim, output_dim)
 
         self.GPU = GPU
 
@@ -26,7 +31,7 @@ class Transition(nn.Module):
         
         self.zero = self.Tensor([[0.]])
 
-    def step(self, x0, zeta, uvw, pqr, dt):
+    def update_inertial(self, x0, zeta, uvw, pqr, dt):
         # state_action is [sin(zeta), cos(zeta), v, w, a]
         xyz = x0.view(-1,1)
         q = self.euler_to_q(zeta)
@@ -100,26 +105,65 @@ class Transition(nn.Module):
                             [q2],
                             [q3]])
 
-    def forward(self, state_action):
-        outputs = []
-        h_t = torch.zeros(1, self.hidden_dim, dtype=torch.float).cuda()
-        c_t = torch.zeros(1, self.hidden_dim, dtype=torch.float).cuda()
-        H = state_action.size()[0]
-        for i in range(H):
-            net_input = state_action[i].unsqueeze(0)
-            h_t, c_t = self.lstm(net_input, (h_t, c_t))
-            uvw = self.uvw_out(h_t)
-            pqr = self.pqr_out(h_t)
-            outputs.append(torch.cat([uvw, pqr],dim=1))
-        return outputs
+    def forward(self, s0, H):
+        xs = []
+        lps = []
+        hs = []
+        h_t = torch.zeros(1, self.hidden_dim, dtype=torch.float)
+        c_t = torch.zeros(1, self.hidden_dim, dtype=torch.float)
+        if self.GPU:
+            h_t = h_t.cuda()
+            c_t = c_t.cuda()
+        for t in range(H):
+            h_t, c_t = self.lstm(s0[t,:].unsqueeze(0), (h_t, c_t))
+            
+            mu_uvw = self.uvw_mu(h_t)
+            logvar_uvw = self.uvw_logvar(h_t)
+            dist_uvw = Normal(mu_uvw, logvar_uvw.exp().sqrt())
+
+            mu_pqr = self.uvw_mu(h_t)
+            logvar_pqr = self.uvw_logvar(h_t)
+            dist_pqr = Normal(mu_pqr, logvar_pqr.exp().sqrt())
+
+            uvw = dist_uvw.sample()
+            pqr = dist_pqr.sample()
+
+            uvw_logprob = dist_uvw.log_prob(uvw)
+            pqr_logprob = dist_pqr.log_prob(pqr)
+
+            lps.append(torch.cat([uvw_logprob, pqr_logprob],dim=1))
+            xs.append(torch.cat([uvw, pqr],dim=1))
+            hs.append(h_t)
+        return xs, lps, hs
+
+    def step(self, state_action, args=None, sample=False):
+        if args is None:
+            h_t = torch.zeros(1, self.hidden_dim, dtype=torch.float)
+            c_t = torch.zeros(1, self.hidden_dim, dtype=torch.float)
+            args = (h_t, c_t)
+        
+        h_t, c_t = self.lstm(state_action.unsqueeze(0), args)
+        mu_uvw = self.uvw_mu(h_t)
+        mu_pqr = self.uvw_mu(h_t)
+        
+        if sample:
+            logvar_uvw = self.uvw_logvar(h_t)
+            logvar_pqr = self.uvw_logvar(h_t)
+            dist_uvw = Normal(mu_uvw, logvar_uvw.exp().sqrt())
+            dist_pqr = Normal(mu_pqr, logvar_pqr.exp().sqrt())
+            return dist_uvw.sample(), dist_pqr.sample()
+        else:
+            return mu_uvw, mu_pqr, (h_t, c_t)
 
     def update(self, optimizer, criterion, state_actions, next_states):
         optimizer.zero_grad()
-        ys_pred = self.forward(torch.stack(state_actions).squeeze(1))
+        H = len(state_actions)
+        ys_pred, logprob, _ = self.forward(torch.stack(state_actions).squeeze(1), H)
         ys_pred = torch.stack(ys_pred).squeeze(1)
+        logprob = torch.stack(logprob).squeeze(1)
         ys = torch.stack([x[:,6:] for x in next_states]).squeeze(1)
-        loss = criterion(ys_pred, ys)
+        cost = (ys_pred-ys)**2
+        loss = ((logprob*cost).sum(dim=1)).mean()
         loss.backward()
-        ut.clip_grad_norm_(self.parameters(),0.1)
         optimizer.step()
-        return loss.item()
+        return cost.mean().item()

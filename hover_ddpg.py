@@ -36,12 +36,12 @@ actor = ddpg.Actor(state_dim, action_dim)
 target_actor = ddpg.Actor(state_dim, action_dim)
 critic = ddpg.Critic(state_dim, action_dim)
 target_critic = ddpg.Critic(state_dim, action_dim)
-agent = ddpg.DDPG(actor,target_actor,critic,target_critic)
+agent = ddpg.DDPG(actor, target_actor, critic, target_critic, env)
 
 if args.cuda:
     agent = agent.cuda()
 
-noise = utils.OUNoise(action_dim)
+noise = utils.OUNoise(action_dim, mu=0.75)
 noise.set_seed(args.seed)
 memory = ddpg.ReplayMemory(1000000)
 
@@ -55,14 +55,13 @@ def main():
         running_reward = 0
         state = Tensor(env.reset())
         for t in range(env.H):
-            if ep > args.warmup:
-                if ep % args.log_interval == 0:
-                    env.render()      
+            if ep % args.log_interval == 0:
+                env.render()      
             if ep < args.warmup:
                 action = agent.random_action(noise)*action_bound
                 action = action.data
             else:    
-                action = agent.select_action(state,noise=noise)*action_bound
+                action = agent.select_action(state,noise=noise)
                 action = action.data
             next_state, reward, done, _ = env.step(action[0].cpu().numpy())
             running_reward += reward

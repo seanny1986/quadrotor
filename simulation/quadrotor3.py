@@ -43,15 +43,24 @@ class Quadrotor:
                             [0.]])
         self.uvw = np.array([[0.],
                             [0.],
-                            [0.],
                             [0.]])
         self.pqr = np.array([[0.],
+                            [0.],
+                            [0.]])
+        
+        self.uvw_q = np.array([[0.],
+                            [0.],
+                            [0.],
+                            [0.]])
+        self.pqr_q = np.array([[0.],
                             [0.],
                             [0.],
                             [0.]])
         
         # all rotation math handled by quaternions. This is secretly part of the state space.
         self.q = self.euler_to_q(self.zeta)
+
+        self.state = np.vstack([self.xyz, self.q, self.uvw, self.pqr])
         
         # action space
         self.rpm = np.array([0.0, 0., 0., 0.])
@@ -76,6 +85,7 @@ class Quadrotor:
         self.max_thrust = self.kt*self.max_rpm
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
+        self.t = 0
         
     def set_state(self, xyz, zeta, uvw, pqr):
         """
@@ -93,7 +103,7 @@ class Quadrotor:
             Returns the current state space
         """
 
-        return self.xyz, self.zeta, self.q, self.uvw[1:], self.pqr[1:]
+        return self.xyz, self.zeta, self.q, self.uvw, self.pqr
     
     def reset(self):
         """
@@ -114,6 +124,8 @@ class Quadrotor:
                             [0.],
                             [0.]]) 
         self.rpm = np.array([0., 0., 0., 0.])
+        self.state = np.vstack([self.xyz, self.q, self.uvw, self.pqr])
+        self.t = 0
         return self.get_state()
 
     def q_norm(self, q):
@@ -188,13 +200,13 @@ class Quadrotor:
             Calculates drag in the body xyz axis (E-N-U) due to linear velocity
         """
 
-        mag = np.linalg.norm(self.uvw[1:])
+        mag = np.linalg.norm(self.uvw)
         if mag == 0:
             return np.array([[0.],
                             [0.],
                             [0.]])
         else:
-            norm = self.uvw[1:]/mag
+            norm = self.uvw/mag
             return -(self.kd*mag**2)*norm
 
     def aero_moments(self):
@@ -202,13 +214,13 @@ class Quadrotor:
             Models aero moments about the body xyz axis (E-N-U) as a function of angular velocity
         """
 
-        mag = np.linalg.norm(self.pqr[1:])
+        mag = np.linalg.norm(self.pqr)
         if mag == 0:
             return np.array([[0.],
                             [0.],
                             [0.]])
         else:
-            norm = self.pqr[1:]/mag
+            norm = self.pqr/mag
             return -(self.km*mag**2)*norm
 
     def thrust_forces(self, rpm):
@@ -236,15 +248,58 @@ class Quadrotor:
         return np.array([[t_body_x],
                         [t_body_y],
                         [t_body_z]])
+
+    def RK4(self, f):
+        """
+            RK4 for ODE integration. Argument f is a function f(t, y), where y can be a
+            multidimensional vector [y0, y1, y2, ..., yn]^T. If y is a vector, it should
+            be passed as a numpy array.
+        """
+
+        return lambda t, y, dt: (
+                lambda dy1: (
+                lambda dy2: (
+                lambda dy3: (
+                lambda dy4: (dy1+2*dy2+2*dy3+dy4)/6.
+                )(dt*f(t+dt, y+dy3))
+	            )(dt*f(t+dt/2., y+dy2/2.))
+	            )(dt*f(t+dt/2., y+dy1/2.))
+	            )(dt*f(t, y))
     
+    def solve_accels(self, t, y):
+        # thrust forces and moments, aerodynamic forces and moments
+        ft = self.thrust_forces(self.rpm)
+        mt = self.thrust_moments(self.rpm)
+        fa = self.aero_forces()
+        ma = self.aero_moments()        
+        
+        forces = ft+fa
+        moments = mt+ma
+
+        # calculate angular momentum
+        H = self.J.dot(self.pqr)
+
+        # rotate gravity vector from inertial frame to body frame using qpq^-1
+        Q = self.q_mult(self.q)
+        Q_inv = self.q_conj(self.q)
+        g_b = Q.dot(self.q_mult(self.G).dot(Q_inv))[1:]
+
+        # linear and angular accelerations due to thrust and aerodynamic effects
+        uvw_dot = forces/self.mass+g_b-np.cross(self.pqr, self.uvw, axis=0)
+        pqr_dot = np.linalg.inv(self.J).dot(moments-np.cross(self.pqr, H, axis=0))
+        q_dot = -0.5*Q.dot(self.pqr_q)
+        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw_q).dot(self.q))[1:]
+        
+        return np.vstack([xyz_dot, q_dot, uvw_dot, pqr_dot])
+
     def step(self, control_signal, rpm_commands=True, return_acceleration=False):
         """
-            Updating the EOMs using second order leapfrog integration (kick-drift-kick
-            form) with quaternion rotations. Should be far more accurate than quadrotor,
-            and the quaternion rotations should be both faster and avoid the singularity
+            Updating the EOMs using semi-implicit, fourth order Runge-Kutta with 
+            quaternion rotations. Should be far more accurate than quadrotor, and 
+            the quaternion rotations should be both faster and avoid the singularity
             at pitch +-90 degrees.
         """
-        
+
         if not rpm_commands:
             rpm_sq = self.u_to_rpm.dot(control_signal)
             rpm_sq = np.clip(rpm_sq, 0, self.max_rpm**2)
@@ -253,46 +308,21 @@ class Quadrotor:
             rpm = control_signal
             rpm = np.clip(rpm, 0., self.max_rpm)
         
-        # thrust forces and moments, aerodynamic forces and moments
-        ft = self.thrust_forces(rpm)
-        mt = self.thrust_moments(rpm)
-        fa = self.aero_forces()
-        ma = self.aero_moments()
-
-        # calculate angular momentum
-        H = self.J.dot(self.pqr[1:])
+        self.rpm = rpm
+        self.state += self.RK4(self.solve_accels)(self.t, self.state, self.dt)
+        self.q = self.q_norm(self.state[3:7])
+        self.state[3:7] = self.q
         
-        # rotate gravity vector from inertial frame to body frame using qpq^-1
-        Q = self.q_mult(self.q)
-        Q_inv = self.q_conj(self.q)
-        g_b = Q.dot(self.q_mult(self.G).dot(Q_inv))[1:]
-
-        # linear and angular accelerations due to thrust and aerodynamic effects
-        uvw_dot = (ft+fa)/self.mass+g_b-np.cross(self.pqr[1:], self.uvw[1:], axis=0)
-        pqr_dot = np.linalg.inv(self.J).dot(mt+ma-np.cross(self.pqr[1:], H, axis=0))
-        
-        # kick: v_{i+0.5} = v_{i}+a_{i}dt/2 -- update velocity by half step
-        self.uvw[1:] += self.uvw_dot*self.dt/2.
-        self.pqr[1:] += self.pqr_dot*self.dt/2.
-        
-        # drift: x_{i+1} = x_{i}+v_{i+0.5}dt -- update q using q_dot*dt, and normalize
-        q_dot = -0.5*Q.dot(self.pqr)
-        self.q = self.q_norm(self.q+q_dot*self.dt)
-        
-        # update zeta using quaternion to Euler angle conversion
+        self.xyz = self.state[0:3]
         self.zeta = self.q_to_euler(self.q)
+        self.uvw = self.state[7:10]
+        self.pqr = self.state[10:]
+        self.uvw_q[1:] = self.state[7:10]
+        self.pqr_q[1:] = self.state[10:]
 
-        # rotate linear velocity to inertial frame using q^-1pq to get xyz_dot, and update xyz
-        Q_inv = self.q_conj(self.q)
-        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw).dot(self.q))[1:]
-        self.xyz += xyz_dot*self.dt
+        self.t += self.dt
 
-        # kick: v_{i+1} = v_{i+0.5}+a_{i+1}dt/2 -- update velocity by half step
-        self.uvw[1:] += uvw_dot*self.dt/2.
-        self.pqr[1:] += pqr_dot*self.dt/2.
-        self.uvw_dot = uvw_dot
-        self.pqr_dot = pqr_dot
         if not return_acceleration:
-            return self.xyz, self.zeta, self.q, self.uvw[1:], self.pqr[1:]
+            return self.xyz, self.zeta, self.q, self.uvw, self.pqr
         else:    
-            return self.xyz, self.zeta, self.q, self.uvw[1:], self.pqr[1:], xyz_dot, q_dot, uvw_dot, pqr_dot
+            return self.xyz, self.zeta, self.q, self.uvw, self.pqr, self.xyz/self.dt, self.q/self.dt, self.uvw/self.dt, self.pqr/self.dt 

@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -10,10 +10,12 @@ class Environment:
     """
         Implements a rapid descent environment for learning control policies. At this stage, the environment doesn't
         include a high-fidelity rotor model. Ideally, the simulation used here should use a rotor model that includes
-        the effects of vortex ring state, and propwash through the disk. I'm guessing a correct BEMT model could be
+        the effects of vortex ring state, and propwash through the disk. I'm guessing a corrected BEMT model could be
         used for this.
+        At the moment, the model assumes propeller thrust is a function ft = kw^2. We check for vortex ring state by
+        limiting the aircraft to less than -2m/s body-z axis.
     """
-
+    
     def __init__(self):
         
         # environment parameters
@@ -40,7 +42,7 @@ class Environment:
         self.T = 15
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 18
+        self.observation_space = 18+self.action_space
 
         # simulation parameters
         self.params = cfg.params
@@ -50,6 +52,8 @@ class Environment:
         self.steps = range(int(self.ctrl_dt/self.sim_dt))
         self.action_bound = [0, self.iris.max_rpm]
         self.H = int(self.T/self.ctrl_dt)
+        self.hov_rpm = self.iris.hov_rpm
+        self.trim = [self.hov_rpm, self.hov_rpm, self.hov_rpm, self.hov_rpm]
 
         # rendering parameters
         pl.close("all")
@@ -78,12 +82,13 @@ class Environment:
         return dist_rew+vel_rew+ctrl_rew+cmplt_rew
 
     def terminal(self, pos):
-        xyz, zeta = pos
+        xyz, zeta, uvw = pos
         mask1 = zeta[0:2] > pi/2
         mask2 = zeta[0:2] < -pi/2
         mask3 = np.abs(xyz[0:2]) > 10
         mask4 = xyz[2] < 0
-        if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0 or mask4 > 0:
+        mask5 = uvw[2] < -2.
+        if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0 or mask4 > 0 or mask5 > 0:
             return True
         elif self.goal_achieved:
             print("Goal Achieved!")
@@ -97,23 +102,27 @@ class Environment:
         for _ in self.steps:
             xyz, zeta, uvw, pqr, xyz_dot, _, _, _ = self.iris.step(action, return_acceleration=True)
         tmp = zeta.T.tolist()[0]
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
         reward = self.reward(xyz, xyz_dot, action)
-        done = self.terminal((xyz, zeta))
+        done = self.terminal((xyz, zeta, uvw))
         info = None
-        self.t += self.ctrl_dt
         next_state = [next_state+self.vec_xyz.T.tolist()[0]+self.vec_xyz_dot.T.tolist()[0]]
+        self.t += self.ctrl_dt
         return next_state, reward, done, info
 
     def reset(self):
         self.goal_achieved = False
         self.t = 0.
         self.iris.set_state(self.start_xyz, self.start_zeta, self.start_uvw, self.start_pqr)
-        xyz, zeta, uvw, pqr = self.iris.get_state()
+        xyz, zeta, _, uvw, pqr = self.iris.get_state()
         self.vec_xyz = xyz-self.goal_xyz
         tmp = zeta.T.tolist()[0]
-        state = [sin(x) for x in tmp]+[cos(x) for x in tmp]
-        state = [state+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec_xyz.T.tolist()[0]+self.vec_xyz_dot.T.tolist()[0]]
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.trim
+        state = [next_state+self.vec_xyz.T.tolist()[0]+self.vec_xyz_dot.T.tolist()[0]]
         return state
     
     def render(self):

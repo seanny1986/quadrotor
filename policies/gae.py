@@ -4,11 +4,11 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 
 """
-    Pytorch implementation of Generalized Advantage Implementation (Schulman, 2015).
+    Pytorch implementation of Generalized Advantage Estimation (Schulman, 2015).
 """
 
 class Actor(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Actor,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -32,7 +32,7 @@ class Actor(torch.nn.Module):
         return mu, logvar 
 
 class Critic(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Critic,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -54,12 +54,12 @@ class Critic(torch.nn.Module):
         return value
 
 class GAE(torch.nn.Module):
-    def __init__(self, actor, critic, env, gamma=0.99, lmbd=0.92, GPU=True):
+    def __init__(self, actor, critic, action_bound, gamma=0.99, lmbd=0.92, GPU=True):
         super(GAE,self).__init__()
         self.actor = actor
         self.critic = critic
         self.env = env
-        self.action_bound = env.action_bound
+        self.action_bound = action_bound
 
         self.gamma = gamma
         self.lmbd = lmbd
@@ -78,7 +78,7 @@ class GAE(torch.nn.Module):
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
-        return F.sigmoid(action)*self.action_bound[1], log_prob
+        return F.sigmoid(action)*self.action_bound, log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):

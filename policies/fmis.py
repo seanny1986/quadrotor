@@ -6,13 +6,11 @@ from torch.distributions import Normal
 """
     Implements an architecture I'm calling Forward Model Importance Sampling. A statistical RNN 
     forward model is trained using the log-likelihood score function. The agent is trained under
-    this model using PPO.
-
-    This implementation currently has a memory leak.  
+    this model using PPO. 
 """
 
 class Dynamics(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Dynamics,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -22,12 +20,10 @@ class Dynamics(torch.nn.Module):
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
         self.logvar = torch.nn.Linear(hidden_dim, output_dim)
 
-        self.GPU = GPU
+        self.GPU = True
 
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
+    def set_cuda(self, GPU):
+        self.GPU = GPU
 
     def forward(self, s0, H):
         xs = []
@@ -36,8 +32,8 @@ class Dynamics(torch.nn.Module):
         h_t = torch.zeros(1, self.hidden_dim, dtype=torch.float)
         c_t = torch.zeros(1, self.hidden_dim, dtype=torch.float)
         if self.GPU:
-            h_t = h_t.cuda()
-            c_t = c_t.cuda()
+                h_t = h_t.cuda()
+                c_t = c_t.cuda()
         for t in range(H):
             h_t, c_t = self.lstm(s0[t,:].unsqueeze(0), (h_t, c_t))
             mu = self.mu(h_t)
@@ -68,7 +64,7 @@ class Dynamics(torch.nn.Module):
             return x, (h_t, c_t)
     
 class Actor(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Actor,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -78,13 +74,6 @@ class Actor(torch.nn.Module):
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
         self.logvar = torch.nn.Linear(hidden_dim, output_dim)
 
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
-
     def forward(self, x):
         x = F.relu(self.l1(x))
         mu = self.mu(x)
@@ -92,7 +81,7 @@ class Actor(torch.nn.Module):
         return mu, logvar
 
 class Critic(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=True):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Critic,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -101,26 +90,18 @@ class Critic(torch.nn.Module):
         self.l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.v = torch.nn.Linear(hidden_dim, output_dim)
 
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
-
     def forward(self, x):
         x = F.relu(self.l1(x))
         value = self.v(x)
         return value
 
 class FMIS(torch.nn.Module):
-    def __init__(self, pi, critic, beta, phi, env, gamma=0.99, eps=0.2, lmbd=0.92, GPU=True):
+    def __init__(self, pi, beta, critic, phi, action_bound, gamma=0.99, eps=0.2, lmbd=0.92, GPU=True):
         super(FMIS,self).__init__()
         self.pi = pi
         self.critic = critic
         self.beta = beta
         self.phi = phi
-        self.env = env
         self.gamma = gamma
         self.eps = eps
         self.lmbd = lmbd
@@ -128,9 +109,7 @@ class FMIS(torch.nn.Module):
 
         self.s0_mu = None
         self.s0_logvar = None
-        self.observation_space = env.observation_space
-        self.action_space = env.action_space
-        self.action_bound = env.action_bound
+        self.action_bound = action_bound
 
         self.state = []
         self.action = []
@@ -144,6 +123,7 @@ class FMIS(torch.nn.Module):
             self.critic = self.critic.cuda()
             self.beta = self.beta.cuda()
             self.phi = phi.cuda()
+            self.phi.set_cuda(GPU)
         else:
             self.Tensor = torch.Tensor
 
@@ -178,7 +158,7 @@ class FMIS(torch.nn.Module):
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
-        return F.sigmoid(action)*self.action_bound[1], log_prob
+        return F.sigmoid(action)*self.action_bound, log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -236,6 +216,11 @@ class FMIS(torch.nn.Module):
         self.hard_update(self.beta, self.pi)
         loss.backward()
         optim.step()
+        del self.state[:]
+        del self.action[:]
+        del self.log_prob[:]
+        del self.next_state[:]
+        del self.reward[:]
         return loss.item()
 
         

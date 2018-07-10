@@ -9,10 +9,10 @@ import copy
 import random
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, neurons=32):
+    def __init__(self, state_dim, hidden_dim, action_dim):
         super(Actor, self).__init__()
-        self.affine1 = nn.Linear(state_dim, neurons)
-        self.action_head = nn.Linear(neurons, action_dim)
+        self.affine1 = nn.Linear(state_dim, hidden_dim)
+        self.action_head = nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
@@ -20,10 +20,10 @@ class Actor(nn.Module):
         return F.sigmoid(mu)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, neurons=32):
+    def __init__(self, state_dim, hidden_dim, action_dim):
         super(Critic, self).__init__()
-        self.affine1 = nn.Linear(state_dim+action_dim, neurons)
-        self.value_head = nn.Linear(neurons, 1)
+        self.affine1 = nn.Linear(state_dim+action_dim, hidden_dim)
+        self.value_head = nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
@@ -31,7 +31,7 @@ class Critic(nn.Module):
         return q
 
 class DDPG(nn.Module):
-    def __init__(self, actor, target_actor, critic, target_critic, env, gamma=0.99, tau=0.001, GPU=True):
+    def __init__(self, actor, target_actor, critic, target_critic, action_bound, gamma=0.99, tau=0.001, GPU=True):
         super(DDPG, self).__init__() 
         self.actor = actor
         self.target_actor = target_actor
@@ -39,8 +39,7 @@ class DDPG(nn.Module):
         self.critic = critic
         self.target_critic = target_critic
 
-        self.env = env
-        self.action_bound = env.action_bound
+        self.action_bound = action_bound
 
         self.gamma = gamma
         self.tau = tau
@@ -72,7 +71,7 @@ class DDPG(nn.Module):
             sigma = Variable(torch.Tensor(noise.noise()))
             if self.GPU:
                 sigma = sigma.cuda()
-            return F.sigmoid(mu+sigma)*self.action_bound[1]
+            return F.sigmoid(mu+sigma)*self.action_bound
         else:
             return mu
 
@@ -115,7 +114,6 @@ class DDPG(nn.Module):
         policy_loss = self.critic(torch.cat([state, self.actor(state)],1))                          # use critic to estimate pol gradient
         policy_loss = -policy_loss.mean()                                                           # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
-        #torch.nn.utils.clip_grad_norm_(self.actor.parameters(),0.1)                                 # clip policy gradient
         self.pol_opt.step()                                                                         # update policy function
         
         self.soft_update(self.target_critic, self.critic, self.tau)                                 # soft update of target networks

@@ -37,6 +37,8 @@ class Visualization:
             self.q_mult = self.aircraft.q_mult
             self.q_conj = self.aircraft.q_conj
 
+            self.zero = np.array([[0.]])
+
     def draw3d(self, ax):
         xyz, R = self.aircraft.xyz, self.aircraft.R1(self.aircraft.zeta).T
         
@@ -112,4 +114,11 @@ class Visualization:
     
     def draw_goal(self, ax, goal):
         ax.scatter(goal[0,0], goal[1,0], goal[2,0], color='green')
+    
+    def set_wall(self):
+        pass
+
+    def draw_wall(self, point, normal, size, offset):
+        pass
+
 

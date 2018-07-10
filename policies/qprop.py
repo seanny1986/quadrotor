@@ -10,15 +10,14 @@ from collections import namedtuple
 """
 
 class QPROP(torch.nn.Module):
-    def __init__(self, actor, critic, memory, target_actor, target_critic, env, gamma=0.99, tau=0.01, GPU=False):
+    def __init__(self, actor, critic, memory, target_actor, target_critic, action_bound, gamma=0.99, tau=0.01, GPU=False):
         super(QPROP,self).__init__()
         self.actor = actor
         self.critic = critic
         self.memory = memory
         self.target_actor = target_actor
         self.target_critic = target_critic
-        self.env = env
-        self.action_bound = env.action_bound
+        self.action_bound = action_bound
 
         self.crit_loss = torch.nn.L1Loss()
 
@@ -51,7 +50,7 @@ class QPROP(torch.nn.Module):
         a = Normal(mu, (logvar.exp()).sqrt())
         action = a.sample()
         logprob = a.log_prob(action)
-        return F.sigmoid(action)*self.action_bound[1], logprob
+        return F.sigmoid(action)*self.action_bound, logprob
     
     def online_update(self, batch):
         state = torch.stack(batch.state)
@@ -142,7 +141,7 @@ class Critic(torch.nn.Module):
         return self.l2(x)
 
 Transition = namedtuple('Transition', ['state', 'action', 'next_state', 'reward'])
-class Memory:
+class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
         self.memory = []

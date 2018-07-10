@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -9,8 +9,8 @@ from math import pi, sin, cos
 class Environment:
     def __init__(self):
         
-        # environment parameters
-        self.goal = np.array([[3.],
+        # environment parameters -- goal is desired velocity vector in inertial frame
+        self.goal = np.array([[5.],
                             [0.],
                             [0.]])
         self.goal_thresh = 0.05
@@ -18,7 +18,7 @@ class Environment:
         self.T = 15
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 15
+        self.observation_space = 15+self.action_space
 
         # simulation parameters
         self.params = cfg.params
@@ -28,6 +28,8 @@ class Environment:
         self.steps = range(int(self.ctrl_dt/self.sim_dt))
         self.action_bound = [0, self.iris.max_rpm]
         self.H = int(self.T/self.ctrl_dt)
+        self.hov_rpm = self.iris.hov_rpm
+        self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
         # rendering parameters
         pl.close("all")
@@ -40,8 +42,8 @@ class Environment:
         self.dist_sq = None
         self.goal_achieved = False
 
-    def reward(self, xyz, action):
-        self.vec = self.iris.xyz-self.goal
+    def reward(self, xyz_dot, action):
+        self.vec = xyz_dot-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
         dist_rew = np.exp(-self.dist_sq)
         ctrl_rew = -np.sum((action**2))/400000.
@@ -68,23 +70,29 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, uvw, pqr = self.iris.step(np.array(action))
+            ret = self.iris.step(action, return_acceleration=True)
+        xyz, zeta, _, uvw, pqr, xyz_dot, _, _, _ = ret
         tmp = zeta.T.tolist()[0]
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
-        reward = self.reward(xyz, action)
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
+        reward = self.reward(xyz_dot, action)
         done = self.terminal((xyz, zeta))
         info = None
-        self.t += self.ctrl_dt
         next_state = [next_state+self.vec.T.tolist()[0]]
+        self.t += self.ctrl_dt
         return next_state, reward, done, info
 
     def reset(self):
         self.goal_achieved = False
         self.t = 0.
-        xyz, zeta, uvw, pqr = self.iris.reset()
+        xyz, zeta, _, uvw, pqr = self.iris.reset()
         self.vec = xyz-self.goal
         tmp = zeta.T.tolist()[0]
-        state = [[sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec.T.tolist()[0]]
+        action = self.trim
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
         return state
     
     def render(self):

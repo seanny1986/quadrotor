@@ -24,7 +24,7 @@ class Environment:
         self.T = 5
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 15
+        self.observation_space = 15+self.action_space
 
         # simulation parameters
         self.params = cfg.params
@@ -34,6 +34,8 @@ class Environment:
         self.steps = range(int(self.ctrl_dt/self.sim_dt))
         self.action_bound = [0, self.iris.max_rpm]
         self.H = int(self.T/self.ctrl_dt)
+        self.hov_rpm = self.iris.hov_rpm
+        self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
         # rendering parameters
         pl.close("all")
@@ -47,7 +49,7 @@ class Environment:
         self.goal_achieved = False
 
     def reward(self, xyz, action):
-        self.vec = self.iris.xyz-self.goal
+        self.vec = xyz-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
         dist_rew = np.exp(-self.dist_sq)
         ctrl_rew = -np.sum((action**2))/400000.
@@ -77,12 +79,14 @@ class Environment:
         for _ in self.steps:
             xyz, zeta, uvw, pqr = self.iris.step(action)
         tmp = zeta.T.tolist()[0]
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
         reward = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
         info = None
-        self.t += self.ctrl_dt
         next_state = [next_state+self.vec.T.tolist()[0]]
+        self.t += self.ctrl_dt
         return next_state, reward, done, info
 
     def reset(self):
@@ -91,7 +95,10 @@ class Environment:
         xyz, zeta, uvw, pqr = self.iris.reset()
         self.vec = xyz-self.goal
         tmp = zeta.T.tolist()[0]
-        state = [[sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec.T.tolist()[0]]
+        action = self.trim
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
         return state
     
     def render(self):

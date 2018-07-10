@@ -22,7 +22,7 @@ class Environment:
         self.T = 15
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 15
+        self.observation_space = 15+self.action_space
 
         # simulation parameters
         self.params = cfg.params
@@ -30,6 +30,8 @@ class Environment:
         self.ctrl_dt = self.params["dt"]
         self.sim_dt = 0.05
         self.steps = range(int(self.sim_dt/self.ctrl_dt))
+        self.hov_rpm = self.iris.hov_rpm
+        self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
         # define bounds here
         self.xzy_bound = 1.
@@ -59,7 +61,7 @@ class Environment:
         return xyz, zeta, uvw, pqr
 
     def reward(self, xyz, action):
-        self.vec = self.iris.xyz-self.goal
+        self.vec = xyz-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
         dist_rew = np.exp(-self.dist_sq)
         ctrl_rew = -np.sum((action**2))/400000.
@@ -85,7 +87,9 @@ class Environment:
         for _ in self.steps:
             xyz, zeta, uvw, pqr = self.iris.step(action)
         tmp = zeta.T.tolist()[0]
-        next_state = [sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
         reward = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
         info = None
@@ -104,7 +108,10 @@ class Environment:
         self.goal = self.generate_goal(self.r)
         self.vec = xyz-self.goal
         tmp = zeta.T.tolist()[0]
-        state = [[sin(x) for x in tmp]+[cos(x) for x in tmp]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+self.vec.T.tolist()[0]]
+        action = self.trim
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
         return state
 
     def generate_goal(self, r):

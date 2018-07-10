@@ -22,7 +22,7 @@ class Environment:
         self.T = 15
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 15
+        self.observation_space = 15+self.action_space
 
         # simulation parameters
         self.params = cfg.params
@@ -32,6 +32,8 @@ class Environment:
         self.steps = range(int(self.ctrl_dt/self.sim_dt))
         self.action_bound = [0, self.iris.max_rpm]
         self.H = int(self.T/self.ctrl_dt)
+        self.hov_rpm = self.iris.hov_rpm
+        self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
         # define bounds here
         self.xzy_bound = 1.
@@ -60,7 +62,10 @@ class Environment:
     def step(self, action):
         for _ in self.steps:
             xyz, zeta, q, uvw, pqr = self.iris.step(np.array(action))
-        next_state = [xyz.T.tolist()[0]+zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]]
+        tmp = zeta.T.tolist()[0]
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        next_state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]]
         self.t += self.ctrl_dt
         return next_state, None, None, None
 
@@ -69,9 +74,13 @@ class Environment:
         if self.deterministic_s0:
             xyz, zeta, _, uvw, pqr = self.iris.reset()
         else:
-            xyz, zeta, _, uvw, pqr = self.generate_s0()
+            xyz, zeta, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
-        state = [xyz.T.tolist()[0]+zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]]
+        action = self.trim
+        tmp = zeta.T.tolist()[0]
+        sinx = [sin(x) for x in tmp]
+        cosx = [cos(x) for x in tmp]
+        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action]
         return state
 
     def set_random(self):

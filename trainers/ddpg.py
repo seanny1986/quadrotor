@@ -6,9 +6,8 @@ import torch.nn.functional as F
 import utils
 
 class Trainer:
-    def __init__(self, env, params):
-        self.env = envs.make(env)
-        self.params = params
+    def __init__(self, env_name, params):
+        self.env = envs.make(env_name)
 
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]
@@ -19,7 +18,6 @@ class Trainer:
         self.warmup = params["warmup"]
         self.batch_size = params["batch_size"]
         self.save = params["save"]
-        self.load = params["load"]
         
         action_bound = self.env.action_bound[1]
         state_dim = self.env.observation_space
@@ -50,12 +48,12 @@ class Trainer:
     def train(self):
         interval_avg = []
         avg = 0
-        for ep in range(self.iterations):
+        for ep in range(1, self.iterations+1):
 
             state = self.Tensor(self.env.reset())
             self.noise.reset()
             running_reward = 0
-            for t in range(self.env.T):
+            for t in range(self.env.H):
             
                 # render the episode
                 if ep % self.log_interval == 0:

@@ -81,7 +81,7 @@ class Environment:
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()
         reward = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
         info = None

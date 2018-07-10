@@ -40,6 +40,10 @@ class QPROP(torch.nn.Module):
         
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
+            self.actor = self.actor.cuda()
+            self.target_actor = self.target_actor.cuda()
+            self.critic = self.critic.cuda()
+            self.target_critic = self.target_critic.cuda()
         else:
             self.Tensor = torch.Tensor
 

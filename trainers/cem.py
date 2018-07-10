@@ -9,8 +9,8 @@ import numpy as np
 from collections import deque
 
 class Trainer:
-    def __init__(self, env, params):
-        self.env = envs.make(env)
+    def __init__(self, env_name, params):
+        self.env = envs.make(env_name)
 
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]
@@ -23,8 +23,8 @@ class Trainer:
         self.save = params["save"]
 
         action_bound = self.env.action_bound[1]
-        state_dim = env.observation_space
-        action_dim = env.action_space
+        state_dim = self.env.observation_space
+        action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
 
@@ -37,12 +37,14 @@ class Trainer:
             self.Tensor = torch.Tensor
 
     def train(self):
-        def evaluate(weights):
+        def evaluate(weights, rend):
             self.agent.set_weights(weights)
             episode_return = 0.0
             state = self.env.reset()
             for t in range(self.env.H):
-                state = torch.from_numpy(state).float().to(device)
+                if rend:
+                    self.env.render()
+                state = self.Tensor(state)
                 action = self.agent(state)
                 state, reward, done, _ = self.env.step(action)
                 episode_return += reward*math.pow(self.gamma, t)
@@ -55,17 +57,17 @@ class Trainer:
         scores_deque = deque(maxlen=100)
         best_weight = self.sigma*np.random.randn(self.agent.get_weights_dim())
 
-        for i_iteration in range(self.iterations):
+        for i_iteration in range(1, self.iterations+1):
+            if i_iteration % self.log_interval == 0 and self.render:
+                rend = True
+            else:
+                rend = False
             weights_pop = [best_weight+(self.sigma*np.random.randn(self.agent.get_weights_dim())) for i in range(self.pop_size)]
-            rewards = np.array([evaluate(weights) for weights in weights_pop])
+            rewards = np.array([evaluate(weights, rend) for weights in weights_pop])
             elite_idxs = rewards.argsort()[-n_elite:]
             elite_weights = [weights_pop[i] for i in elite_idxs]
             best_weight = np.array(elite_weights).mean(axis=0)
-            reward = evaluate(best_weight)
+            reward = evaluate(best_weight, rend)
             scores_deque.append(reward)
-        
             if i_iteration % self.log_interval == 0:
                 print('Episode {}\tAverage Score: {:.2f}'.format(i_iteration, np.mean(scores_deque)))
-            if np.mean(scores_deque)>=90.0:
-                print('\nEnvironment solved in {:d} iterations!\tAverage Score: {:.2f}'.format(i_iteration-100, np.mean(scores_deque)))
-                break

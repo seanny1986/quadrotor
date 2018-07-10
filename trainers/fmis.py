@@ -6,8 +6,8 @@ import torch.nn.functional as F
 import utils
 
 class Trainer:
-    def __init__(self, env, params):
-        self.env = envs.make(env)
+    def __init__(self, env_name, params):
+        self.env = envs.make(env_name)
         self.params = params
 
         self.iterations = params["iterations"]
@@ -18,7 +18,6 @@ class Trainer:
         self.save = params["save"]
         
         cuda = params["cuda"]
-        action_bound = self.env.action_bound[1]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
@@ -27,7 +26,7 @@ class Trainer:
         self.beta = fmis.Actor(state_dim, hidden_dim, action_dim)
         self.phi = fmis.Dynamics(state_dim+action_dim, hidden_dim, state_dim)
         self.critic = fmis.Critic(state_dim, hidden_dim, 1)
-        self.agent = fmis.FMIS(self.pi, self.beta, self.critic, self.phi, action_bound, GPU=cuda)
+        self.agent = fmis.FMIS(self.pi, self.beta, self.critic, self.phi, self.env, GPU=cuda)
 
         self.pi_optim = torch.optim.Adam(self.pi.parameters())
         self.phi_optim = torch.optim.Adam(self.phi.parameters())
@@ -40,7 +39,7 @@ class Trainer:
     def train(self):
         interval_avg = []
         avg = 0
-        for ep in range(self.iterations):
+        for ep in range(1, self.iterations+1):
             running_reward = 0
             s_ = []
             a_ = []

@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "hover",
-        "algs": ["cem", "ddpg"]
+        "algs": ["ddpg"]
         }
 
 cem = { 
@@ -22,9 +22,9 @@ cem = {
         "pop_size": 64,
         "elite_frac": 0.2,
         "sigma": 0.5,
-        "render": False,
+        "render": True,
         "save": False,
-        "cuda": False
+        "cuda": True
         }
 
 ddpg = {
@@ -36,9 +36,9 @@ ddpg = {
         "log_interval": 10,
         "warmup": 50,
         "batch_size": 64,
-        "render": False,
+        "render": True,
         "save": False,
-        "cuda": False
+        "cuda": True
         }
 
 fmis = {
@@ -49,7 +49,7 @@ fmis = {
         "log_interval": 10,
         "render": False,
         "save": False,
-        "cuda": False
+        "cuda": True
         }
 
 gae = {
@@ -60,7 +60,7 @@ gae = {
         "log_interval": 10,
         "render": False,
         "save": False,
-        "cuda": False
+        "cuda": True
         }
 
 ppo = {
@@ -71,7 +71,7 @@ ppo = {
         "log_interval": 10,
         "render": False,
         "save": False,
-        "cuda": False
+        "cuda": True
         }
 
 qprop = {
@@ -85,5 +85,5 @@ qprop = {
         "batch_size": 64,
         "render": False,
         "save": False,
-        "cuda": False
+        "cuda": True
         }

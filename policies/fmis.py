@@ -96,7 +96,7 @@ class Critic(torch.nn.Module):
         return value
 
 class FMIS(torch.nn.Module):
-    def __init__(self, pi, beta, critic, phi, action_bound, gamma=0.99, eps=0.2, lmbd=0.92, GPU=True):
+    def __init__(self, pi, beta, critic, phi, env, gamma=0.99, eps=0.2, lmbd=0.92, GPU=True):
         super(FMIS,self).__init__()
         self.pi = pi
         self.critic = critic
@@ -109,7 +109,9 @@ class FMIS(torch.nn.Module):
 
         self.s0_mu = None
         self.s0_logvar = None
-        self.action_bound = action_bound
+        self.env = env
+        self.observation_space = env.observation_space
+        self.action_bound = env.action_bound[1]
 
         self.state = []
         self.action = []

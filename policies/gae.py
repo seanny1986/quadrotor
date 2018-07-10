@@ -18,13 +18,6 @@ class Actor(torch.nn.Module):
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
         self.logvar = torch.nn.Linear(hidden_dim, output_dim)
 
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
-
     def forward(self, x):
         x = F.relu(self.l1(x))
         mu = self.mu(x)
@@ -41,13 +34,6 @@ class Critic(torch.nn.Module):
         self.l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.v = torch.nn.Linear(hidden_dim, output_dim)
 
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
-
     def forward(self, x):
         x = F.relu(self.l1(x))
         value = self.v(x)
@@ -58,7 +44,6 @@ class GAE(torch.nn.Module):
         super(GAE,self).__init__()
         self.actor = actor
         self.critic = critic
-        self.env = env
         self.action_bound = action_bound
 
         self.gamma = gamma

@@ -6,8 +6,8 @@ import torch.nn.functional as F
 import utils
 
 class Trainer:
-    def __init__(self, env, params):
-        self.env = envs.make(env)
+    def __init__(self, env_name, params):
+        self.env = envs.make(env_name)
         self.params = params
 
         self.iterations = params["iterations"]
@@ -21,8 +21,8 @@ class Trainer:
         self.save = params["save"]
 
         hidden_dim = params["hidden_dim"]
-        state_dim = env.observation_space
-        action_dim = env.action_space
+        state_dim = self.env.observation_space
+        action_dim = self.env.action_space
         action_bound = self.env.action_bound[1]
         cuda = params["cuda"]
 
@@ -51,7 +51,7 @@ class Trainer:
     def train(self):
         interval_avg = []
         avg = 0
-        for ep in range(self.iterations):
+        for ep in range(1, self.iterations+1):
             running_reward = 0
             state = self.Tensor(self.env.reset())
             states = []

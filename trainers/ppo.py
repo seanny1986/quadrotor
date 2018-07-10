@@ -6,8 +6,8 @@ import torch.nn.functional as F
 import utils
 
 class Trainer:
-    def __init__(self, env, params):
-        self.env = envs.make(env)
+    def __init__(self, env_name, params):
+        self.env = envs.make(env_name)
         self.params = params
 
         self.iterations = params["iterations"]
@@ -19,14 +19,14 @@ class Trainer:
 
         action_bound = self.env.action_bound[1]
         hidden_dim = params["hidden_dim"]
-        state_dim = env.observation_space
-        action_dim = env.action_space
+        state_dim = self.env.observation_space
+        action_dim = self.env.action_space
         cuda = params["cuda"]
 
         self.pi = ppo.Actor(state_dim, hidden_dim, action_dim)
         self.beta = ppo.Actor(state_dim, hidden_dim, action_dim)
         self.critic = ppo.Critic(state_dim, hidden_dim, 1)
-        self.agent = ppo.PPO(self.pi, self.beta, self.critic, action_bound)
+        self.agent = ppo.PPO(self.pi, self.beta, self.critic, action_bound, GPU=cuda)
 
         self.optim = torch.optim.Adam(self.agent.parameters())
 
@@ -39,7 +39,7 @@ class Trainer:
     def train(self):
         interval_avg = []
         avg = 0
-        for ep in range(self.iterations):
+        for ep in range(1, self.iterations+1):
             running_reward = 0
             s_ = []
             a_ = []

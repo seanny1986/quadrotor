@@ -40,7 +40,7 @@ class Critic(torch.nn.Module):
         return value
 
 class PPO(torch.nn.Module):
-    def __init__(self, pi, critic, beta, action_bound, gamma=0.99, lmbd=0.92, eps=0.2, GPU=True):
+    def __init__(self, pi, beta, critic, action_bound, gamma=0.99, lmbd=0.92, eps=0.2, GPU=True):
         super(PPO,self).__init__()
         self.pi = pi
         self.critic = critic
@@ -56,8 +56,8 @@ class PPO(torch.nn.Module):
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
             self.pi = self.pi.cuda()
-            self.critic = self.critic.cuda()
             self.beta = self.beta.cuda()
+            self.critic = self.critic.cuda()
         else:
             self.Tensor = torch.Tensor
 

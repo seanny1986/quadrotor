@@ -35,16 +35,13 @@ class CEM(nn.Module):
             self.Tensor = torch.Tensor
 
     def set_weights(self, weights):
-        s_size = self.input_dim
-        h_size = self.hidden_dim
-        a_size = self.output_dim
         
         # separate the weights for each layer
-        fc1_end = (s_size*h_size)+h_size
-        fc1_W = torch.from_numpy(weights[:s_size*h_size].reshape(s_size, h_size))
-        fc1_b = torch.from_numpy(weights[s_size*h_size:fc1_end])
-        fc2_W = torch.from_numpy(weights[fc1_end:fc1_end+(h_size*a_size)].reshape(h_size, a_size))
-        fc2_b = torch.from_numpy(weights[fc1_end+(h_size*a_size):])
+        fc1_end = (self.input_dim*self.hidden_dim)+self.hidden_dim
+        fc1_W = torch.from_numpy(weights[:self.input_dim*self.hidden_dim].reshape(self.input_dim, self.hidden_dim))
+        fc1_b = torch.from_numpy(weights[self.input_dim*self.hidden_dim:fc1_end])
+        fc2_W = torch.from_numpy(weights[fc1_end:fc1_end+(self.hidden_dim*self.output_dim)].reshape(self.hidden_dim, self.output_dim))
+        fc2_b = torch.from_numpy(weights[fc1_end+(self.hidden_dim*self.output_dim):])
         
         # set the weights for each layer
         self.fc1.weight.data.copy_(fc1_W.view_as(self.fc1.weight.data))
@@ -58,4 +55,4 @@ class CEM(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.sigmoid(self.fc2(x))*self.action_bound
-        return x.cpu().data
+        return x.cpu().detach().numpy()[0]

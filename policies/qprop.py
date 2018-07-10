@@ -6,7 +6,13 @@ from collections import namedtuple
 
 """
     Pytorch implementation of Q-Prop (Gu et al., 2017). The paper implements the advantage estimation function
-    though we can also use the Q-function directly. This implementation uses the Q-function form. 
+    though we can also use the Q-function directly; this implementation uses the Q-function form. 
+    
+    The goal of this method is to use the Q-function directly as a control variate to minimize variance in the 
+    policy search. I've tested this code in the Mujoco Ant-v1 environment, where it makes steady progress even 
+    without CUDA. In my experiments, the agent plateauxed at around 900-1000 points after a few hours of training.
+
+    -- Sean Morrison, 2018
 """
 
 class QPROP(torch.nn.Module):
@@ -97,17 +103,11 @@ class QPROP(torch.nn.Module):
         self.soft_update(self.target_actor, self.actor, self.tau)
 
 class Actor(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=False):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Actor,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
 
         self.l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
@@ -119,19 +119,12 @@ class Actor(torch.nn.Module):
         a_logvar = self.logvar(x)
         return a_mu, a_logvar
 
-
 class Critic(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, GPU=False):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Critic,self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
-        self.GPU = GPU
-
-        if GPU:
-            self.Tensor = torch.cuda.FloatTensor
-        else:
-            self.Tensor = torch.Tensor
 
         self.l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.l2 = torch.nn.Linear(hidden_dim, output_dim)

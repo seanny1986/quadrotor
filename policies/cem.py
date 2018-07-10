@@ -7,13 +7,18 @@ import numpy as np
 from collections import deque
 
 """
-    Implements policy network class for the cross-entropy method.
+    Implements policy network class for the cross-entropy method. This should be used as a sanity
+    check and benchmark for other methods, since CEM is usually embarrassingly effective.
+
+    Credits to OpenAI for most of this code. Minor changes were made to fit in with the conventions
+    used in other policy search methods in ths library, but other than that, it's mostly intact.
 """
 
 class CEM(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, action_bound, GPU=False):
         super(CEM, self).__init__()
         
+        # neural network dimensions
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
@@ -21,9 +26,7 @@ class CEM(nn.Module):
         # define layers
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
-        
         self.action_bound = action_bound
-
         self.GPU = GPU
 
         if GPU:

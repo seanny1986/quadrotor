@@ -31,16 +31,17 @@ class Environment:
         self.hov_rpm = self.iris.hov_rpm
         self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure(0)
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6)
-
         self.vec = None
         self.dist_sq = None
         self.goal_achieved = False
+    
+    def init_rendering(self):
+        # rendering parameters
+        pl.close("all")
+        pl.ion()
+        self.fig = pl.figure("Straight and Level")
+        self.axis3d = self.fig.add_subplot(111, projection='3d')
+        self.vis = ani.Visualization(self.iris, 6)
 
     def reward(self, xyz_dot, action):
         self.vec = xyz_dot-self.goal

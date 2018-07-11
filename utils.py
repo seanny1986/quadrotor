@@ -172,17 +172,17 @@ class OUNoise:
         self.mu = mu
         self.theta = theta
         self.sigma = sigma
-        self.state = np.ones(self.action_dimension) * self.mu
+        self.state = np.ones(self.action_dimension)*self.mu
         self.reset()
 
     def reset(self):
-        self.state = np.ones(self.action_dimension) * self.mu
+        self.state = np.ones(self.action_dimension)*self.mu
 
     def noise(self):
         x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
-        self.state = x + dx
-        return self.state * self.scale
+        dx = self.theta*(self.mu-x)+self.sigma*np.random.randn(len(x))
+        self.state = x+dx
+        return self.state*self.scale
 
     def set_seed(self,seed):
         np.random.seed(seed=seed)

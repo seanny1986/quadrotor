@@ -8,7 +8,7 @@ import utils
 class Trainer:
     def __init__(self, env_name, params):
         self.env = envs.make(env_name)
-
+        self.env_name = env_name
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]
         self.mem_len = params["mem_len"]
@@ -35,7 +35,10 @@ class Trainer:
                                 action_bound, 
                                 GPU=cuda)
 
-        self.noise = utils.OUNoise(action_dim)
+        ou_scale = params["ou_scale"]
+        ou_mu = params["ou_mu"]
+        ou_sigma = params["ou_sigma"]
+        self.noise = utils.OUNoise(action_dim, scale=ou_scale, mu=ou_mu, sigma=ou_sigma)
         self.noise.set_seed(self.seed)
         self.memory = ddpg.ReplayMemory(self.mem_len)
 
@@ -44,6 +47,11 @@ class Trainer:
             self.agent = self.agent.cuda()
         else:
             self.Tensor = torch.Tensor
+        
+        if self.render:
+            self.env.init_rendering()
+
+        self.train()
 
     def train(self):
         interval_avg = []
@@ -56,7 +64,7 @@ class Trainer:
             for t in range(self.env.H):
             
                 # render the episode
-                if ep % self.log_interval == 0:
+                if ep % self.log_interval == 0 and self.render:
                     self.env.render()
             
                 # select an action using either random policy or trained policy
@@ -67,6 +75,7 @@ class Trainer:
             
                 # step simulation forward
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy())
+                running_reward += reward
                 next_state = self.Tensor(next_state)
                 reward = self.Tensor([reward])
 

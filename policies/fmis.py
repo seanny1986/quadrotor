@@ -182,6 +182,7 @@ class FMIS(torch.nn.Module):
         optim.zero_grad()
         model_loss.backward()
         optim.step()
+        return error.sum().item()
 
     def policy_update(self, optim, s0, H):
 

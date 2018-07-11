@@ -25,15 +25,16 @@ class Environment:
         self.sim_dt = 0.05
         self.steps = range(int(self.sim_dt/self.ctrl_dt))
 
+        self.vec = None
+        self.dist_sq = None
+    
+    def init_rendering(self):
         # rendering parameters
         pl.close("all")
         pl.ion()
-        self.fig = pl.figure(0)
+        self.fig = pl.figure("Maneuvers")
         self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, self.r)
-
-        self.vec = None
-        self.dist_sq = None
+        self.vis = ani.Visualization(self.iris, 6)
 
     def reward(self, xyz, action):
         self.vec = self.iris.xyz-self.goal

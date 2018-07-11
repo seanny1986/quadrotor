@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -37,27 +37,28 @@ class Environment:
         self.hov_rpm = self.iris.hov_rpm
         self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure(0)
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6)
-
         self.vec = None
         self.dist_sq = None
         self.goal_achieved = False
 
+    def init_rendering(self):
+        # rendering parameters
+        pl.close("all")
+        pl.ion()
+        self.fig = pl.figure("Hover")
+        self.axis3d = self.fig.add_subplot(111, projection='3d')
+        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+
     def reward(self, xyz, action):
         self.vec = xyz-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
-        dist_rew = np.exp(-self.dist_sq)
-        ctrl_rew = -np.sum((action**2))/400000.
+        dist_rew = 10*np.exp(-self.dist_sq)
+        ctrl_rew = -np.sum((action**2))/40000000.
         cmplt_rew = 0.
         if self.dist_sq < self.goal_thresh:
-            cmplt_rew = 1000.
+            cmplt_rew = 5.
             self.goal_achieved = True
-        time_rew = 0.5
+        time_rew = 1
         return dist_rew+ctrl_rew+cmplt_rew+time_rew
 
     def terminal(self, pos):
@@ -77,7 +78,7 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, uvw, pqr = self.iris.step(action)
+            xyz, zeta, _, uvw, pqr = self.iris.step(action)
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
@@ -92,7 +93,7 @@ class Environment:
     def reset(self):
         self.goal_achieved = False
         self.t = 0.
-        xyz, zeta, uvw, pqr = self.iris.reset()
+        xyz, zeta, _, uvw, pqr = self.iris.reset()
         self.vec = xyz-self.goal
         tmp = zeta.T.tolist()[0]
         action = self.trim
@@ -102,9 +103,9 @@ class Environment:
         return state
     
     def render(self):
-        pl.figure(0)
+        pl.figure("Hover")
         self.axis3d.cla()
-        self.vis.draw3d(self.axis3d)
+        self.vis.draw3d_quat(self.axis3d)
         self.vis.draw_goal(self.axis3d, self.goal)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)

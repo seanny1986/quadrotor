@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.quadrotor2 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -19,7 +19,7 @@ class Environment:
         self.goal = self.generate_goal(1.5)
         self.goal_thresh = 0.1
         self.t = 0
-        self.T = 15
+        self.T = 2.5
         self.r = 1.5
         self.action_space = 4
         self.observation_space = 15+self.action_space
@@ -27,11 +27,13 @@ class Environment:
         # simulation parameters
         self.params = cfg.params
         self.iris = quad.Quadrotor(self.params)
-        self.ctrl_dt = self.params["dt"]
-        self.sim_dt = 0.05
-        self.steps = range(int(self.sim_dt/self.ctrl_dt))
+        self.ctrl_dt = 0.05
+        self.sim_dt = self.params["dt"]
+        self.steps = range(int(self.ctrl_dt/self.sim_dt))
         self.hov_rpm = self.iris.hov_rpm
         self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
+        self.action_bound = [0, self.iris.max_rpm]
+        self.H = int(self.T/self.ctrl_dt)
 
         # define bounds here
         self.xzy_bound = 1.
@@ -39,16 +41,17 @@ class Environment:
         self.uvw_bound = 10
         self.pqr_bound = 1.
 
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure(0)
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6)
-
         self.vec = None
         self.dist_sq = None
     
+    def init_rendering(self):
+        # rendering parameters
+        pl.close("all")
+        pl.ion()
+        self.fig = pl.figure("Flying Skills")
+        self.axis3d = self.fig.add_subplot(111, projection='3d')
+        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+
     def set_nondeterministic_s0(self):
         self.deterministic_s0 = False
 
@@ -85,11 +88,11 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, uvw, pqr = self.iris.step(action)
+            xyz, zeta, _, uvw, pqr = self.iris.step(action)
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()
         reward = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
         info = None
@@ -101,9 +104,9 @@ class Environment:
         self.goal_achieved = False
         self.t = 0.
         if self.deterministic_s0:
-            xyz, zeta, uvw, pqr = self.iris.reset()
+            xyz, zeta, _, uvw, pqr = self.iris.reset()
         else:
-            xyz, zeta, uvw, pqr = self.generate_s0()
+            xyz, zeta, _, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
         self.goal = self.generate_goal(self.r)
         self.vec = xyz-self.goal
@@ -125,9 +128,9 @@ class Environment:
                         [z]])
     
     def render(self):
-        pl.figure(0)
+        pl.figure("Flying Skills")
         self.axis3d.cla()
-        self.vis.draw3d(self.axis3d)
+        self.vis.draw3d_quat(self.axis3d)
         self.vis.draw_goal(self.axis3d, self.goal)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)

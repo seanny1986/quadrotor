@@ -41,12 +41,13 @@ class Environment:
         self.uvw_bound = 10
         self.pqr_bound = 1.
 
+    def init_rendering(self):
         # rendering parameters
         pl.close("all")
         pl.ion()
-        self.fig = pl.figure(0)
+        self.fig = pl.figure("Model Training")
         self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+        self.vis = ani.Visualization(self.iris, 6)
 
     def set_nondeterministic_s0(self):
         self.deterministic_s0 = False

@@ -73,13 +73,11 @@ class DDPG(nn.Module):
                 sigma = sigma.cuda()
             return F.sigmoid(mu+sigma)*self.action_bound
         else:
-            return mu
+            return F.sigmoid(mu)*self.action_bound
 
     def random_action(self, noise):
-        action = Variable(torch.Tensor([noise.noise()]))
-        if self.GPU:
-            action = action.cuda()
-        return action
+        action = self.Tensor([noise.noise()])
+        return action*self.action_bound
     
     def soft_update(self, target, source, tau):
 	    for target_param, param in zip(target.parameters(), source.parameters()):
@@ -107,7 +105,7 @@ class DDPG(nn.Module):
         state_action_value = self.critic(torch.cat([state, action],dim=1))                          # zero gradients in optimizer
         value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)              # (critic-target) loss
         value_loss.backward()                                                                       # backpropagate value loss
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(),0.1)                                # clip critic gradients
+        #torch.nn.utils.clip_grad_norm_(self.critic.parameters(),0.1)                                # clip critic gradients
         self.crit_opt.step()                                                                        # update value function
         
         self.pol_opt.zero_grad()                                                                    # zero gradients in optimizer

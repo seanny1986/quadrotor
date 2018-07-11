@@ -41,16 +41,17 @@ class Environment:
         self.action_bound = [0, self.iris.max_rpm]
         self.H = int(self.T/self.ctrl_dt)
 
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure(0)
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6)
-
         self.vec = None
         self.dist_sq = None
         self.goal_achieved = False
+    
+    def init_rendering(self):
+        # rendering parameters
+        pl.close("all")
+        pl.ion()
+        self.fig = pl.figure("perching")
+        self.axis3d = self.fig.add_subplot(111, projection='3d')
+        self.vis = ani.Visualization(self.iris, 6)
 
     def reward(self, xyz, action):
         self.vec = self.iris.xyz-self.goal_xyz

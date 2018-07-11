@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "hover",
-        "algs": ["ddpg"]
+        "env": "flying_skills",
+        "algs": ["fmis"]
         }
 
 cem = { 
@@ -19,9 +19,9 @@ cem = {
         "gamma": 0.99,
         "seed": 343,
         "log_interval": 10,
-        "pop_size": 64,
+        "pop_size": 32,
         "elite_frac": 0.2,
-        "sigma": 0.5,
+        "sigma": 0.2,
         "render": True,
         "save": False,
         "cuda": True
@@ -38,7 +38,10 @@ ddpg = {
         "batch_size": 64,
         "render": True,
         "save": False,
-        "cuda": True
+        "cuda": True,
+        "ou_scale": 1,
+        "ou_mu": 0.75,
+        "ou_sigma": 0.05
         }
 
 fmis = {
@@ -47,13 +50,13 @@ fmis = {
         "gamma": 0.99,
         "seed": 343,
         "log_interval": 10,
-        "render": False,
+        "render": True,
         "save": False,
         "cuda": True
         }
 
 gae = {
-        "hidden_dim": 32,
+        "hidden_dim": 64,
         "iterations": 5000,
         "gamma": 0.99,
         "seed": 343,
@@ -87,3 +90,5 @@ qprop = {
         "save": False,
         "cuda": True
         }
+
+trpo = {}

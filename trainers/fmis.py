@@ -35,6 +35,11 @@ class Trainer:
             self.Tensor = torch.cuda.FloatTensor
         else:
             self.Tensor = torch.Tensor
+        
+        if self.render:
+            self.env.init_rendering()
+
+        self.train()
 
     def train(self):
         interval_avg = []
@@ -47,7 +52,7 @@ class Trainer:
             state = self.Tensor(self.env.reset())
             s0 = state.clone()
             for _ in range(self.env.H):
-                if ep % self.log_interval == 0:
+                if ep % self.log_interval == 0 and self.render:
                     self.env.render()          
                 action, _ = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy())
@@ -62,13 +67,14 @@ class Trainer:
             trajectory = {"states": s_,
                         "actions": a_,
                         "next_states": ns_}
-            for i in range(1):
-                self.agent.model_update(self.pi_optim, trajectory)
-            for i in range(1):
+            model_loss = 0
+            for i in range(1, 15+1):
+                model_loss += (model_loss*(i-1)+self.agent.model_update(self.pi_optim, trajectory))/i
+            for i in range(5):
                 self.agent.policy_update(self.phi_optim, s0, self.env.H)
             interval_avg.append(running_reward)
-            avg = (avg*(ep-1)+running_reward)/ep   
+            avg = (avg*(ep-1)+running_reward)/ep
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
+                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}\t Model loss: {:.2f}'.format(ep, interval, avg, model_loss))
                 interval_avg = []

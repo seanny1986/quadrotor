@@ -63,6 +63,7 @@ class GAE(torch.nn.Module):
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
+        print("variance: ", logvar.exp().sqrt().data)
         return F.sigmoid(action)*self.action_bound, log_prob
 
     def hard_update(self, target, source):
@@ -95,6 +96,7 @@ class GAE(torch.nn.Module):
         critic_loss = advantage.pow(2).sum()
         loss = actor_loss+critic_loss
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.parameters(),0.1)     
         optim.step()
 
         

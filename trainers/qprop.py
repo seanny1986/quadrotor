@@ -47,6 +47,11 @@ class Trainer:
             self.Tensor = torch.cuda.FloatTensor
         else:
             self.Tensor = torch.Tensor
+        
+        if self.render:
+            self.env.init_rendering()
+            
+        self.train()
 
     def train(self):
         interval_avg = []
@@ -59,7 +64,7 @@ class Trainer:
             rewards = []
             log_probs = []
             for t in range(self.env.H):
-                if ep % self.log_interval == 0:
+                if ep % self.log_interval == 0 and self.render:
                     self.env.render()          
                 action, log_prob = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action.data[0].cpu().numpy())

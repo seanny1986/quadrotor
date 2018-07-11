@@ -22,7 +22,6 @@ class Environment:
         self.goal_thresh = 0.05
         self.t = 0
         self.T = 5
-        self.r = 1.5
         self.action_space = 4
         self.observation_space = 15+self.action_space
 

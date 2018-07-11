@@ -1,4 +1,3 @@
-import os
 import trainers.config as cfg
 import multiprocessing as mp
 
@@ -11,10 +10,22 @@ import multiprocessing as mp
     -- Sean Morrison, 2018
 """
 
+# TODO: 
+# Implement logging for all environments.
+# Prevent GAE and QPROP from blowing up. 
+# Implement stochastic wind model in the environment
+# Get TRPO working
+# Implement a variant of ACER
+# Port OffPAC
+# Improve FMIS model learning
+# Check DDPG noise makes sense after warmup ends
+
+
 # grab experiment environment and list of algorithms
 env_name = cfg.exp["env"]
 algs = cfg.exp["algs"]
 
+# start training processes
 def main(env_name, algs):
     processes = []
     for alg in algs:

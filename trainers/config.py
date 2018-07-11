@@ -91,4 +91,18 @@ qprop = {
         "cuda": True
         }
 
-trpo = {}
+trpo = {
+        "hidden_dim": 32,
+        "iterations": 5000,
+        "tau": None,
+        "l2_reg": None,
+        "max_kl": None,
+        "damping": None,
+        "log_interval": 10,
+        "warmup": 50,
+        "batch_size": 64,
+        "render": False,
+        "save": False,
+        "cuda": True
+        }
+        

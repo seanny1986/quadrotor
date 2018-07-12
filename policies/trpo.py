@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import scipy.optimize
 from math import pi, log
+import numpy as np
+from collections import namedtuple
 
 
 class Actor(nn.Module):
@@ -22,7 +24,7 @@ class Actor(nn.Module):
         self.final_value = 0
 
     def forward(self, x):
-        x = F.tanh(self.affine1(x))
+        x = F.tanh(self.affine1(x.float()))
         action_mean = self.action_mean(x)
         action_log_std = self.action_log_std.expand_as(action_mean)
         action_std = torch.exp(action_log_std)
@@ -42,10 +44,24 @@ class Critic(nn.Module):
         return state_values
 
 class TRPO(nn.Module):
-    def __init__(self, actor, critic):
+    def __init__(self, actor, critic, params, GPU=False):
         super(TRPO, self).__init__()
         self.actor = actor
         self.critic = critic
+        self.gamma = params["gamma"]
+        self.tau = params["tau"]
+        self.l2_reg = params["l2_reg"]
+        self.max_kl = params["max_kl"]
+        self.damping = params["damping"]
+
+        self.GPU = GPU
+
+        if GPU:
+            self.Tensor = torch.cuda.FloatTensor
+            self.actor = self.actor.cuda()
+            self.critic = self.critic.cuda()
+        else:
+            self.Tensor = torch.Tensor
 
     def select_action(self, state):
         state = torch.from_numpy(state).unsqueeze(0)
@@ -66,12 +82,12 @@ class TRPO(nn.Module):
             
             # weight decay
             for param in self.critic.parameters():
-                value_loss += param.pow(2).sum()*args.l2_reg
+                value_loss += param.pow(2).sum()*self.l2_reg
             value_loss.backward()
-            return (value_loss.data.double().numpy()[0], get_flat_grad_from(self.critic).data.double().numpy())
+            return (value_loss.data.double().numpy(), get_flat_grad_from(self.critic).data.double().numpy())
 
         def get_loss(volatile=False):
-            action_means, action_log_stds, action_stds = policy_net(Variable(states, volatile=volatile))
+            action_means, action_log_stds, action_stds = self.actor(Variable(states, volatile=volatile))
             log_prob = normal_log_density(Variable(actions), action_means, action_log_stds, action_stds)
             action_loss = -Variable(advantages)*torch.exp(log_prob-Variable(fixed_log_prob))
             return action_loss.mean()
@@ -98,9 +114,9 @@ class TRPO(nn.Module):
 
         # calculate advantages
         for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i]+args.gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+args.gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+args.gamma*args.tau*prev_advantage*masks[i]
+            returns[i] = rewards[i]+self.gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.gamma*prev_value*masks[i]-values.data[i]
+            advantages[i] = deltas[i]+self.gamma*self.tau*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
@@ -109,9 +125,24 @@ class TRPO(nn.Module):
         flat_params, _, opt_info = scipy.optimize.fmin_l_bfgs_b(get_value_loss, get_flat_params_from(self.critic).double().numpy(), maxiter=25)
         set_flat_params_to(self.critic, torch.Tensor(flat_params))
         advantages = (advantages-advantages.mean())/advantages.std()
-        action_means, action_log_stds, action_stds = policy_net(Variable(states))
+        action_means, action_log_stds, action_stds = self.actor(Variable(states))
         fixed_log_prob = normal_log_density(Variable(actions), action_means, action_log_stds, action_stds).data.clone()
-        trpo_step(self.actor, get_loss, get_kl, args.max_kl, args.damping)
+        trpo_step(self.actor, get_loss, get_kl, self.max_kl, self.damping)
+
+Transition = namedtuple('Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
+class Memory(object):
+    def __init__(self):
+        self.memory = []
+
+    def push(self, *args):
+        """Saves a transition."""
+        self.memory.append(Transition(*args))
+
+    def sample(self):
+        return Transition(*zip(*self.memory))
+
+    def __len__(self):
+        return len(self.memory)
 
 def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
     x = torch.zeros(b.size())
@@ -205,8 +236,3 @@ def get_flat_grad_from(net, grad_grad=False):
             grads.append(param.grad.view(-1))
     flat_grad = torch.cat(grads)
     return flat_grad
-
-
-
-running_state = ZFilter((num_inputs,), clip=5)
-running_reward = ZFilter((1,), demean=False, clip=10)

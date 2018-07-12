@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "flying_skills",
-        "algs": ["fmis"]
+        "algs": ["trpo"]
         }
 
 cem = { 
@@ -28,9 +28,12 @@ cem = {
         }
 
 ddpg = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "tau": 0.01
+                                },
         "hidden_dim": 32,
         "iterations": 5000,
-        "gamma": 0.99,
         "mem_len": 1000000,
         "seed": 343,
         "log_interval": 10,
@@ -45,9 +48,11 @@ ddpg = {
         }
 
 fmis = {
+        "network_settings": {
+                                "gamma": 0.99
+                                },
         "hidden_dim": 32,
         "iterations": 5000,
-        "gamma": 0.99,
         "seed": 343,
         "log_interval": 10,
         "render": True,
@@ -56,9 +61,12 @@ fmis = {
         }
 
 gae = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "lambda": 0.92
+                                },
         "hidden_dim": 64,
         "iterations": 5000,
-        "gamma": 0.99,
         "seed": 343,
         "log_interval": 10,
         "render": False,
@@ -66,10 +74,13 @@ gae = {
         "cuda": True
         }
 
-ppo = {
+ppo = { 
+        "network_settings": {
+                                "gamma": 0.99,
+                                "lambda": 0.92
+                                },
         "hidden_dim": 32,
         "iterations": 5000,
-        "gamma": 0.99,
         "seed": 343,
         "log_interval": 10,
         "render": False,
@@ -78,6 +89,10 @@ ppo = {
         }
 
 qprop = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "tau": 0.01
+                                },
         "hidden_dim": 32,
         "iterations": 5000,
         "gamma": 0.99,
@@ -92,17 +107,21 @@ qprop = {
         }
 
 trpo = {
+        "network_settings": {
+                                "gamma": 0.995,
+                                "tau": 0.97,
+                                "l2_reg": 1e-3,
+                                "max_kl": 1e-2,
+                                "damping": 1e-1
+                                },
         "hidden_dim": 32,
         "iterations": 5000,
-        "tau": None,
-        "l2_reg": None,
-        "max_kl": None,
-        "damping": None,
         "log_interval": 10,
         "warmup": 50,
         "batch_size": 64,
-        "render": False,
+        "seed": 343,
+        "render": True,
         "save": False,
-        "cuda": True
+        "cuda": False
         }
         

@@ -1,6 +1,5 @@
 import environments.envs as envs 
 import policies.trpo as trpo
-import argparse
 import torch
 import torch.nn.functional as F
 import math
@@ -13,11 +12,6 @@ class Trainer:
         self.params = params
 
         self.iterations = params["iterations"]
-        self.gamma = params["gamma"]
-        self.tau = params["tau"]
-        self.l2_reg = params["l2_reg"]
-        self.max_kl = params["max_kl"]
-        self.damping = params["damping"]
         self.seed = params["seed"]
         self.batch_size = params["batch_size"]
         self.render = params["render"]
@@ -31,10 +25,10 @@ class Trainer:
 
         self.pi = trpo.Actor(state_dim, hidden_dim, action_dim)
         self.critic = trpo.Critic(state_dim, hidden_dim, 1)
-        self.agent = trpo.TRPO(self.pi, self.beta, self.critic, self.phi, self.env, GPU=cuda)
+        self.agent = trpo.TRPO(self.pi, self.critic, params["network_settings"], GPU=cuda)
 
-        self.pi_optim = torch.optim.Adam(self.pi.parameters())
-        self.phi_optim = torch.optim.Adam(self.phi.parameters())
+        self.running_state = ZFilter((state_dim,), clip=5)
+        self.running_reward = ZFilter((1,), demean=False, clip=10)
 
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
@@ -48,20 +42,20 @@ class Trainer:
     
     def train(self):
         for i_episode in range(1, self.iterations+1):
-            memory = Memory()
+            memory = trpo.Memory()
             num_steps = 0
             reward_batch = 0
             num_episodes = 0
             while num_steps < self.batch_size:
                 state = self.env.reset()
-                state = running_state(state)
+                state = self.running_state(state[0])
                 reward_sum = 0
-                for t in range(10000): # Don't infinite loop while learning
-                    action = select_action(state)
+                for t in range(1, self.iterations):
+                    action = self.agent.select_action(state)
                     action = action.data[0].numpy()
-                    next_state, reward, done, _ = env.step(action)
+                    next_state, reward, done, _ = self.env.step(action)
                     reward_sum += reward
-                    next_state = running_state(next_state)
+                    next_state = self.running_state(next_state[0])
                     mask = 1
                     if done:
                         mask = 0
@@ -71,7 +65,6 @@ class Trainer:
                         self.env.render()
                     if done:
                         break
-
                     state = next_state
                 num_steps += (t-1)
                 num_episodes += 1
@@ -81,4 +74,66 @@ class Trainer:
             self.agent.update(batch)
             if i_episode % self.log_interval == 0:
                 print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(i_episode, reward_sum, reward_batch))
+
+class RunningStat(object):
+    def __init__(self, shape):
+        self._n = 0
+        self._M = np.zeros(shape)
+        self._S = np.zeros(shape)
+
+    def push(self, x):
+        x = np.asarray(x)
+        assert x.shape == self._M.shape
+        self._n += 1
+        if self._n == 1:
+            self._M[...] = x
+        else:
+            oldM = self._M.copy()
+            self._M[...] = oldM + (x - oldM) / self._n
+            self._S[...] = self._S + (x - oldM) * (x - self._M)
+
+    @property
+    def n(self):
+        return self._n
+
+    @property
+    def mean(self):
+        return self._M
+
+    @property
+    def var(self):
+        return self._S / (self._n - 1) if self._n > 1 else np.square(self._M)
+
+    @property
+    def std(self):
+        return np.sqrt(self.var)
+
+    @property
+    def shape(self):
+        return self._M.shape
+
+class ZFilter:
+    """
+    y = (x-mean)/std
+    using running estimates of mean,std
+    """
+
+    def __init__(self, shape, demean=True, destd=True, clip=10.0):
+        self.demean = demean
+        self.destd = destd
+        self.clip = clip
+        self.rs = RunningStat(shape)
+
+    def __call__(self, x, update=True):
+        if update: self.rs.push(x)
+        if self.demean:
+            x = x - self.rs.mean
+        if self.destd:
+            x = x / (self.rs.std + 1e-8)
+        if self.clip:
+            x = np.clip(x, -self.clip, self.clip)
+        return x
+
+    def output_shape(self, input_space):
+        return input_space.shape
 

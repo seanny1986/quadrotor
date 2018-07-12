@@ -9,8 +9,10 @@ import numpy as np
 from collections import deque
 
 class Trainer:
-    def __init__(self, env_name, params):
+    def __init__(self, env_name, params, directory):
+        self.env_name = env_name
         self.env = envs.make(env_name)
+        self.directory = directory
 
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]

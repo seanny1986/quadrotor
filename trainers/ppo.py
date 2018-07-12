@@ -6,9 +6,10 @@ import torch.nn.functional as F
 import utils
 
 class Trainer:
-    def __init__(self, env_name, params):
+    def __init__(self, env_name, params, directory):
         self.env = envs.make(env_name)
         self.params = params
+        self.directory = directory
 
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]

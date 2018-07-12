@@ -1,5 +1,6 @@
 import trainers.config as cfg
 import multiprocessing as mp
+import os
 
 """
     Main experiment script. We pull the experiment config parameters from file and then fire up a bunch of
@@ -14,7 +15,6 @@ import multiprocessing as mp
 # Implement logging for all environments.
 # Prevent GAE and QPROP from blowing up. 
 # Implement stochastic wind model in the environment
-# Get TRPO working
 # Implement a variant of ACER
 # Port OffPAC
 # Improve FMIS model learning
@@ -25,11 +25,14 @@ import multiprocessing as mp
 env_name = cfg.exp["env"]
 algs = cfg.exp["algs"]
 
+# get current working directory for logging data
+directory = os.getcwd()
+
 # start training processes
 def main(env_name, algs):
     processes = []
     for alg in algs:
-        p = mp.Process(target=make, args=(env_name, alg))
+        p = mp.Process(target=make, args=(env_name, alg, directory))
         processes.append(p)
         p.start()
 
@@ -43,31 +46,31 @@ def make(env_name, alg):
     if alg == "cem":
         params = cfg.cem
         import trainers.cem as cem_trainer
-        return cem_trainer.Trainer(env_name, params)
+        return cem_trainer.Trainer(env_name, params, directory)
     if alg == "ddpg":
         params = cfg.ddpg
         import trainers.ddpg as ddpg_trainer
-        return ddpg_trainer.Trainer(env_name, params)
+        return ddpg_trainer.Trainer(env_name, params, directory)
     if alg == "fmis":
         params = cfg.fmis
         import trainers.fmis as fmis_trainer
-        return fmis_trainer.Trainer(env_name, params)
+        return fmis_trainer.Trainer(env_name, params, directory)
     if alg == "gae":
         params = cfg.gae
         import trainers.gae as gae_trainer
-        return gae_trainer.Trainer(env_name, params)
+        return gae_trainer.Trainer(env_name, params, directory)
     if alg == "ppo":
         params = cfg.ppo
         import trainers.ppo as ppo_trainer
-        return ppo_trainer.Trainer(env_name, params)
+        return ppo_trainer.Trainer(env_name, params, directory)
     if alg == "qprop":
         params = cfg.qprop
         import trainers.qprop as qprop_trainer
-        return qprop_trainer.Trainer(env_name, params)
+        return qprop_trainer.Trainer(env_name, params, directory)
     if alg == "trpo":
         params = cfg.trpo
         import trainers.trpo as trpo_trainer
-        return trpo_trainer.Trainer(env_name, params)
+        return trpo_trainer.Trainer(env_name, params, directory)
     
 
 if __name__ == "__main__":

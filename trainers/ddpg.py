@@ -4,13 +4,17 @@ import argparse
 import torch
 import torch.nn.functional as F
 import utils
+import csv
+from pathlib import Path
 
 class Trainer:
-    def __init__(self, env_name, params):
+    def __init__(self, env_name, params, directory):
         self.env = envs.make(env_name)
         self.env_name = env_name
+        self.directory = directory
+
+        # save important experiment parameters for the training loop
         self.iterations = params["iterations"]
-        self.gamma = params["gamma"]
         self.mem_len = params["mem_len"]
         self.seed = params["seed"]
         self.render = params["render"]
@@ -19,11 +23,13 @@ class Trainer:
         self.batch_size = params["batch_size"]
         self.save = params["save"]
         
+        # initialize DDPG agent using experiment parameters from config file
         action_bound = self.env.action_bound[1]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
+        network_settings = params["network_settings"]
         self.actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
         self.target_actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
         self.critic = ddpg.Critic(state_dim, hidden_dim, action_dim)
@@ -32,9 +38,11 @@ class Trainer:
                                 self.target_actor, 
                                 self.critic, 
                                 self.target_critic, 
-                                action_bound, 
+                                action_bound,
+                                network_settings, 
                                 GPU=cuda)
 
+        # intitialize ornstein-uhlenbeck noise for random action exploration
         ou_scale = params["ou_scale"]
         ou_mu = params["ou_mu"]
         ou_sigma = params["ou_sigma"]
@@ -42,6 +50,7 @@ class Trainer:
         self.noise.set_seed(self.seed)
         self.memory = ddpg.ReplayMemory(self.mem_len)
 
+        # send to GPU if flagged in experiment config file
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
             self.agent = self.agent.cuda()
@@ -51,7 +60,20 @@ class Trainer:
         if self.render:
             self.env.init_rendering()
 
+        # initialize experiment logging
+        self.logging = params["logging"]
+        if self.logging:
+            my_file = Path("/path/to/file")
+            if not my_file.exists():
+                # create file
+                pass
+        
         self.train()
+
+    def log(self, reward):
+        with open(self.directory+"/data/ddpg_"+self.env_name+".csv") as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(reward)
 
     def train(self):
         interval_avg = []
@@ -61,11 +83,9 @@ class Trainer:
             state = self.Tensor(self.env.reset())
             self.noise.reset()
             running_reward = 0
+            if self.render:
+                self.env.render()
             for t in range(self.env.H):
-            
-                # render the episode
-                if ep % self.log_interval == 0 and self.render:
-                    self.env.render()
             
                 # select an action using either random policy or trained policy
                 if ep < self.warmup:
@@ -76,6 +96,13 @@ class Trainer:
                 # step simulation forward
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy())
                 running_reward += reward
+
+                # render the episode
+                if ep % self.log_interval == 0 and self.render:
+                    self.env.render()
+                    if self.logging:
+                        self.log(running_reward)
+                
                 next_state = self.Tensor(next_state)
                 reward = self.Tensor([reward])
 

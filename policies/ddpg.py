@@ -31,7 +31,7 @@ class Critic(nn.Module):
         return q
 
 class DDPG(nn.Module):
-    def __init__(self, actor, target_actor, critic, target_critic, action_bound, gamma=0.99, tau=0.001, GPU=True):
+    def __init__(self, actor, target_actor, critic, target_critic, action_bound, network_settings, GPU=True, clip=None):
         super(DDPG, self).__init__() 
         self.actor = actor
         self.target_actor = target_actor
@@ -41,8 +41,8 @@ class DDPG(nn.Module):
 
         self.action_bound = action_bound
 
-        self.gamma = gamma
-        self.tau = tau
+        self.gamma = network_settings["gamma"]
+        self.tau = network_settings["tau"]
 
         self.hard_update(self.target_actor, self.actor)
         self.hard_update(self.target_critic, self.critic)
@@ -51,6 +51,7 @@ class DDPG(nn.Module):
         self.crit_opt = optim.Adam(critic.parameters(), lr=1e-4)
 
         self.GPU = GPU
+        self.clip = clip
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
@@ -105,13 +106,14 @@ class DDPG(nn.Module):
         state_action_value = self.critic(torch.cat([state, action],dim=1))                          # zero gradients in optimizer
         value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)              # (critic-target) loss
         value_loss.backward()                                                                       # backpropagate value loss
-        #torch.nn.utils.clip_grad_norm_(self.critic.parameters(),0.1)                                # clip critic gradients
         self.crit_opt.step()                                                                        # update value function
         
         self.pol_opt.zero_grad()                                                                    # zero gradients in optimizer
         policy_loss = self.critic(torch.cat([state, self.actor(state)],1))                          # use critic to estimate pol gradient
         policy_loss = -policy_loss.mean()                                                           # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
+        if self.clip is not None:
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.clip)
         self.pol_opt.step()                                                                         # update policy function
         
         self.soft_update(self.target_critic, self.critic, self.tau)                                 # soft update of target networks

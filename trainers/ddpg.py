@@ -5,13 +5,13 @@ import torch
 import torch.nn.functional as F
 import utils
 import csv
-from pathlib import Path
+import os
+
 
 class Trainer:
-    def __init__(self, env_name, params, directory):
+    def __init__(self, env_name, params):
         self.env = envs.make(env_name)
         self.env_name = env_name
-        self.directory = directory
 
         # save important experiment parameters for the training loop
         self.iterations = params["iterations"]
@@ -63,17 +63,12 @@ class Trainer:
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:
-            my_file = Path("/path/to/file")
-            if not my_file.exists():
-                # create file
-                pass
+            directory = os.getcwd()
+            filename = directory + "/data/ddpg.csv"
+            with open(filename, "w") as csvfile:
+                self.writer = csv.writer(csvfile)
         
         self.train()
-
-    def log(self, reward):
-        with open(self.directory+"/data/ddpg_"+self.env_name+".csv") as outfile:
-            writer = csv.writer(outfile)
-            writer.writerow(reward)
 
     def train(self):
         interval_avg = []
@@ -100,8 +95,6 @@ class Trainer:
                 # render the episode
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
-                    if self.logging:
-                        self.log(running_reward)
                 
                 next_state = self.Tensor(next_state)
                 reward = self.Tensor([reward])
@@ -115,7 +108,7 @@ class Trainer:
                         transitions = self.memory.sample(self.batch_size)
                         batch = ddpg.Transition(*zip(*transitions))
                         self.agent.update(batch)
-            
+
                 # check if terminate
                 if done:
                     break
@@ -127,3 +120,6 @@ class Trainer:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
                 interval_avg = []
+                if self.logging:
+                    self.writer.writerow([ep, reward])
+            

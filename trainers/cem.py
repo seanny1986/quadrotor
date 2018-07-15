@@ -7,12 +7,14 @@ import math
 import utils
 import numpy as np
 from collections import deque
+import csv
+import os
+
 
 class Trainer:
-    def __init__(self, env_name, params, directory):
+    def __init__(self, env_name, params):
         self.env_name = env_name
         self.env = envs.make(env_name)
-        self.directory = directory
 
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]
@@ -40,14 +42,25 @@ class Trainer:
         
         if self.render:
             self.env.init_rendering()
-            
-        self.train()
+        
+        # initialize experiment logging
+        self.logging = params["logging"]
+        if self.logging:
+            directory = os.getcwd()
+            filename = directory + "/data/cem.csv"
+            with open(filename, "w") as csvfile:
+                self.writer = csv.writer(csvfile)
+                self.train()
+        else:
+            self.train()
 
     def train(self):
         def evaluate(weights, rend):
             self.agent.set_weights(weights)
             episode_return = 0.0
             state = self.env.reset()
+            if self.render:
+                self.env.render()
             for t in range(self.env.H):
                 if rend:
                     self.env.render()
@@ -65,16 +78,14 @@ class Trainer:
         best_weight = self.sigma*np.random.randn(self.agent.get_weights_dim())
 
         for i_iteration in range(1, self.iterations+1):
-            if i_iteration % self.log_interval == 0 and self.render:
-                rend = True
-            else:
-                rend = False
             weights_pop = [best_weight+(self.sigma*np.random.randn(self.agent.get_weights_dim())) for i in range(self.pop_size)]
-            rewards = np.array([evaluate(weights, rend) for weights in weights_pop])
+            rewards = np.array([evaluate(weights, False) for weights in weights_pop])
             elite_idxs = rewards.argsort()[-n_elite:]
             elite_weights = [weights_pop[i] for i in elite_idxs]
             best_weight = np.array(elite_weights).mean(axis=0)
-            reward = evaluate(best_weight, rend)
+            reward = evaluate(best_weight, True)
             scores_deque.append(reward)
             if i_iteration % self.log_interval == 0:
                 print('Episode {}\tAverage Score: {:.2f}'.format(i_iteration, np.mean(scores_deque)))
+                if self.logging:
+                    self.writer.writerow([i_iteration, np.mean(scores_deque)])

@@ -16,7 +16,7 @@ from collections import namedtuple
 """
 
 class QPROP(torch.nn.Module):
-    def __init__(self, actor, critic, memory, target_actor, target_critic, action_bound, gamma=0.99, tau=0.01, GPU=False):
+    def __init__(self, actor, critic, memory, target_actor, target_critic, action_bound, network_settings, GPU=False):
         super(QPROP,self).__init__()
         self.actor = actor
         self.critic = critic
@@ -30,8 +30,8 @@ class QPROP(torch.nn.Module):
         self.crit_opt = torch.optim.Adam(self.critic.parameters())
         self.pol_opt = torch.optim.Adam(self.actor.parameters())
 
-        self.gamma = gamma
-        self.tau = tau
+        self.gamma = network_settings["gamma"]
+        self.tau = network_settings["tau"]
 
         self.hard_update(target_actor, actor)
         self.hard_update(target_critic, critic)
@@ -57,7 +57,8 @@ class QPROP(torch.nn.Module):
     
     def select_action(self, x):
         mu, logvar = self.actor(x)
-        a = Normal(mu, (logvar.exp()).sqrt())
+        std = logvar.exp().sqrt()+torch.ones(x.size()[0], self.actor.output_dim)*1e-4
+        a = Normal(mu, std)
         action = a.sample()
         logprob = a.log_prob(action)
         return F.sigmoid(action)*self.action_bound, logprob

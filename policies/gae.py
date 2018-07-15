@@ -1,7 +1,7 @@
 import torch
 import random
 import torch.nn.functional as F
-from torch.distributions import Normal
+from torch.distributions import MultivariateNormal
 
 """
     Pytorch implementation of Generalized Advantage Estimation (Schulman, 2015).
@@ -16,13 +16,23 @@ class Actor(torch.nn.Module):
 
         self.l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
-        self.logvar = torch.nn.Linear(hidden_dim, output_dim)
+        #self.logvar = torch.nn.Linear(hidden_dim, output_dim)
+        self.non_diag = torch.nn.Linear(hidden_dim, int(output_dim*(output_dim+1)/2-output_dim))
+        self.diag = torch.nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         x = F.relu(self.l1(x))
         mu = self.mu(x)
-        logvar = self.logvar(x)
-        return mu, logvar 
+        non_diag = self.non_diag(x)
+        diag = F.softplus(self.diag(x))
+        diag = diag+torch.ones(diag.size())*1e-4
+        A = torch.zeros(x.size()[0], self.output_dim, self.output_dim)
+        for i in range(self.output_dim):
+            A[:,i,i] = diag[:,i]
+        dim = self.output_dim-1
+        for i in range(dim):
+            A[:,i+1:,i] = non_diag[:,i*dim:i*dim+dim-i]
+        return mu, A
 
 class Critic(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -40,14 +50,14 @@ class Critic(torch.nn.Module):
         return value
 
 class GAE(torch.nn.Module):
-    def __init__(self, actor, critic, action_bound, gamma=0.99, lmbd=0.92, GPU=True):
+    def __init__(self, actor, critic, action_bound, network_settings, GPU=True):
         super(GAE,self).__init__()
         self.actor = actor
         self.critic = critic
         self.action_bound = action_bound
 
-        self.gamma = gamma
-        self.lmbd = lmbd
+        self.gamma = network_settings["gamma"]
+        self.lmbd = network_settings["lambda"]
     
         self.GPU = GPU
 
@@ -59,11 +69,11 @@ class GAE(torch.nn.Module):
             self.Tensor = torch.Tensor
 
     def select_action(self, x):
-        mu, logvar = self.actor(x)
-        a = Normal(mu, logvar.exp().sqrt())
+        mu, A = self.actor(x)
+        a = MultivariateNormal(mu, scale_tril=A)
         action = a.sample()
         log_prob = a.log_prob(action)
-        print("variance: ", logvar.exp().sqrt().data)
+        #print("Sigma matrix: ", A.data)
         return F.sigmoid(action)*self.action_bound, log_prob
 
     def hard_update(self, target, source):

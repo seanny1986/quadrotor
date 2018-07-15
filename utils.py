@@ -1,5 +1,7 @@
 import math
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import matplotlib.style as style
 import pandas as pd
@@ -105,7 +107,7 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-class Logger():
+class Logger:
     def __init__(self, title, xlab, ylab):
         self.fig1 = plt.figure()
         self.ax1 = self.fig1.add_subplot(111)

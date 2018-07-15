@@ -4,15 +4,16 @@ import argparse
 import torch
 import torch.nn.functional as F
 import utils
+import csv
+import os
+
 
 class Trainer:
-    def __init__(self, env_name, params, directory):
+    def __init__(self, env_name, params):
         self.env = envs.make(env_name)
         self.params = params
-        self.directory = directory
 
         self.iterations = params["iterations"]
-        self.gamma = params["gamma"]
         self.seed = params["seed"]
         self.render = params["render"]
         self.log_interval = params["log_interval"]
@@ -23,10 +24,10 @@ class Trainer:
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
-
+        network_settings = params["network_settings"]
         self.actor = gae.Actor(state_dim, hidden_dim, action_dim)
         self.critic = gae.Critic(state_dim, hidden_dim, 1)
-        self.agent = gae.GAE(self.actor, self.critic, action_bound, GPU=cuda)
+        self.agent = gae.GAE(self.actor, self.critic, action_bound, network_settings, GPU=cuda)
         self.optim = torch.optim.Adam(self.agent.parameters())
 
         if cuda:
@@ -36,8 +37,17 @@ class Trainer:
         
         if self.render:
             self.env.init_rendering()
-            
-        self.train()
+        
+        # initialize experiment logging
+        self.logging = params["logging"]
+        if self.logging:
+            directory = os.getcwd()
+            filename = directory + "/data/gae.csv"
+            with open(filename, "w") as csvfile:
+                self.writer = csv.writer(csvfile)
+                self.train()
+        else:
+            self.train()
 
     def train(self):
         interval_avg = []
@@ -50,12 +60,17 @@ class Trainer:
             r_ = []
             lp_ = []
             state = self.Tensor(self.env.reset())
-            for _ in range(self.env.H):
-                if ep % self.log_interval == 0 and self.render:
-                    self.env.render()          
+            if self.render:
+                self.env.render()
+
+            for _ in range(self.env.H):          
                 action, log_prob = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy())
                 running_reward += reward
+                
+                if ep % self.log_interval == 0 and self.render:
+                    self.env.render()
+
                 next_state = self.Tensor(next_state)
                 s_.append(state[0])
                 a_.append(action[0])
@@ -77,3 +92,5 @@ class Trainer:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
                 interval_avg = []
+                if self.logging:
+                    self.writer.writerow([ep, running_reward])

@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "flying_skills",
-        "algs": ["trpo"]
+        "env": "hover",
+        "algs": ["gae"]
         }
 
 cem = { 
@@ -25,7 +25,8 @@ cem = {
         "log_data": True,
         "render": True,
         "save": False,
-        "cuda": True
+        "cuda": True,
+        "logging": True
         }
 
 ddpg = {
@@ -46,7 +47,8 @@ ddpg = {
         "log_data": True,
         "render": True,
         "save": False,
-        "cuda": True
+        "cuda": True,
+        "logging": True
         }
 
 fmis = {
@@ -60,7 +62,8 @@ fmis = {
         "log_data": True,
         "render": True,
         "save": False,
-        "cuda": True
+        "cuda": True,
+        "logging": True
         }
 
 gae = {
@@ -68,14 +71,15 @@ gae = {
                                 "gamma": 0.99,
                                 "lambda": 0.92
                                 },
-        "hidden_dim": 64,
+        "hidden_dim": 128,
         "iterations": 5000,
         "seed": 343,
         "log_interval": 10,
         "log_data": True,
         "render": False,
         "save": False,
-        "cuda": True
+        "cuda": False,
+        "logging": True
         }
 
 ppo = { 
@@ -90,7 +94,8 @@ ppo = {
         "log_data": True,
         "render": False,
         "save": False,
-        "cuda": True
+        "cuda": True,
+        "logging": True
         }
 
 qprop = {
@@ -100,7 +105,6 @@ qprop = {
                                 },
         "hidden_dim": 32,
         "iterations": 5000,
-        "gamma": 0.99,
         "mem_len": 1000000,
         "seed": 343,
         "log_interval": 10,
@@ -109,7 +113,8 @@ qprop = {
         "log_data": True,
         "render": False,
         "save": False,
-        "cuda": True
+        "cuda": False,
+        "logging": True
         }
 
 trpo = {
@@ -129,6 +134,7 @@ trpo = {
         "log_data": True,
         "render": True,
         "save": False,
-        "cuda": False
+        "cuda": False,
+        "logging": True
         }
         

@@ -1,6 +1,6 @@
 import simulation.quadrotor2 as quad
 import simulation.config as cfg
-import models.one_step_velocity2 as model
+import models.one_step_vel2 as model
 import math
 from math import pi
 import numpy as np

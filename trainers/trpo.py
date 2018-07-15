@@ -5,12 +5,14 @@ import torch.nn.functional as F
 import math
 import utils
 import numpy as np
+import csv
+import os
+
 
 class Trainer:
-    def __init__(self, env_name, params, directory):
+    def __init__(self, env_name, params):
         self.env = envs.make(env_name)
         self.params = params
-        self.directory = directory
 
         self.iterations = params["iterations"]
         self.seed = params["seed"]
@@ -38,8 +40,17 @@ class Trainer:
         
         if self.render:
             self.env.init_rendering()
-            
-        self.train()
+        
+        # initialize experiment logging
+        self.logging = params["logging"]
+        if self.logging:
+            directory = os.getcwd()
+            filename = directory + "/data/trpo.csv"
+            with open(filename, "w") as csvfile:
+                self.writer = csv.writer(csvfile)    
+                self.train()
+        else:
+            self.train()
     
     def train(self):
         for i_episode in range(1, self.iterations+1):
@@ -51,19 +62,23 @@ class Trainer:
                 state = self.env.reset()
                 state = self.running_state(state[0])
                 reward_sum = 0
+                if self.render:
+                    self.env.render()
                 for t in range(1, self.iterations):
                     action = self.agent.select_action(state)
                     action = action.data[0].numpy()
                     next_state, reward, done, _ = self.env.step(action)
                     reward_sum += reward
+                    
+                    if i_episode % self.log_interval == 0 and self.render:
+                        self.env.render()
+
                     next_state = self.running_state(next_state[0])
                     mask = 1
                     if done:
                         mask = 0
                     memory.push(state, np.array([action]), mask, next_state, reward)
-
-                    if i_episode % self.log_interval == 0 and self.render:
-                        self.env.render()
+                        
                     if done:
                         break
                     state = next_state
@@ -75,6 +90,8 @@ class Trainer:
             self.agent.update(batch)
             if i_episode % self.log_interval == 0:
                 print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(i_episode, reward_sum, reward_batch))
+                if self.logging:
+                    self.writer.writerow([i_episode, reward]) 
 
 class RunningStat(object):
     def __init__(self, shape):

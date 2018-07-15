@@ -2,6 +2,7 @@ import torch
 import random
 import torch.nn.functional as F
 from torch.distributions import Normal
+from collections import namedtuple
 
 """
     Implements an architecture I'm calling Forward Model Importance Sampling. A statistical RNN 
@@ -157,7 +158,8 @@ class FMIS(torch.nn.Module):
 
     def select_action(self, x):
         mu, logvar = self.beta(x)
-        a = Normal(mu, logvar.exp().sqrt())
+        sigma = logvar.exp().sqrt()+torch.ones(x.size()[0], self.actor.output_dim)*1e-4
+        a = Normal(mu, sigma)
         action = a.sample()
         log_prob = a.log_prob(action)
         return F.sigmoid(action)*self.action_bound, log_prob
@@ -225,6 +227,25 @@ class FMIS(torch.nn.Module):
         del self.next_state[:]
         del self.reward[:]
         return loss.item()
+
+Transition = namedtuple('Transition', ['state', 'action', 'next_state'])
+class ReplayMemory(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position+1)%self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
 
         
 

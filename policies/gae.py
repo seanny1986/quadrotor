@@ -16,7 +16,6 @@ class Actor(torch.nn.Module):
 
         self.l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
-        #self.logvar = torch.nn.Linear(hidden_dim, output_dim)
         self.non_diag = torch.nn.Linear(hidden_dim, int(output_dim*(output_dim+1)/2-output_dim))
         self.diag = torch.nn.Linear(hidden_dim, output_dim)
 
@@ -29,9 +28,9 @@ class Actor(torch.nn.Module):
         A = torch.zeros(x.size()[0], self.output_dim, self.output_dim)
         for i in range(self.output_dim):
             A[:,i,i] = diag[:,i]
-        dim = self.output_dim-1
-        for i in range(dim):
-            A[:,i+1:,i] = non_diag[:,i*dim:i*dim+dim-i]
+        A[:,1:,0] = non_diag[:,0:3]
+        A[:,2:,1] = non_diag[:,3:5]
+        A[:,3:,2] = non_diag[:,5:]
         return mu, A
 
 class Critic(torch.nn.Module):
@@ -72,7 +71,6 @@ class GAE(torch.nn.Module):
         a = MultivariateNormal(mu, scale_tril=A)
         action = a.sample()
         log_prob = a.log_prob(action)
-        #print("Sigma matrix: ", A.data)
         return F.sigmoid(action), log_prob
 
     def hard_update(self, target, source):
@@ -105,7 +103,6 @@ class GAE(torch.nn.Module):
         critic_loss = advantage.pow(2).sum()
         loss = actor_loss+critic_loss
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.parameters(),0.1)     
         optim.step()
 
         

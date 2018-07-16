@@ -32,6 +32,7 @@ class Trainer:
 
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
+            self.agent = self.agent.cuda()
         else:
             self.Tensor = torch.Tensor
         

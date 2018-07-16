@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "hover",
-        "algs": ["ppo"]
+        "algs": ["gae"]
         }
 
 cem = { 
@@ -72,7 +72,7 @@ gae = {
         "iterations": 5000,
         "seed": 343,
         "log_interval": 10,
-        "render": False,
+        "render": True,
         "save": False,
         "cuda": False,
         "logging": True

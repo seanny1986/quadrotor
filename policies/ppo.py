@@ -40,16 +40,15 @@ class Critic(torch.nn.Module):
         return value
 
 class PPO(torch.nn.Module):
-    def __init__(self, pi, beta, critic, action_bound, gamma=0.99, lmbd=0.92, eps=0.2, GPU=True):
+    def __init__(self, pi, beta, critic, network_settings, GPU=True):
         super(PPO,self).__init__()
         self.pi = pi
         self.critic = critic
         self.beta = beta
-        self.action_bound = action_bound
 
-        self.gamma = gamma
-        self.lmbd = lmbd
-        self.eps = eps
+        self.gamma = network_settings["gamma"]
+        self.lmbd = network_settings["lambda"]
+        self.eps = network_settings["eps"]
     
         self.GPU = GPU
 
@@ -66,7 +65,7 @@ class PPO(torch.nn.Module):
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
-        return F.sigmoid(action)*self.action_bound, log_prob
+        return F.sigmoid(action), log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):

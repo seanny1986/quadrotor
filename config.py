@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "hover",
-        "algs": ["gae"]
+        "algs": ["ppo"]
         }
 
 cem = { 
@@ -22,7 +22,6 @@ cem = {
         "pop_size": 32,
         "elite_frac": 0.2,
         "sigma": 0.2,
-        "log_data": True,
         "render": True,
         "save": False,
         "cuda": True,
@@ -44,7 +43,6 @@ ddpg = {
         "ou_scale": 1,
         "ou_mu": 0.75,
         "ou_sigma": 0.05,
-        "log_data": True,
         "render": True,
         "save": False,
         "cuda": True,
@@ -59,7 +57,6 @@ fmis = {
         "iterations": 5000,
         "seed": 343,
         "log_interval": 10,
-        "log_data": True,
         "render": True,
         "save": False,
         "cuda": True,
@@ -75,7 +72,6 @@ gae = {
         "iterations": 5000,
         "seed": 343,
         "log_interval": 10,
-        "log_data": True,
         "render": False,
         "save": False,
         "cuda": False,
@@ -85,14 +81,14 @@ gae = {
 ppo = { 
         "network_settings": {
                                 "gamma": 0.99,
-                                "lambda": 0.92
+                                "lambda": 0.92,
+                                "eps": 0.2
                                 },
         "hidden_dim": 32,
         "iterations": 5000,
         "seed": 343,
         "log_interval": 10,
-        "log_data": True,
-        "render": False,
+        "render": True,
         "save": False,
         "cuda": True,
         "logging": True
@@ -110,7 +106,6 @@ qprop = {
         "log_interval": 10,
         "warmup": 50,
         "batch_size": 64,
-        "log_data": True,
         "render": False,
         "save": False,
         "cuda": False,
@@ -131,7 +126,6 @@ trpo = {
         "warmup": 50,
         "batch_size": 64,
         "seed": 343,
-        "log_data": True,
         "render": True,
         "save": False,
         "cuda": False,

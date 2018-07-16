@@ -25,7 +25,7 @@ class Actor(torch.nn.Module):
         mu = self.mu(x)
         non_diag = self.non_diag(x)
         diag = F.softplus(self.diag(x))
-        diag = diag+torch.ones(diag.size())*1e-4
+        diag = diag+torch.ones(diag.size())*1e-3
         A = torch.zeros(x.size()[0], self.output_dim, self.output_dim)
         for i in range(self.output_dim):
             A[:,i,i] = diag[:,i]
@@ -50,11 +50,10 @@ class Critic(torch.nn.Module):
         return value
 
 class GAE(torch.nn.Module):
-    def __init__(self, actor, critic, action_bound, network_settings, GPU=True):
+    def __init__(self, actor, critic, network_settings, GPU=True):
         super(GAE,self).__init__()
         self.actor = actor
         self.critic = critic
-        self.action_bound = action_bound
 
         self.gamma = network_settings["gamma"]
         self.lmbd = network_settings["lambda"]
@@ -74,7 +73,7 @@ class GAE(torch.nn.Module):
         action = a.sample()
         log_prob = a.log_prob(action)
         #print("Sigma matrix: ", A.data)
-        return F.sigmoid(action)*self.action_bound, log_prob
+        return F.sigmoid(action), log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):

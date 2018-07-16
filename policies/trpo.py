@@ -48,6 +48,7 @@ class TRPO(nn.Module):
         super(TRPO, self).__init__()
         self.actor = actor
         self.critic = critic
+        
         self.gamma = params["gamma"]
         self.tau = params["tau"]
         self.l2_reg = params["l2_reg"]
@@ -67,7 +68,7 @@ class TRPO(nn.Module):
         state = torch.from_numpy(state).unsqueeze(0)
         action_mean, _, action_std = self.actor(Variable(state))
         action = torch.normal(action_mean, action_std)
-        return action
+        return F.sigmoid(action)
 
     def update(self, batch):
         

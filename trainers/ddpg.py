@@ -24,7 +24,7 @@ class Trainer:
         self.save = params["save"]
         
         # initialize DDPG agent using experiment parameters from config file
-        action_bound = self.env.action_bound[1]
+        self.action_bound = self.env.action_bound[1]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
@@ -37,8 +37,7 @@ class Trainer:
         self.agent = ddpg.DDPG(self.actor, 
                                 self.target_actor, 
                                 self.critic, 
-                                self.target_critic, 
-                                action_bound,
+                                self.target_critic,
                                 network_settings, 
                                 GPU=cuda)
 
@@ -89,7 +88,7 @@ class Trainer:
                     action = self.agent.select_action(state, noise=self.noise).data
             
                 # step simulation forward
-                next_state, reward, done, _ = self.env.step(action[0].cpu().numpy())
+                next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
 
                 # render the episode

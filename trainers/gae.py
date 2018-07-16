@@ -19,7 +19,7 @@ class Trainer:
         self.log_interval = params["log_interval"]
         self.save = params["save"]
 
-        action_bound = self.env.action_bound[1]
+        self.action_bound = self.env.action_bound[1]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
@@ -27,7 +27,7 @@ class Trainer:
         network_settings = params["network_settings"]
         self.actor = gae.Actor(state_dim, hidden_dim, action_dim)
         self.critic = gae.Critic(state_dim, hidden_dim, 1)
-        self.agent = gae.GAE(self.actor, self.critic, action_bound, network_settings, GPU=cuda)
+        self.agent = gae.GAE(self.actor, self.critic, network_settings, GPU=cuda)
         self.optim = torch.optim.Adam(self.agent.parameters())
 
         if cuda:
@@ -65,7 +65,7 @@ class Trainer:
 
             for _ in range(self.env.H):          
                 action, log_prob = self.agent.select_action(state)
-                next_state, reward, done, _ = self.env.step(action[0].cpu().numpy())
+                next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
                 
                 if ep % self.log_interval == 0 and self.render:

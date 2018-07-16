@@ -1,4 +1,4 @@
-import trainers.config as cfg
+import config as cfg
 import multiprocessing as mp
 
 """

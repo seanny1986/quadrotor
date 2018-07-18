@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "hover",
-        "algs": ["gae"]
+        "env": "flying_skills",
+        "algs": ["ddpg"]
         }
 
 cem = { 
@@ -41,8 +41,8 @@ ddpg = {
         "warmup": 50,
         "batch_size": 64,
         "ou_scale": 1,
-        "ou_mu": 0.75,
-        "ou_sigma": 0.05,
+        "ou_mu": 0.7,
+        "ou_sigma": 0.15,
         "render": True,
         "save": False,
         "cuda": True,
@@ -106,7 +106,7 @@ qprop = {
         "log_interval": 10,
         "warmup": 50,
         "batch_size": 64,
-        "render": False,
+        "render": True,
         "save": False,
         "cuda": False,
         "logging": True

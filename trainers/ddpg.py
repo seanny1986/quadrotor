@@ -38,6 +38,7 @@ class Trainer:
                                 self.target_actor, 
                                 self.critic, 
                                 self.target_critic,
+                                self.action_bound,
                                 network_settings, 
                                 GPU=cuda)
 
@@ -66,8 +67,10 @@ class Trainer:
             filename = directory + "/data/ddpg.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
-        
-        self.train()
+                self.writer.writerow(["episode", "reward"])
+                self.train()
+        else:
+            self.train()
 
     def train(self):
         interval_avg = []
@@ -77,7 +80,7 @@ class Trainer:
             state = self.Tensor(self.env.reset())
             self.noise.reset()
             running_reward = 0
-            if self.render:
+            if ep % self.log_interval == 0 and self.render:
                 self.env.render()
             for t in range(self.env.H):
             
@@ -90,7 +93,7 @@ class Trainer:
                 # step simulation forward
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
-
+                
                 # render the episode
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
@@ -120,5 +123,5 @@ class Trainer:
                 print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
-                    self.writer.writerow([ep, reward])
+                    self.writer.writerow([ep, avg])
             

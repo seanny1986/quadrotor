@@ -1,4 +1,4 @@
-import simulation.quadrotor as quad
+import simulation.legacy.quadrotor as quad
 import simulation.animation as ani
 import simulation.config as cfg
 import numpy as np

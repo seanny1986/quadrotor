@@ -50,6 +50,7 @@ class Trainer:
             filename = directory + "/data/cem.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
+                self.writer.writerow(["episode", "reward"])
                 self.train()
         else:
             self.train()
@@ -88,4 +89,4 @@ class Trainer:
             if i_iteration % self.log_interval == 0:
                 print('Episode {}\tAverage Score: {:.2f}'.format(i_iteration, np.mean(scores_deque)))
                 if self.logging:
-                    self.writer.writerow([i_iteration, np.mean(scores_deque)])
+                    self.writer.writerow([i_iteration, np.mean(scores_deque).item()])

@@ -66,7 +66,7 @@ class Visualization:
         ax.plot(p4[:,0], p4[:,1], p4[:,2],'k')
 
     def draw3d_quat(self, ax):
-        xyz, q = self.aircraft.xyz, self.aircraft.q
+        xyz, q = self.aircraft.state[0:3], self.aircraft.state[3:7]
         Q_inv = self.q_conj(q)
         Q = self.q_mult(Q_inv)
         r = self.R(Q_inv)

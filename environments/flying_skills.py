@@ -1,4 +1,4 @@
-import simulation.quadrotor2 as quad
+import simulation.quadrotor3 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -67,12 +67,13 @@ class Environment:
         self.vec = xyz-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
         dist_rew = np.exp(-self.dist_sq)
-        ctrl_rew = -np.sum((action**2))/400000.
+        ctrl_rew = -np.sum((action**2))/1e12
         cmplt_rew = 0.
         if self.dist_sq < self.goal_thresh:
-            cmplt_rew = 1000.
+            cmplt_rew = 5.
             self.goal_achieved = True
-        return dist_rew+ctrl_rew+cmplt_rew
+        time_rew = 0.1
+        return dist_rew, ctrl_rew, cmplt_rew, time_rew
 
     def terminal(self, pos):
         xyz, zeta = pos
@@ -88,14 +89,14 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, _, uvw, pqr = self.iris.step(action)
+            xyz, zeta, uvw, pqr = self.iris.step(action)
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()
-        reward = self.reward(xyz, action)
+        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(action/self.action_bound[1]).tolist()
+        info = self.reward(xyz, action)
         done = self.terminal((xyz, zeta))
-        info = None
+        reward = sum(info)
         self.t += self.ctrl_dt
         next_state = [next_state+self.vec.T.tolist()[0]]
         return next_state, reward, done, info
@@ -104,14 +105,14 @@ class Environment:
         self.goal_achieved = False
         self.t = 0.
         if self.deterministic_s0:
-            xyz, zeta, _, uvw, pqr = self.iris.reset()
+            xyz, zeta, uvw, pqr = self.iris.reset()
         else:
             xyz, zeta, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
         self.goal = self.generate_goal(self.r)
         self.vec = xyz-self.goal
         tmp = zeta.T.tolist()[0]
-        action = self.trim
+        action = [x/self.action_bound[1] for x in self.trim]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
         state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]

@@ -25,53 +25,37 @@ class Quadrotor:
         self.g = params["g"]
         self.dt = params["dt"]
 
-        # physical parameters
+        # inertia tensor. Our aircraft is symmetric along x and y axes, so this is a diagonal matrix
+        # only.
         self.J = np.array([[self.Jxx, 0., 0.],
                             [0., self.Jyy, 0.],
                             [0., 0., self.Jzz]])
-        self.G = np.array([[0.],
+        
+        # gravity quaternion.
+        self.G_q = np.array([[0.],
                             [0.],
                             [0.],
                             [-self.g]])
         
-        # state space. uvw and pqr are 4 element vectors of the form [0, uvw]^T, and [0, pqr]^T
-        self.xyz = np.array([[0.],
+        # all rotation math handled by quaternions. This is secretly part of the state space. State
+        # vector is [xyz, q, uvw, pqr]^T, all in a single column vector. The reason for this is that
+        # we want to use the RK4 routine to 
+        self.state = np.array([[0.],
                             [0.],
-                            [0.]])
-        self.zeta = np.array([[0.],
                             [0.],
-                            [0.]])
-        self.uvw = np.array([[0.],
+                            [1.],
                             [0.],
-                            [0.]])
-        self.pqr = np.array([[0.],
                             [0.],
-                            [0.]])
-        
-        self.uvw_q = np.array([[0.],
+                            [0.],
+                            [0.],
+                            [0.],
+                            [0.],
                             [0.],
                             [0.],
                             [0.]])
-        self.pqr_q = np.array([[0.],
-                            [0.],
-                            [0.],
-                            [0.]])
-        
-        # all rotation math handled by quaternions. This is secretly part of the state space.
-        self.q = self.euler_to_q(self.zeta)
-
-        self.state = np.vstack([self.xyz, self.q, self.uvw, self.pqr])
         
         # action space
         self.rpm = np.array([0.0, 0., 0., 0.])
-
-        # accelerations -- memory is required here required for leapfrog integration.
-        self.uvw_dot = np.array([[0.],
-                                [0.],
-                                [0.]])
-        self.pqr_dot = np.array([[0.],
-                                [0.],
-                                [0.]])
 
         # we use this matrix to convert from a thrust/moment input to an rpm input.
         self.u_to_rpm = np.linalg.inv(np.array([[self.kt, self.kt, self.kt, self.kt],
@@ -92,41 +76,44 @@ class Quadrotor:
             Sets the state space of our vehicle
         """
 
-        self.xyz = xyz
-        self.zeta = zeta
-        self.q = self.euler_to_q(zeta)
-        self. uvw[1:] = uvw
-        self.pqr[1:] = pqr
+        q = self.euler_to_q(zeta)
+        self.state = np.vstack([xyz, q, uvw, pqr])
     
     def get_state(self):
         """
             Returns the current state space
         """
 
-        return self.xyz, self.zeta, self.q, self.uvw, self.pqr
+        xyz = self.state[0:3]
+        q = self.state[3:7]
+        zeta = self.q_to_euler(q)
+        uvw = self.state[7:10]
+        pqr = self.state[10:13]
+        return xyz, zeta, uvw, pqr
     
     def reset(self):
         """
             Resets the initial state of the quadrotor
         """
 
-        self.xyz = np.array([[0.],
-                            [0.],
-                            [0.]])
-        self.q = np.array([[1.],
-                            [0.],
-                            [0.],
-                            [0.]])
-        self.uvw[1:] = np.array([[0.],
-                            [0.],
-                            [0.]])
-        self.pqr[1:] = np.array([[0.],
-                            [0.],
-                            [0.]]) 
+        xyz = np.array([[0.],
+                        [0.],
+                        [0.]])
+        q = np.array([[1.],
+                        [0.],
+                        [0.],
+                        [0.]])
+        uvw = np.array([[0.],
+                        [0.],
+                        [0.]])
+        pqr = np.array([[0.],
+                        [0.],
+                        [0.]])
+        zeta = self.q_to_euler(q)
         self.rpm = np.array([0., 0., 0., 0.])
-        self.state = np.vstack([self.xyz, self.q, self.uvw, self.pqr])
+        self.state = np.vstack([xyz, q, uvw, pqr])
         self.t = 0
-        return self.get_state()
+        return xyz, zeta, uvw, pqr
 
     def q_norm(self, q):
         """
@@ -195,33 +182,33 @@ class Quadrotor:
                         [q2],
                         [q3]])
 
-    def aero_forces(self):
+    def aero_forces(self, uvw):
         """
             Calculates drag in the body xyz axis (E-N-U) due to linear velocity
         """
 
-        mag = np.linalg.norm(self.uvw)
+        mag = np.linalg.norm(uvw)
         if mag == 0:
             return np.array([[0.],
                             [0.],
                             [0.]])
         else:
-            norm = self.uvw/mag
-            return -(self.kd*mag**2)*norm
+            unit = uvw/mag
+            return -(self.kd*mag**2)*unit
 
-    def aero_moments(self):
+    def aero_moments(self, pqr):
         """
             Models aero moments about the body xyz axis (E-N-U) as a function of angular velocity
         """
 
-        mag = np.linalg.norm(self.pqr)
+        mag = np.linalg.norm(pqr)
         if mag == 0:
             return np.array([[0.],
                             [0.],
                             [0.]])
         else:
-            norm = self.pqr/mag
-            return -(self.km*mag**2)*norm
+            unit = pqr/mag
+            return -(self.km*mag**2)*unit
 
     def thrust_forces(self, rpm):
         """
@@ -270,36 +257,46 @@ class Quadrotor:
         # thrust forces and moments, aerodynamic forces and moments
         ft = self.thrust_forces(self.rpm)
         mt = self.thrust_moments(self.rpm)
-        fa = self.aero_forces()
-        ma = self.aero_moments()        
+        fa = self.aero_forces(y[7:10])
+        ma = self.aero_moments(y[10:13])        
         
         forces = ft+fa
         moments = mt+ma
 
         # calculate angular momentum
-        H = self.J.dot(self.pqr)
+        H = self.J.dot(y[10:13])
 
         # rotate gravity vector from inertial frame to body frame using qpq^-1
-        Q = self.q_mult(self.q)
-        Q_inv = self.q_conj(self.q)
-        g_b = Q.dot(self.q_mult(self.G).dot(Q_inv))[1:]
+        Q = self.q_mult(y[3:7])
+        Q_inv = self.q_conj(y[3:7])
+        g_b = Q.dot(self.q_mult(self.G_q).dot(Q_inv))[1:]
 
         # linear and angular accelerations due to thrust and aerodynamic effects
-        uvw_dot = forces/self.mass+g_b-np.cross(self.pqr, self.uvw, axis=0)
-        pqr_dot = np.linalg.inv(self.J).dot(moments-np.cross(self.pqr, H, axis=0))
-        q_dot = -0.5*Q.dot(self.pqr_q)
-        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(self.uvw_q).dot(self.q))[1:]
+        uvw_dot = forces/self.mass+g_b-np.cross(y[10:13], y[7:10], axis=0)
+        pqr_dot = np.linalg.inv(self.J).dot(moments-np.cross(y[10:13], H, axis=0))
+
+        # quaternion time derivative
+        q_dot = -0.5*Q.dot(np.vstack([[0.], y[10:13,:]]))
         
+        # velocity in the xyz plane (rotated velocity from body to inertial frame)
+        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(np.vstack([[0.], y[7:10,:]])).dot(y[3:7]))[1:]
         return np.vstack([xyz_dot, q_dot, uvw_dot, pqr_dot])
 
-    def step(self, control_signal, rpm_commands=True, return_acceleration=False):
+    def step(self, control_signal, rpm_commands=True):
         """
-            Updating the EOMs using semi-implicit, fourth order Runge-Kutta with 
-            quaternion rotations. Should be far more accurate than quadrotor, and 
-            the quaternion rotations should be both faster and avoid the singularity
-            at pitch +-90 degrees.
+            Updating the EOMs using explicit RK4 with quaternion rotations. Should be more 
+            accurate than quadrotor. In theory, the quaternion rotations should be faster 
+            to calculate than rotation matrices, and avoid the singularity at pitch +-90 
+            degrees. In practice, this implementation is slightly slower to calculate because
+            we lean heavily on numpy, and copy quite a few arrays using np.vstack. List comp
+            might be a faster way of doing this, but afaik would require modifying the RK4
+            routine. 
         """
 
+        # handle control signal -- we want to clip it to the interval [0, max_rpm]. In some cases
+        # we might want to accept a control signal that includes a thrust, and roll, pitch, yaw
+        # comands. We handle these by converting them to rpm commands using the conversion matrix
+        # that is initialized in the __init__() function.
         if not rpm_commands:
             rpm_sq = self.u_to_rpm.dot(control_signal)
             rpm_sq = np.clip(rpm_sq, 0, self.max_rpm**2)
@@ -309,20 +306,19 @@ class Quadrotor:
             rpm = np.clip(rpm, 0., self.max_rpm)
         
         self.rpm = rpm
-        self.state += self.RK4(self.solve_accels)(self.t, self.state, self.dt)
-        self.q = self.q_norm(self.state[3:7])
-        self.state[3:7] = self.q
-        
-        self.xyz = self.state[0:3]
-        self.zeta = self.q_to_euler(self.q)
-        self.uvw = self.state[7:10]
-        self.pqr = self.state[10:]
-        self.uvw_q[1:] = self.state[7:10]
-        self.pqr_q[1:] = self.state[10:]
 
+        # step simulation forward
+        self.state += self.RK4(self.solve_accels)(self.t, self.state, self.dt)
+        
+        # normalize quaternion
+        self.state[3:7] = self.q_norm(self.state[3:7])
+        
+        # return state values
+        xyz = self.state[0:3]
+        q = self.state[3:7]
+        zeta = self.q_to_euler(q)
+        uvw = self.state[7:10]
+        pqr = self.state[10:]
         self.t += self.dt
 
-        if not return_acceleration:
-            return self.xyz, self.zeta, self.q, self.uvw, self.pqr
-        else:    
-            return self.xyz, self.zeta, self.q, self.uvw, self.pqr, self.xyz/self.dt, self.q/self.dt, self.uvw/self.dt, self.pqr/self.dt 
+        return xyz, zeta, uvw, pqr

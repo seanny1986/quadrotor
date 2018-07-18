@@ -46,6 +46,7 @@ class Trainer:
             filename = directory + "/data/gae.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
+                self.writer.writerow(["episode", "reward"])
                 self.train()
         else:
             self.train()
@@ -94,4 +95,4 @@ class Trainer:
                 print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
-                    self.writer.writerow([ep, running_reward])
+                    self.writer.writerow([ep, avg])

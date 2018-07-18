@@ -48,7 +48,8 @@ class Trainer:
             directory = os.getcwd()
             filename = directory + "/data/trpo.csv"
             with open(filename, "w") as csvfile:
-                self.writer = csv.writer(csvfile)    
+                self.writer = csv.writer(csvfile)
+                self.writer.writerow(["episode", "reward"])
                 self.train()
         else:
             self.train()
@@ -56,10 +57,11 @@ class Trainer:
     def train(self):
         for i_episode in range(1, self.iterations+1):
             memory = trpo.Memory()
-            num_steps = 0
+            num_steps = 1
             reward_batch = 0
             num_episodes = 0
-            while num_steps < self.batch_size:
+            avg = 0
+            while num_steps < self.batch_size+1:
                 state = self.env.reset()
                 state = self.running_state(state[0])
                 reward_sum = 0
@@ -83,6 +85,7 @@ class Trainer:
                     if done:
                         break
                     state = next_state
+                avg = (avg*(num_steps-1)+reward_sum)/num_steps
                 num_steps += (t-1)
                 num_episodes += 1
                 reward_batch += reward_sum
@@ -92,7 +95,7 @@ class Trainer:
             if i_episode % self.log_interval == 0:
                 print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(i_episode, reward_sum, reward_batch))
                 if self.logging:
-                    self.writer.writerow([i_episode, reward]) 
+                    self.writer.writerow([i_episode, avg]) 
 
 class RunningStat(object):
     def __init__(self, shape):

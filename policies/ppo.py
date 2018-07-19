@@ -65,7 +65,7 @@ class PPO(torch.nn.Module):
         a = Normal(mu, logvar.exp().sqrt())
         action = a.sample()
         log_prob = a.log_prob(action)
-        return F.sigmoid(action), log_prob
+        return F.sigmoid(action).pow(0.5), log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -96,7 +96,7 @@ class PPO(torch.nn.Module):
         mu_pi, logvar_pi = self.pi(state)
         dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
         pi_log_prob = dist_pi.log_prob(action)
-        ratio = (pi_log_prob-beta_log_prob).sum(dim=1, keepdim=True).exp()
+        ratio = (pi_log_prob-beta_log_prob.detach()).sum(dim=1, keepdim=True).exp()
         optim.zero_grad()
         actor_loss = -torch.min(ratio*a_hat, torch.clamp(ratio, 1-self.eps, 1+self.eps)*a_hat).sum()
         critic_loss = advantage.pow(2).sum()

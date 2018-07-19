@@ -70,7 +70,7 @@ class Quadrotor:
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
         self.t = 0
-        
+
     def set_state(self, xyz, zeta, uvw, pqr):
         """
             Sets the state space of our vehicle

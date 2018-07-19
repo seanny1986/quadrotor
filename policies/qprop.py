@@ -16,14 +16,13 @@ from collections import namedtuple
 """
 
 class QPROP(torch.nn.Module):
-    def __init__(self, actor, critic, memory, target_actor, target_critic, action_bound, network_settings, GPU=False):
+    def __init__(self, actor, critic, memory, target_actor, target_critic, network_settings, GPU=False):
         super(QPROP,self).__init__()
         self.actor = actor
         self.critic = critic
         self.memory = memory
         self.target_actor = target_actor
         self.target_critic = target_critic
-        self.action_bound = action_bound
 
         self.crit_loss = torch.nn.L1Loss()
 
@@ -61,7 +60,7 @@ class QPROP(torch.nn.Module):
         a = Normal(mu, std)
         action = a.sample()
         logprob = a.log_prob(action)
-        return F.sigmoid(action)*self.action_bound, logprob
+        return F.sigmoid(action).pow(0.5), logprob
     
     def online_update(self, batch):
         state = torch.stack(batch.state)

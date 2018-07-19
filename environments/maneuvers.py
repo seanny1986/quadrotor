@@ -39,8 +39,8 @@ class Environment:
     def reward(self, xyz, action):
         self.vec = self.iris.xyz-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
-        dist_rew = np.exp(-self.dist_sq)
-        ctrl_rew = -np.sum((action**2))/400000.
+        dist_rew = -100*np.exp(-self.dist_sq)
+        ctrl_rew = -np.sum((action**2))/1e12
         cmplt_rew = 0.
         if self.dist_sq < self.goal_thresh:
             cmplt_rew = 1000.

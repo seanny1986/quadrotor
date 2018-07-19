@@ -66,7 +66,7 @@ class Trainer:
             r_ = []
             lp_ = []
             state = self.Tensor(self.env.reset())
-            if self.render:
+            if ep % self.log_interval == 0 and self.render:
                 self.env.render()
             for _ in range(self.env.H):            
                 action, log_prob = self.agent.select_action(state)

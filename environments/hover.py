@@ -51,27 +51,28 @@ class Environment:
     def reward(self, xyz, action):
         self.vec = xyz-self.goal
         self.dist_sq = np.linalg.norm(self.vec)
-        dist_rew = 10*np.exp(-self.dist_sq)
-        ctrl_rew = 0.#-np.sum((action**2))/1e12
+        dist_rew = -100*self.dist_sq
+        ctrl_rew = 0. #-np.sum(((action/self.action_bound[1])**2))
         cmplt_rew = 0.
         if self.dist_sq < self.goal_thresh:
-            cmplt_rew = 5.
+            cmplt_rew = 10.
             self.goal_achieved = True
-        time_rew = 0.#1
+        time_rew = 0.1
         return dist_rew, ctrl_rew, cmplt_rew, time_rew
 
     def terminal(self, pos):
         xyz, zeta = pos
-        mask1 = zeta[0:2] > pi/2
-        mask2 = zeta[0:2] < -pi/2
-        mask3 = np.abs(xyz) > 6
+        mask1 = zeta > pi/2
+        mask2 = zeta < -pi/2
+        mask3 = np.abs(xyz) > 3
         if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
             return True
         elif self.goal_achieved:
-            print("Goal Achieved!")
+            #print("Goal Achieved!")
             return True
         elif self.t == self.T:
             print("Sim time reached")
+            return True
         else:
             return False
 
@@ -108,7 +109,7 @@ class Environment:
         self.vis.draw_goal(self.axis3d, self.goal)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)
-        self.axis3d.set_zlim(0, 6)
+        self.axis3d.set_zlim(-3, 3)
         self.axis3d.set_xlabel('West/East [m]')
         self.axis3d.set_ylabel('South/North [m]')
         self.axis3d.set_zlabel('Down/Up [m]')

@@ -13,6 +13,7 @@ class Trainer:
     def __init__(self, env_name, params):
         self.env = envs.make(env_name)
         self.params = params
+        self.action_bound = self.env.action_bound[1]
 
         self.iterations = params["iterations"]
         self.seed = params["seed"]
@@ -22,7 +23,6 @@ class Trainer:
         self.save = params["save"]
         
         cuda = params["cuda"]
-        self.action_bound = self.env.action_bound[1]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
@@ -65,7 +65,7 @@ class Trainer:
                 state = self.env.reset()
                 state = self.running_state(state[0])
                 reward_sum = 0
-                if self.render:
+                if i_episode % self.log_interval == 0 and self.render:
                     self.env.render()
                 for t in range(1, self.iterations):
                     action = self.agent.select_action(state)

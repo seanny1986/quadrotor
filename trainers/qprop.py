@@ -12,7 +12,8 @@ class Trainer:
     def __init__(self, env_name, params):
         self.env = envs.make(env_name)
         self.params = params
-
+        self.action_bound = self.env.action_bound[1]
+        
         self.iterations = params["iterations"]
         self.mem_len = params["mem_len"]
         self.seed = params["seed"]
@@ -25,7 +26,6 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
-        action_bound = self.env.action_bound[1]
         cuda = params["cuda"]
         network_settings = params["network_settings"]
 
@@ -38,8 +38,7 @@ class Trainer:
                                 self.critic, 
                                 self.memory, 
                                 self.target_actor, 
-                                self.target_critic, 
-                                action_bound,
+                                self.target_critic,
                                 network_settings,
                                 GPU=cuda)
 
@@ -77,11 +76,11 @@ class Trainer:
             actions = []
             rewards = []
             log_probs = []
-            if self.render:
+            if ep % self.log_interval == 0 and self.render:
                 self.env.render()
             for t in range(self.env.H):     
                 action, log_prob = self.agent.select_action(state)
-                next_state, reward, done, _ = self.env.step(action.data[0].cpu().numpy())
+                next_state, reward, done, _ = self.env.step(action.data[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
 
                 if ep % self.log_interval == 0 and self.render:

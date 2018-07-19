@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "flying_skills",
-        "algs": ["ddpg"]
+        "env": "hover",
+        "algs": ["cem", "ddpg", "gae", "ppo"]
         }
 
 cem = { 
@@ -40,8 +40,8 @@ ddpg = {
         "log_interval": 10,
         "warmup": 50,
         "batch_size": 64,
-        "ou_scale": 1,
-        "ou_mu": 0.7,
+        "ou_scale": 0.75,
+        "ou_mu": 0.2,
         "ou_sigma": 0.15,
         "render": True,
         "save": False,
@@ -51,7 +51,9 @@ ddpg = {
 
 fmis = {
         "network_settings": {
-                                "gamma": 0.99
+                                "gamma": 0.99,
+                                "eps": 0.2,
+                                "lambda": 0.92
                                 },
         "hidden_dim": 32,
         "iterations": 5000,
@@ -65,14 +67,30 @@ fmis = {
 
 gae = {
         "network_settings": {
-                                "gamma": 0.99,
+                                "gamma": 0.995,
                                 "lambda": 0.92
                                 },
-        "hidden_dim": 128,
+        "hidden_dim": 32,
         "iterations": 5000,
         "seed": 343,
         "log_interval": 10,
         "render": True,
+        "save": False,
+        "cuda": True,
+        "logging": True
+        }
+
+offpac = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "lambda": 0.92,
+                                "lookback": 1
+                                },
+        "hidden_dim": 32,
+        "iterations": 50000,
+        "seed": 343,
+        "log_interval": 10,
+        "render": False,
         "save": False,
         "cuda": False,
         "logging": True

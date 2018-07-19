@@ -11,7 +11,6 @@ import multiprocessing as mp
 """
 
 # TODO:
-# Implement stochastic wind model in the environment
 # Implement a variant of ACER
 # Port OffPAC
 # Improve FMIS model learning
@@ -53,6 +52,10 @@ def make(env_name, alg):
         params = cfg.gae
         import trainers.gae as gae_trainer
         return gae_trainer.Trainer(env_name, params)
+    if alg == "offpac":
+        params = cfg.offpac
+        import trainers.offpac as offpac_trainer
+        return offpac_trainer.Trainer(env_name, params)
     if alg == "ppo":
         params = cfg.ppo
         import trainers.ppo as ppo_trainer

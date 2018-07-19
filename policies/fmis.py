@@ -1,6 +1,7 @@
 import torch
 import random
 import torch.nn.functional as F
+import torch.nn.utils.rnn as rnn_utils
 from torch.distributions import Normal
 from collections import namedtuple
 
@@ -97,15 +98,15 @@ class Critic(torch.nn.Module):
         return value
 
 class FMIS(torch.nn.Module):
-    def __init__(self, pi, beta, critic, phi, env, gamma=0.99, eps=0.2, lmbd=0.92, GPU=True):
+    def __init__(self, pi, beta, critic, phi, env, network_settings, GPU=True):
         super(FMIS,self).__init__()
         self.pi = pi
         self.critic = critic
         self.beta = beta
         self.phi = phi
-        self.gamma = gamma
-        self.eps = eps
-        self.lmbd = lmbd
+        self.gamma = network_settings["gamma"]
+        self.eps = network_settings["eps"]
+        self.lmbd = network_settings["lambda"]
         self.GPU = GPU
 
         self.s0_mu = None
@@ -141,10 +142,11 @@ class FMIS(torch.nn.Module):
             action = dist.sample()
             beta_logprob = dist.log_prob(action)
             state_action = torch.cat([x, action],dim=1)
-            x, args = self.phi.step(state_action, args)
+            delta, args = self.phi.step(state_action, args)
+            x = x+delta
             xyz = x[:,0:3].detach().cpu().numpy().T
-            a = action.squeeze(0).cpu().numpy()
-            r = self.Tensor([self.env.reward(xyz, a)])
+            a = action.squeeze(0).cpu().numpy()*self.action_bound
+            r = self.Tensor([sum(self.env.reward(xyz, a))])
             self.next_state.append(x[:,0:self.observation_space])
             self.action.append(action)
             self.log_prob.append(beta_logprob)
@@ -158,11 +160,14 @@ class FMIS(torch.nn.Module):
 
     def select_action(self, x):
         mu, logvar = self.beta(x)
-        sigma = logvar.exp().sqrt()+torch.ones(x.size()[0], self.actor.output_dim)*1e-4
+        min_sigma = torch.ones(x.size()[0], self.beta.output_dim)*1e-3
+        if self.GPU:
+            min_sigma = min_sigma.cuda()
+        sigma = logvar.exp().sqrt()+min_sigma
         a = Normal(mu, sigma)
         action = a.sample()
         log_prob = a.log_prob(action)
-        return F.sigmoid(action)*self.action_bound, log_prob
+        return F.sigmoid(action).pow(0.5), log_prob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -172,19 +177,20 @@ class FMIS(torch.nn.Module):
         state = torch.stack(trajectory["states"])
         action = torch.stack(trajectory["actions"])
         next_state = torch.stack(trajectory["next_states"])
-        
+        delta = (next_state-state).detach()
+
         # compute model loss
         H = len(action)
         xs = torch.cat([state, action],dim=1)
-        ys = next_state
+        ys = delta
         pred_ys, log_probs, _ = self.phi(xs, H)
         pred_ys, log_probs = torch.stack(pred_ys).squeeze(1), torch.stack(log_probs).squeeze(1)
-        error = (pred_ys-ys)**2
+        error = (pred_ys.detach()-ys)**2
         model_loss = (log_probs*error).mean()
         optim.zero_grad()
         model_loss.backward()
         optim.step()
-        return error.sum().item()
+        return error.mean().item()
 
     def policy_update(self, optim, s0, H):
 
@@ -226,7 +232,6 @@ class FMIS(torch.nn.Module):
         del self.log_prob[:]
         del self.next_state[:]
         del self.reward[:]
-        return loss.item()
 
 Transition = namedtuple('Transition', ['state', 'action', 'next_state'])
 class ReplayMemory(object):
@@ -242,7 +247,8 @@ class ReplayMemory(object):
         self.position = (self.position+1)%self.capacity
 
     def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+        lst = random.sample(self.memory, batch_size)
+        return sorted(lst)
 
     def __len__(self):
         return len(self.memory)

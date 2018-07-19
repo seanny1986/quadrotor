@@ -55,7 +55,6 @@ class DDPG(nn.Module):
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
-            
             self.actor = self.actor.cuda()
             self.target_actor = self.target_actor.cuda()
             self.critic = self.critic.cuda()
@@ -72,13 +71,13 @@ class DDPG(nn.Module):
             sigma = Variable(torch.Tensor(noise.noise()))
             if self.GPU:
                 sigma = sigma.cuda()
-            return F.sigmoid(mu+sigma)*self.action_bound
+            return F.sigmoid(mu+sigma).pow(0.5)
         else:
-            return F.sigmoid(mu)*self.action_bound
+            return F.sigmoid(mu).pow(0.5)
 
     def random_action(self, noise):
         action = self.Tensor([noise.noise()])
-        return action*self.action_bound
+        return action
     
     def soft_update(self, target, source, tau):
 	    for target_param, param in zip(target.parameters(), source.parameters()):

@@ -68,7 +68,7 @@ class TRPO(nn.Module):
         state = torch.from_numpy(state).unsqueeze(0)
         action_mean, _, action_std = self.actor(Variable(state))
         action = torch.normal(action_mean, action_std)
-        return F.sigmoid(action)
+        return F.sigmoid(action).pow(0.5)
 
     def update(self, batch):
         

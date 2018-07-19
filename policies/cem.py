@@ -15,7 +15,7 @@ from collections import deque
 """
 
 class CEM(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, action_bound, GPU=False):
+    def __init__(self, input_dim, hidden_dim, output_dim, GPU=False):
         super(CEM, self).__init__()
         
         # neural network dimensions
@@ -26,7 +26,6 @@ class CEM(nn.Module):
         # define layers
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.action_bound = action_bound
         self.GPU = GPU
 
         if GPU:
@@ -54,5 +53,5 @@ class CEM(nn.Module):
         
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        x = F.sigmoid(self.fc2(x))*self.action_bound
+        x = F.sigmoid(self.fc2(x)).pow(0.5)
         return x.cpu().detach().numpy()[0]

@@ -91,9 +91,9 @@ class Trainer:
                     action = self.agent.select_action(state, noise=self.noise).data
             
                 # step simulation forward
-                next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
+                next_state, reward, done, info = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
-                
+
                 # render the episode
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()

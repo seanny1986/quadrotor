@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.qprop as qprop
+import policies.ind.qprop as qprop
 import argparse
 import torch
 import torch.nn.functional as F
@@ -54,11 +54,13 @@ class Trainer:
         if self.render:
             self.env.init_rendering()
         
+        self.best = None
+
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:
-            directory = os.getcwd()
-            filename = directory + "/data/qprop.csv"
+            self.directory = os.getcwd()
+            filename = self.directory + "/data/qprop.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
@@ -101,6 +103,11 @@ class Trainer:
                 if done:
                     break
                 state = next_state
+            
+            if (self.best is None or running_reward > self.best) and self.save:
+                self.best = running_reward
+                utils.save(self.agent, self.directory + "/saved_policies/qprop.pth.tar")
+
             trajectory = {"states": states,
                         "actions": actions,
                         "rewards": rewards,

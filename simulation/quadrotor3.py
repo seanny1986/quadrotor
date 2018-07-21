@@ -70,6 +70,7 @@ class Quadrotor:
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
         self.t = 0
+        self.zero = np.array([[0.]])
 
     def set_state(self, xyz, zeta, uvw, pqr):
         """
@@ -276,10 +277,10 @@ class Quadrotor:
         pqr_dot = np.linalg.inv(self.J).dot(moments-np.cross(y[10:13], H, axis=0))
 
         # quaternion time derivative
-        q_dot = -0.5*Q.dot(np.vstack([[0.], y[10:13,:]]))
+        q_dot = -0.5*self.q_mult(np.vstack([self.zero, y[10:13]])).dot(y[3:7])
         
         # velocity in the xyz plane (rotated velocity from body to inertial frame)
-        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(np.vstack([[0.], y[7:10,:]])).dot(y[3:7]))[1:]
+        xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(np.vstack([self.zero, y[7:10]])).dot(y[3:7]))[1:]
         return np.vstack([xyz_dot, q_dot, uvw_dot, pqr_dot])
 
     def step(self, control_signal, rpm_commands=True):

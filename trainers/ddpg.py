@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.ddpg as ddpg
+import policies.ind.ddpg as ddpg
 import argparse
 import torch
 import torch.nn.functional as F
@@ -50,6 +50,8 @@ class Trainer:
         self.noise.set_seed(self.seed)
         self.memory = ddpg.ReplayMemory(self.mem_len)
 
+        self.best = None
+
         # send to GPU if flagged in experiment config file
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
@@ -63,8 +65,8 @@ class Trainer:
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:
-            directory = os.getcwd()
-            filename = directory + "/data/ddpg.csv"
+            self.directory = os.getcwd()
+            filename = self.directory + "/data/ddpg.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
@@ -115,6 +117,11 @@ class Trainer:
                 if done:
                     break
                 state = next_state
+
+            if (self.best is None or running_reward > self.best) and self.save:
+                self.best = running_reward
+                print("Saving new DDPG model.")
+                utils.save(self.agent, self.directory + "/saved_policies/ddpg.pth.tar")
 
             interval_avg.append(running_reward)
             avg = (avg*(ep-1)+running_reward)/ep   

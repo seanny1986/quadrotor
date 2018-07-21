@@ -9,13 +9,13 @@
 """
 
 exp = { 
-        "env": "hover",
-        "algs": ["cem", "ddpg", "gae", "ppo"]
+        "env": "flying_skills",
+        "algs": ["ddpg"]
         }
 
 cem = { 
         "hidden_dim": 32,
-        "iterations": 5000,
+        "iterations": 10000,
         "gamma": 0.99,
         "seed": 343,
         "log_interval": 10,
@@ -34,7 +34,7 @@ ddpg = {
                                 "tau": 0.01
                                 },
         "hidden_dim": 32,
-        "iterations": 5000,
+        "iterations": 10000,
         "mem_len": 1000000,
         "seed": 343,
         "log_interval": 10,
@@ -47,6 +47,15 @@ ddpg = {
         "save": False,
         "cuda": True,
         "logging": True
+        }
+
+expected = {
+        "iterations": 10000,
+        "seed": 343,
+        "log_interval": 10,
+        "render": True,
+        "save": False,
+        "logging": True                
         }
 
 fmis = {
@@ -71,7 +80,7 @@ gae = {
                                 "lambda": 0.92
                                 },
         "hidden_dim": 32,
-        "iterations": 5000,
+        "iterations": 10000,
         "seed": 343,
         "log_interval": 10,
         "render": True,
@@ -103,7 +112,7 @@ ppo = {
                                 "eps": 0.2
                                 },
         "hidden_dim": 32,
-        "iterations": 5000,
+        "iterations": 10000,
         "seed": 343,
         "log_interval": 10,
         "render": True,

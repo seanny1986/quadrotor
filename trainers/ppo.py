@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.ppo as ppo
+import policies.ind.ppo as ppo
 import argparse
 import torch
 import torch.nn.functional as F
@@ -43,11 +43,13 @@ class Trainer:
         if self.render:
             self.env.init_rendering()
         
+        self.best = None
+
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:
-            directory = os.getcwd()
-            filename = directory + "/data/ppo.csv"
+            self.directory = os.getcwd()
+            filename = self.directory + "/data/ppo.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
@@ -85,6 +87,11 @@ class Trainer:
                 if done:
                     break
                 state = next_state
+
+            if (self.best is None or running_reward > self.best) and self.save:
+                self.best = running_reward
+                utils.save(self.agent, self.directory + "/saved_policies/ppo.pth.tar")
+            
             trajectory = {"states": s_,
                         "actions": a_,
                         "next_states": ns_,

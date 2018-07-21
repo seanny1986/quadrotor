@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.fmis as fmis
+import policies.ind.fmis as fmis
 import argparse
 import torch
 import torch.nn.functional as F
@@ -35,6 +35,8 @@ class Trainer:
         self.pi_optim = torch.optim.Adam(self.pi.parameters(),lr=1e-2)
         self.phi_optim = torch.optim.Adam(self.phi.parameters(),lr=1e-2)
 
+        self.memory = fmis.ReplayMemory(1000000)
+
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
         else:
@@ -43,11 +45,13 @@ class Trainer:
         if self.render:
             self.env.init_rendering()
 
+        self.best = None
+
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:
-            directory = os.getcwd()
-            filename = directory + "/data/fmis.csv"
+            self.directory = os.getcwd()
+            filename = self.directory + "/data/fmis.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
@@ -60,9 +64,6 @@ class Trainer:
         avg = 0
         for ep in range(1, self.iterations+1):
             running_reward = 0
-            s_ = []
-            a_ = []
-            ns_ = []
             state = self.Tensor(self.env.reset())
             s0 = state.clone()
             if self.render:
@@ -71,30 +72,37 @@ class Trainer:
                 action, _ = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
+                next_state = self.Tensor(next_state)
+                
+                # push to replay memory
+                self.memory.push(state[0], action[0], next_state[0])
 
                 if ep % self.log_interval == 0 and self.render:
-                    self.env.render()      
+                    self.env.render()
                 
-                next_state = self.Tensor(next_state)
-                s_.append(state[0])
-                a_.append(action[0])
-                ns_.append(next_state[0])
+                model_loss = 0
+                for i in range(1,10):
+                    transitions = self.memory.sample(64)
+                    batch = fmis.Transition(*zip(*transitions))
+                    model_loss = (model_loss*(i-1)+self.agent.model_update(self.phi_optim, batch))/i
+                
                 if done:
                     break
                 state = next_state
-            trajectory = {"states": s_,
-                        "actions": a_,
-                        "next_states": ns_}
-            model_loss = 0
-            for i in range(1, 1+1):
-                model_loss += (model_loss*(i-1)+self.agent.model_update(self.phi_optim, trajectory))/i
-            for i in range(1):
-                self.agent.policy_update(self.pi_optim, s0, self.env.H)
+            
+            if (self.best is None or running_reward > self.best) and self.save:
+                self.best = running_reward
+                utils.save(self.agent, self.directory + "/saved_policies/fmis.pth.tar")
+            
+            if ep > 1000:
+                for i in range(100):
+                    self.agent.policy_update(self.pi_optim, s0, self.env.H)
+            
             interval_avg.append(running_reward)
             avg = (avg*(ep-1)+running_reward)/ep
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}\t Model loss: {:.2f}'.format(ep, interval, avg, model_loss))
+                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}\t Model loss: {:.5f}'.format(ep, interval, avg, model_loss))
                 interval_avg = []
                 if self.logging:
                     self.writer.writerow([ep, avg])  

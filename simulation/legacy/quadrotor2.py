@@ -277,7 +277,7 @@ class Quadrotor:
         self.pqr[1:] += self.pqr_dot*self.dt/2.
         
         # drift: x_{i+1} = x_{i}+v_{i+0.5}dt -- update q using q_dot*dt, and normalize
-        q_dot = -0.5*Q.dot(self.pqr)
+        q_dot = -0.5*self.q_mult(np.vstack([[0.], y[10:13,:]])).dot(y[3:7])
         self.q = self.q_norm(self.q+q_dot*self.dt)
         
         # update zeta using quaternion to Euler angle conversion

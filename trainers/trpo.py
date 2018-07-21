@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.trpo as trpo
+import policies.ind.trpo as trpo
 import torch
 import torch.nn.functional as F
 import math
@@ -42,11 +42,13 @@ class Trainer:
         if self.render:
             self.env.init_rendering()
         
+        self.best = None
+
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:
-            directory = os.getcwd()
-            filename = directory + "/data/trpo.csv"
+            self.directory = os.getcwd()
+            filename = self.directory + "/data/trpo.csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
@@ -90,6 +92,11 @@ class Trainer:
                 num_episodes += 1
                 reward_batch += reward_sum
             reward_batch /= num_episodes
+
+            if (self.best is None or reward_batch > self.best) and self.save:
+                self.best = reward_batch
+                utils.save(self.agent, self.directory + "/saved_policies/trpo.pth.tar")
+
             batch = memory.sample()
             self.agent.update(batch)
             if i_episode % self.log_interval == 0:

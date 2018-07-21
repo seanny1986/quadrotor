@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.cem as cem
+import policies.ind.cem as cem
 import argparse
 import torch
 import torch.nn.functional as F
@@ -33,7 +33,7 @@ class Trainer:
         cuda = params["cuda"]
 
         self.agent = cem.CEM(state_dim, hidden_dim, action_dim, GPU=cuda)
-    
+
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
             self.agent = self.agent.cuda()

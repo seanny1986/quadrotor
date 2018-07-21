@@ -16,14 +16,23 @@ class Environment:
     def __init__(self):
         
         # environment parameters
-        self.goal = np.array([[0.],
-                            [0.],
-                            [1.5]])
-        self.goal_thresh = 0.05
+        self.goal_xyz = np.array([[0.],
+                                [0.],
+                                [1.5]])
+        self.goal_zeta = np.array([[0.],
+                                [0.],
+                                [0.]])
+        self.goal_uvw = np.array([[0.],
+                                [0.],
+                                [0.]])
+        self.goal_pqr = np.array([[0.],
+                                [0.],
+                                [0.]])
+
         self.t = 0
         self.T = 5
         self.action_space = 4
-        self.observation_space = 15+self.action_space
+        self.observation_space = 12+self.action_space+12
 
         # simulation parameters
         self.params = cfg.params
@@ -36,11 +45,21 @@ class Environment:
         self.hov_rpm = self.iris.hov_rpm
         self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
-        self.vec = None
-        self.dist_sq = None
-        self.goal_achieved = False
+        self.iris.set_state(self.goal_xyz, self.goal_zeta, self.goal_uvw, self.goal_pqr)
+        xyz, zeta, uvw, pqr = self.iris.get_state()
+
+        self.vec_xyz = xyz-self.goal_xyz
+        self.vec_zeta = zeta-self.goal_zeta
+        self.vec_uvw = uvw-self.goal_uvw
+        self.vec_pqr = pqr-self.goal_pqr
+
+        self.dist_sq_xyz = np.linalg.norm(self.vec_xyz)**2
+        self.dist_sq_zeta = np.linalg.norm(self.vec_zeta)**2
+        self.dist_sq_uvw = np.linalg.norm(self.vec_uvw)**2
+        self.dist_sq_pqr = np.linalg.norm(self.vec_pqr)**2
 
     def init_rendering(self):
+
         # rendering parameters
         pl.close("all")
         pl.ion()
@@ -48,17 +67,26 @@ class Environment:
         self.axis3d = self.fig.add_subplot(111, projection='3d')
         self.vis = ani.Visualization(self.iris, 6, quaternion=True)
 
-    def reward(self, xyz, action):
-        self.vec = xyz-self.goal
-        self.dist_sq = np.linalg.norm(self.vec)
-        dist_rew = -100*self.dist_sq
-        ctrl_rew = 0. #-np.sum(((action/self.action_bound[1])**2))
-        cmplt_rew = 0.
-        if self.dist_sq < self.goal_thresh:
-            cmplt_rew = 10.
-            self.goal_achieved = True
-        time_rew = 0.1
-        return dist_rew, ctrl_rew, cmplt_rew, time_rew
+    def reward(self, state, action):
+        xyz, zeta, uvw, pqr = state
+        
+        self.vec_xyz = xyz-self.goal_xyz
+        self.vec_zeta = zeta-self.goal_zeta
+        self.vec_uvw = uvw-self.goal_uvw
+        self.vec_pqr = pqr-self.goal_pqr
+
+        self.dist_sq_xyz = np.linalg.norm(self.vec_xyz)**2
+        self.dist_sq_zeta = np.linalg.norm(self.vec_zeta)**2
+        self.dist_sq_uvw = np.linalg.norm(self.vec_uvw)**2
+        self.dist_sq_pqr = np.linalg.norm(self.vec_pqr)**2
+
+        dist_rew = -self.dist_sq_xyz
+        att_rew = -self.dist_sq_zeta
+        vel_rew = -self.dist_sq_uvw
+        ang_rew = -self.dist_sq_pqr
+        ctrl_rew = -np.sum(((action/self.action_bound[1])**2))
+        time_rew = 1.
+        return dist_rew, att_rew, vel_rew, ang_rew, ctrl_rew, time_rew
 
     def terminal(self, pos):
         xyz, zeta = pos
@@ -66,9 +94,6 @@ class Environment:
         mask2 = zeta < -pi/2
         mask3 = np.abs(xyz) > 3
         if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
-            return True
-        elif self.goal_achieved:
-            #print("Goal Achieved!")
             return True
         elif self.t == self.T:
             print("Sim time reached")
@@ -83,30 +108,35 @@ class Environment:
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
         next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(action/self.action_bound[1]).tolist()
-        info = self.reward(xyz, action)
+        info = self.reward((xyz, zeta, uvw, pqr), action)
         done = self.terminal((xyz, zeta))
         reward = sum(info)
-        next_state = [next_state+self.vec.T.tolist()[0]]
+        goals = self.vec_xyz.T.tolist()[0]+self.vec_zeta.T.tolist()[0]+self.vec_uvw.T.tolist()[0]+self.vec_pqr.T.tolist()[0]
+        next_state = [next_state+goals]
         self.t += self.ctrl_dt
         return next_state, reward, done, info
 
     def reset(self):
-        self.goal_achieved = False
         self.t = 0.
-        xyz, zeta, uvw, pqr = self.iris.reset()
-        self.vec = xyz-self.goal
+        self.iris.set_state(self.goal_xyz, self.goal_zeta, self.goal_uvw, self.goal_pqr)
+        xyz, zeta, uvw, pqr = self.iris.get_state()
+        self.vec_xyz = xyz-self.goal_xyz
+        self.vec_zeta = zeta-self.goal_zeta
+        self.vec_uvw = uvw-self.goal_uvw
+        self.vec_pqr = pqr-self.goal_pqr
         tmp = zeta.T.tolist()[0]
         action = [x/self.action_bound[1] for x in self.trim]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
+        goals = self.vec_xyz.T.tolist()[0]+self.vec_zeta.T.tolist()[0]+self.vec_uvw.T.tolist()[0]+self.vec_pqr.T.tolist()[0]
+        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+goals]
         return state
     
     def render(self):
         pl.figure("Hover")
         self.axis3d.cla()
         self.vis.draw3d_quat(self.axis3d)
-        self.vis.draw_goal(self.axis3d, self.goal)
+        self.vis.draw_goal(self.axis3d, self.goal_xyz)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)
         self.axis3d.set_zlim(-3, 3)

@@ -61,16 +61,23 @@ class Quadrotor:
         self.u_to_rpm = np.linalg.inv(np.array([[self.kt, self.kt, self.kt, self.kt],
                                                 [0., self.l*self.kt, 0., -self.l*self.kt],
                                                 [-self.l*self.kt, 0., self.l*self.kt, 0.],
-                                                [-self.kq, self.kq, -self.kq, self.kq]]))
-        
+                                                [-self.kq, self.kq, -self.kq, self.kq]]))      
+        self.rpm_to_u = np.array([[0., 0., 0., 0.],
+                                [0., 0., 0., 0.],
+                                [self.kt, self.kt, self.kt, self.kt],
+                                [0., self.l*self.kt, 0., -self.l*self.kt],
+                                [-self.l*self.kt, 0., self.l*self.kt, 0.],
+                                [-self.kq, self.kq, -self.kq, self.kq]])
+
         # important physical limits
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
         self.max_thrust = self.kt*self.max_rpm
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
-        self.t = 0
         self.zero = np.array([[0.]])
+        self.zero_array = np.array([[0.],[0.],[0.]])
+        self.inv_quat = np.array([[1],[-1],[-1],[-1]])
 
     def set_state(self, xyz, zeta, uvw, pqr):
         """
@@ -146,11 +153,7 @@ class Quadrotor:
             is, for a unit quaternion, q* = q'
         """
 
-        q0, q1, q2, q3 = q
-        return np.array([q0, 
-                        -q1, 
-                        -q2, 
-                        -q3])
+        return self.inv_quat*q
     
     def q_to_euler(self, q):
         """
@@ -211,32 +214,6 @@ class Quadrotor:
             unit = pqr/mag
             return -(self.km*mag**2)*unit
 
-    def thrust_forces(self, rpm):
-        """
-            Calculates thrust forces in the body xyz axis (E-N-U)
-        """
-        
-        thrust = self.kt*rpm**2
-        f_body_x, f_body_y = 0., 0.
-        f_body_z = np.sum(thrust)
-        return np.array([[f_body_x],
-                        [f_body_y],
-                        [f_body_z]])
-    
-    def thrust_moments(self, rpm):
-        """
-            Calculates moments about the body xyz axis due to motor thrust and torque
-        """
-
-        thrust = self.kt*rpm**2
-        t_body_x = self.l*(thrust[1]-thrust[3])
-        t_body_y = self.l*(thrust[2]-thrust[0])
-        motor_torques = self.kq*rpm**2
-        t_body_z = -motor_torques[0]+motor_torques[1]-motor_torques[2]+motor_torques[3]
-        return np.array([[t_body_x],
-                        [t_body_y],
-                        [t_body_z]])
-
     def RK4(self, f):
         """
             RK4 for ODE integration. Argument f is a function f(t, y), where y can be a
@@ -244,20 +221,21 @@ class Quadrotor:
             be passed as a numpy array.
         """
 
-        return lambda t, y, dt: (
+        return lambda y, dt: (
                 lambda dy1: (
                 lambda dy2: (
                 lambda dy3: (
                 lambda dy4: (dy1+2*dy2+2*dy3+dy4)/6.
-                )(dt*f(t+dt, y+dy3))
-	            )(dt*f(t+dt/2., y+dy2/2.))
-	            )(dt*f(t+dt/2., y+dy1/2.))
-	            )(dt*f(t, y))
+                )(dt*f(y+dy3))
+	            )(dt*f(y+dy2/2.))
+	            )(dt*f(y+dy1/2.))
+	            )(dt*f(y))
     
-    def solve_accels(self, t, y):
+    def solve_accels(self, y):
         # thrust forces and moments, aerodynamic forces and moments
-        ft = self.thrust_forces(self.rpm)
-        mt = self.thrust_moments(self.rpm)
+        fnm = self.rpm_to_u.dot(self.rpm**2)
+        ft = fnm[0:3].reshape((3,1))
+        mt = fnm[3:].reshape((3,1))
         fa = self.aero_forces(y[7:10])
         ma = self.aero_moments(y[10:13])        
         
@@ -309,7 +287,7 @@ class Quadrotor:
         self.rpm = rpm
 
         # step simulation forward
-        self.state += self.RK4(self.solve_accels)(self.t, self.state, self.dt)
+        self.state += self.RK4(self.solve_accels)(self.state, self.dt)
         
         # normalize quaternion
         self.state[3:7] = self.q_norm(self.state[3:7])
@@ -320,6 +298,5 @@ class Quadrotor:
         zeta = self.q_to_euler(q)
         uvw = self.state[7:10]
         pqr = self.state[10:]
-        self.t += self.dt
 
         return xyz, zeta, uvw, pqr

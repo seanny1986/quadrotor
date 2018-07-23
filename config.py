@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "flying_skills",
-        "algs": ["ddpg"]
+        "env": "attitude_control",
+        "algs": ["eddpg", "ddpg"]
         }
 
 cem = { 
@@ -29,6 +29,27 @@ cem = {
         }
 
 ddpg = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "tau": 0.01
+                                },
+        "hidden_dim": 32,
+        "iterations": 10000,
+        "mem_len": 1000000,
+        "seed": 343,
+        "log_interval": 10,
+        "warmup": 50,
+        "batch_size": 64,
+        "ou_scale": 0.75,
+        "ou_mu": 0.2,
+        "ou_sigma": 0.15,
+        "render": True,
+        "save": False,
+        "cuda": True,
+        "logging": True
+        }
+
+eddpg = {
         "network_settings": {
                                 "gamma": 0.99,
                                 "tau": 0.01

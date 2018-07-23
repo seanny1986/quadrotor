@@ -22,6 +22,7 @@ class Quadrotor:
         self.kq = params["kq"]
         self.kd = params["kd"]
         self.km = params["km"]
+        self.kw = params["kw"]
         self.g = params["g"]
         self.dt = params["dt"]
 
@@ -279,12 +280,14 @@ class Quadrotor:
         if not rpm_commands:
             rpm_sq = self.u_to_rpm.dot(control_signal)
             rpm_sq = np.clip(rpm_sq, 0, self.max_rpm**2)
-            rpm = (rpm_sq**0.5).flatten()
+            rpm_c = (rpm_sq**0.5).flatten()
         else:
-            rpm = control_signal
-            rpm = np.clip(rpm, 0., self.max_rpm)
+            rpm_c = control_signal
+            rpm_c = np.clip(rpm_c, 0., self.max_rpm)
         
-        self.rpm = rpm
+        rpm_err = self.rpm-rpm_c
+        w_dot = -self.kw*rpm_err
+        self.rpm += w_dot*self.dt
 
         # step simulation forward
         self.state += self.RK4(self.solve_accels)(self.state, self.dt)

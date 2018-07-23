@@ -53,10 +53,10 @@ class Environment:
         self.vec_uvw = uvw-self.goal_uvw
         self.vec_pqr = pqr-self.goal_pqr
 
-        self.dist_sq_xyz = np.linalg.norm(self.vec_xyz)**2
-        self.dist_sq_zeta = np.linalg.norm(self.vec_zeta)**2
-        self.dist_sq_uvw = np.linalg.norm(self.vec_uvw)**2
-        self.dist_sq_pqr = np.linalg.norm(self.vec_pqr)**2
+        self.dist_norm = np.linalg.norm(self.vec_xyz)
+        self.att_norm = np.linalg.norm(self.vec_zeta)
+        self.vel_norm = np.linalg.norm(self.vec_uvw)
+        self.ang_norm = np.linalg.norm(self.vec_pqr)
 
     def init_rendering(self):
 
@@ -70,22 +70,33 @@ class Environment:
     def reward(self, state, action):
         xyz, zeta, uvw, pqr = state
         
-        self.vec_xyz = xyz-self.goal_xyz
-        self.vec_zeta = zeta-self.goal_zeta
-        self.vec_uvw = uvw-self.goal_uvw
-        self.vec_pqr = pqr-self.goal_pqr
+        curr_dist = xyz-self.goal_xyz
+        curr_att = zeta-self.goal_zeta
+        curr_vel = uvw-self.goal_uvw
+        curr_ang = pqr-self.goal_pqr
+        
+        dist_hat = np.linalg.norm(curr_dist)
+        att_hat = np.linalg.norm(curr_att)
+        vel_hat = np.linalg.norm(curr_vel)
+        ang_hat = np.linalg.norm(curr_ang)
 
-        self.dist_sq_xyz = np.linalg.norm(self.vec_xyz)**2
-        self.dist_sq_zeta = np.linalg.norm(self.vec_zeta)**2
-        self.dist_sq_uvw = np.linalg.norm(self.vec_uvw)**2
-        self.dist_sq_pqr = np.linalg.norm(self.vec_pqr)**2
+        dist_rew = 100*(dist_hat-self.dist_norm)
+        att_rew = 10*(att_hat-self.att_norm)
+        vel_rew = 10*(vel_hat-self.vel_norm)
+        ang_rew = 10*(ang_hat-self.ang_norm)
+        
+        self.dist_norm = dist_hat
+        self.att_norm = att_hat
+        self.vel_norm = vel_hat
+        self.ang_norm = ang_hat
 
-        dist_rew = -self.dist_sq_xyz
-        att_rew = -self.dist_sq_zeta
-        vel_rew = -self.dist_sq_uvw
-        ang_rew = -self.dist_sq_pqr
+        self.vec_xyz = curr_dist
+        self.vec_zeta = curr_att
+        self.vec_uvw = curr_vel
+        self.vec_pqr = curr_ang
+
         ctrl_rew = -np.sum(((action/self.action_bound[1])**2))
-        time_rew = 1.
+        time_rew = 5.
         return dist_rew, att_rew, vel_rew, ang_rew, ctrl_rew, time_rew
 
     def terminal(self, pos):

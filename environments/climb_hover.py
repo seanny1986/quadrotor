@@ -42,6 +42,7 @@ class Environment:
         self.vec_xyz = self.iris.get_state()[0]-self.goal_xyz
         self.vec_zeta = self.iris.get_state()[0]-self.goal_zeta
         self.dist_norm = np.linalg.norm(self.vec_xyz)
+        self.att_norm = np.linalg.norm(self.vec_zeta)
         self.goal_achieved = False
 
     def init_rendering(self):
@@ -56,9 +57,12 @@ class Environment:
         xyz, zeta, _, _ = state
         curr_dist = xyz-self.goal_xyz
         curr_att = zeta-self.goal_zeta
-        self.dist_norm = np.linalg.norm(curr_dist)
-        dist_rew = 100*(curr_dist-self.vec_xyz).mean()
-        att_rew = 10*(curr_att-self.vec_zeta).mean()
+        dist_hat = np.linalg.norm(curr_dist)
+        att_hat = np.linalg.norm(curr_att)
+        dist_rew = 100*(dist_hat-self.dist_norm)
+        att_rew = 10*(att_hat-self.att_norm)
+        self.dist_norm = dist_hat
+        self.att_norm = att_hat
         self.vec_xyz = curr_dist
         self.vec_zeta = curr_att
         ctrl_rew = -np.sum(((action/self.action_bound[1])**2))

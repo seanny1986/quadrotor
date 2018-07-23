@@ -44,6 +44,10 @@ def make(env_name, alg):
         params = cfg.ddpg
         import trainers.ddpg as ddpg_trainer
         return ddpg_trainer.Trainer(env_name, params)
+    if alg == "eddpg":
+        params = cfg.eddpg
+        import trainers.eddpg as eddpg_trainer
+        return eddpg_trainer.Trainer(env_name, params)
     if alg == "expected":
         params = cfg.expected
         import trainers.expected as expected_trainer

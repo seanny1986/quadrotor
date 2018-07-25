@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import utils
 import csv
 import os
+import numpy as np
 
 
 class Trainer:
@@ -20,7 +21,7 @@ class Trainer:
         self.log_interval = params["log_interval"]
         self.save = params["save"]
         
-        cuda = params["cuda"]
+        self.cuda = params["cuda"]
         state_dim = self.env.observation_space
         action_dim = self.env.action_space
         hidden_dim = params["hidden_dim"]
@@ -28,16 +29,14 @@ class Trainer:
 
         self.pi = fmis.Actor(state_dim, hidden_dim, action_dim)
         self.beta = fmis.Actor(state_dim, hidden_dim, action_dim)
-        self.phi = fmis.Dynamics(state_dim+action_dim, hidden_dim, state_dim)
         self.critic = fmis.Critic(state_dim, hidden_dim, 1)
-        self.agent = fmis.FMIS(self.pi, self.beta, self.critic, self.phi, self.env, network_settings, GPU=cuda)
+        self.agent = fmis.FMIS(self.pi, self.beta, self.critic, self.env, network_settings, GPU=self.cuda)
 
-        self.pi_optim = torch.optim.Adam(self.pi.parameters(),lr=1e-2)
-        self.phi_optim = torch.optim.Adam(self.phi.parameters(),lr=1e-2)
+        self.pi_optim = torch.optim.Adam(self.pi.parameters())
 
         self.memory = fmis.ReplayMemory(1000000)
 
-        if cuda:
+        if self.cuda:
             self.Tensor = torch.cuda.FloatTensor
         else:
             self.Tensor = torch.Tensor
@@ -46,6 +45,10 @@ class Trainer:
             self.env.init_rendering()
 
         self.best = None
+        
+        # use OU noise to explore and learn the model for n warmup episodes
+        self.noise = utils.OUNoise(action_dim, mu=10)
+        self.warmup = 10
 
         # initialize experiment logging
         self.logging = params["logging"]
@@ -69,7 +72,13 @@ class Trainer:
             if self.render:
                 self.env.render()
             for _ in range(self.env.H):
-                action, _ = self.agent.select_action(state)
+                if ep<self.warmup+1:
+                    a = np.array([self.noise.noise()], dtype="float32")
+                    action = torch.from_numpy(a)
+                    if self.cuda:
+                        action = action.cuda()
+                else:
+                    action, _ = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
                 next_state = self.Tensor(next_state)
@@ -80,12 +89,6 @@ class Trainer:
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
                 
-                model_loss = 0
-                for i in range(1,10):
-                    transitions = self.memory.sample(64)
-                    batch = fmis.Transition(*zip(*transitions))
-                    model_loss = (model_loss*(i-1)+self.agent.model_update(self.phi_optim, batch))/i
-                
                 if done:
                     break
                 state = next_state
@@ -94,15 +97,16 @@ class Trainer:
                 self.best = running_reward
                 utils.save(self.agent, self.directory + "/saved_policies/fmis.pth.tar")
             
-            if ep > 1000:
-                for i in range(100):
+            self.agent.model_update(self.memory)
+            if ep > self.warmup+1:
+                for _ in range(100):
                     self.agent.policy_update(self.pi_optim, s0, self.env.H)
-            
+                
             interval_avg.append(running_reward)
             avg = (avg*(ep-1)+running_reward)/ep
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}\t Model loss: {:.5f}'.format(ep, interval, avg, model_loss))
+                print("Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}".format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
                     self.writer.writerow([ep, avg])  

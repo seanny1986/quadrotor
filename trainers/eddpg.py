@@ -32,9 +32,9 @@ class Trainer:
         network_settings = params["network_settings"]
         self.actor = eddpg.Actor(state_dim, hidden_dim, action_dim)
         self.target_actor = eddpg.Actor(state_dim, hidden_dim, action_dim)
-        self.critic_1 = eddpg.Critic(state_dim, hidden_dim, action_dim)
-        self.critic_2 = eddpg.Critic(state_dim, hidden_dim, action_dim)
-        self.target_critic = eddpg.Critic(state_dim, hidden_dim, action_dim)
+        self.critic_1 = eddpg.Critic(state_dim+action_dim, hidden_dim, 1)
+        self.critic_2 = eddpg.Critic(state_dim+action_dim, hidden_dim, 1)
+        self.target_critic = eddpg.Critic(state_dim+action_dim, hidden_dim, 1)
         self.agent = eddpg.DDPG(self.actor, 
                                 self.target_actor, 
                                 self.critic_1,

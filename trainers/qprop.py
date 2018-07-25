@@ -31,8 +31,8 @@ class Trainer:
 
         self.actor = qprop.Actor(state_dim, hidden_dim, action_dim)
         self.target_actor = qprop.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = qprop.Critic(state_dim+action_dim, hidden_dim, action_dim)
-        self.target_critic = qprop.Critic(state_dim+action_dim, hidden_dim, action_dim)
+        self.critic = qprop.Critic(state_dim+action_dim, hidden_dim, 1)
+        self.target_critic = qprop.Critic(state_dim+action_dim, hidden_dim, 1)
         self.memory = qprop.ReplayMemory(1000000)
         self.agent = qprop.QPROP(self.actor, 
                                 self.critic, 

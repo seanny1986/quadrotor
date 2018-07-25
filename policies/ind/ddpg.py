@@ -20,10 +20,10 @@ class Actor(nn.Module):
         return F.sigmoid(mu)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, hidden_dim, action_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Critic, self).__init__()
-        self.affine1 = nn.Linear(state_dim+action_dim, hidden_dim)
-        self.value_head = nn.Linear(hidden_dim, 1)
+        self.affine1 = nn.Linear(input_dim, hidden_dim)
+        self.value_head = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
@@ -112,7 +112,7 @@ class DDPG(nn.Module):
         policy_loss = -policy_loss.mean()                                                           # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
         if self.clip is not None:
-            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.clip)
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.clip)                     # clip gradient
         self.pol_opt.step()                                                                         # update policy function
         
         self.soft_update(self.target_critic, self.critic, self.tau)                                 # soft update of target networks

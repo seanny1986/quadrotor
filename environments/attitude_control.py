@@ -19,9 +19,12 @@ class Environment:
         self.goal_xyz = np.array([[0.],
                                 [0.],
                                 [1.5]])
-        self.goal_zeta = np.array([[0.],
-                                [0.],
-                                [0.]])
+        self.goal_zeta_sin = np.sin(np.array([[0.],
+                                            [0.],
+                                            [0.]]))
+        self.goal_zeta_cos = np.cos(np.array([[0.],
+                                            [0.],
+                                            [0.]]))
         self.goal_uvw = np.array([[0.],
                                 [0.],
                                 [0.]])
@@ -32,7 +35,7 @@ class Environment:
         self.t = 0
         self.T = 5
         self.action_space = 4
-        self.observation_space = 12+self.action_space+12
+        self.observation_space = 15+self.action_space+15
 
         # simulation parameters
         self.params = cfg.params
@@ -45,16 +48,18 @@ class Environment:
         self.hov_rpm = self.iris.hov_rpm
         self.trim = [self.hov_rpm, self.hov_rpm,self.hov_rpm, self.hov_rpm]
 
-        self.iris.set_state(self.goal_xyz, self.goal_zeta, self.goal_uvw, self.goal_pqr)
+        self.iris.set_state(self.goal_xyz, np.arcsin(self.goal_zeta_sin), self.goal_uvw, self.goal_pqr)
         xyz, zeta, uvw, pqr = self.iris.get_state()
 
         self.vec_xyz = xyz-self.goal_xyz
-        self.vec_zeta = zeta-self.goal_zeta
+        self.vec_zeta_sin = np.sin(zeta)-self.goal_zeta_sin
+        self.vec_zeta_cos = np.cos(zeta)-self.goal_zeta_cos
         self.vec_uvw = uvw-self.goal_uvw
         self.vec_pqr = pqr-self.goal_pqr
 
         self.dist_norm = np.linalg.norm(self.vec_xyz)
-        self.att_norm = np.linalg.norm(self.vec_zeta)
+        self.att_norm_sin = np.linalg.norm(self.vec_zeta_sin)
+        self.att_norm_cos = np.linalg.norm(self.vec_zeta_cos)
         self.vel_norm = np.linalg.norm(self.vec_uvw)
         self.ang_norm = np.linalg.norm(self.vec_pqr)
 
@@ -70,33 +75,40 @@ class Environment:
     def reward(self, state, action):
         xyz, zeta, uvw, pqr = state
         
+        s_zeta = np.sin(zeta)
+        c_zeta = np.cos(zeta)
+
         curr_dist = xyz-self.goal_xyz
-        curr_att = zeta-self.goal_zeta
+        curr_att_sin = s_zeta-self.goal_zeta_sin
+        curr_att_cos = c_zeta-self.goal_zeta_cos
         curr_vel = uvw-self.goal_uvw
         curr_ang = pqr-self.goal_pqr
         
         dist_hat = np.linalg.norm(curr_dist)
-        att_hat = np.linalg.norm(curr_att)
+        att_hat_sin = np.linalg.norm(curr_att_sin)
+        att_hat_cos = np.linalg.norm(curr_att_cos)
         vel_hat = np.linalg.norm(curr_vel)
         ang_hat = np.linalg.norm(curr_ang)
 
-        dist_rew = 100*(dist_hat-self.dist_norm)
-        att_rew = 10*(att_hat-self.att_norm)
-        vel_rew = 10*(vel_hat-self.vel_norm)
-        ang_rew = 10*(ang_hat-self.ang_norm)
+        dist_rew = -10*(dist_hat-self.dist_norm)
+        att_rew = -1*((att_hat_sin-self.att_norm_sin)+(att_hat_cos-self.att_norm_cos))
+        vel_rew = -1*(vel_hat-self.vel_norm)
+        ang_rew = -1*(ang_hat-self.ang_norm)
         
         self.dist_norm = dist_hat
-        self.att_norm = att_hat
+        self.att_norm_sin = att_hat_sin
+        self.att_norm_cos = att_hat_cos
         self.vel_norm = vel_hat
         self.ang_norm = ang_hat
 
         self.vec_xyz = curr_dist
-        self.vec_zeta = curr_att
+        self.vec_zeta_sin = curr_att_sin
+        self.vec_zeta_cos = curr_att_cos
         self.vec_uvw = curr_vel
         self.vec_pqr = curr_ang
 
         ctrl_rew = -np.sum(((action/self.action_bound[1])**2))
-        time_rew = 5.
+        time_rew = 10.
         return dist_rew, att_rew, vel_rew, ang_rew, ctrl_rew, time_rew
 
     def terminal(self, pos):
@@ -115,32 +127,32 @@ class Environment:
     def step(self, action):
         for _ in self.steps:
             xyz, zeta, uvw, pqr = self.iris.step(action)
-        tmp = zeta.T.tolist()[0]
-        sinx = [sin(x) for x in tmp]
-        cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(action/self.action_bound[1]).tolist()
+        sin_zeta = np.sin(zeta)
+        cos_zeta = np.cos(zeta)
+        a = (action/self.action_bound[1]).tolist()
+        next_state = xyz.T.tolist()[0]+sin_zeta.T.tolist()[0]+cos_zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]
         info = self.reward((xyz, zeta, uvw, pqr), action)
         done = self.terminal((xyz, zeta))
         reward = sum(info)
-        goals = self.vec_xyz.T.tolist()[0]+self.vec_zeta.T.tolist()[0]+self.vec_uvw.T.tolist()[0]+self.vec_pqr.T.tolist()[0]
-        next_state = [next_state+goals]
+        goals = self.vec_xyz.T.tolist()[0]+self.vec_zeta_sin.T.tolist()[0]+self.vec_zeta_cos.T.tolist()[0]+self.vec_uvw.T.tolist()[0]+self.vec_pqr.T.tolist()[0]
+        next_state = [next_state+a+goals]
         self.t += self.ctrl_dt
         return next_state, reward, done, info
 
     def reset(self):
         self.t = 0.
-        self.iris.set_state(self.goal_xyz, self.goal_zeta, self.goal_uvw, self.goal_pqr)
+        self.iris.set_state(self.goal_xyz, np.sin(self.goal_zeta_sin), self.goal_uvw, self.goal_pqr)
         xyz, zeta, uvw, pqr = self.iris.get_state()
+        sin_zeta = np.sin(zeta)
+        cos_zeta = np.cos(zeta)
         self.vec_xyz = xyz-self.goal_xyz
-        self.vec_zeta = zeta-self.goal_zeta
+        self.vec_zeta_sin = sin_zeta-self.goal_zeta_sin
+        self.vec_zeta_cos = cos_zeta-self.goal_zeta_cos
         self.vec_uvw = uvw-self.goal_uvw
         self.vec_pqr = pqr-self.goal_pqr
-        tmp = zeta.T.tolist()[0]
-        action = [x/self.action_bound[1] for x in self.trim]
-        sinx = [sin(x) for x in tmp]
-        cosx = [cos(x) for x in tmp]
-        goals = self.vec_xyz.T.tolist()[0]+self.vec_zeta.T.tolist()[0]+self.vec_uvw.T.tolist()[0]+self.vec_pqr.T.tolist()[0]
-        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+goals]
+        a = [x/self.action_bound[1] for x in self.trim]
+        goals = self.vec_xyz.T.tolist()[0]+self.vec_zeta_sin.T.tolist()[0]+self.vec_zeta_cos.T.tolist()[0]+self.vec_uvw.T.tolist()[0]+self.vec_pqr.T.tolist()[0]
+        state = [xyz.T.tolist()[0]+sin_zeta.T.tolist()[0]+cos_zeta.T.tolist()[0]+uvw.T.tolist()[0]+pqr.T.tolist()[0]+a+goals]
         return state
     
     def render(self):

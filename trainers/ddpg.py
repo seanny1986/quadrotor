@@ -10,6 +10,7 @@ import os
 
 class Trainer:
     def __init__(self, env_name, params):
+        # initialize environment
         self.env = envs.make(env_name)
         self.env_name = env_name
 
@@ -32,8 +33,8 @@ class Trainer:
         network_settings = params["network_settings"]
         self.actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
         self.target_actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = ddpg.Critic(state_dim, hidden_dim, action_dim)
-        self.target_critic = ddpg.Critic(state_dim, hidden_dim, action_dim)
+        self.critic = ddpg.Critic(state_dim+action_dim, hidden_dim, 1)
+        self.target_critic = ddpg.Critic(state_dim+action_dim, hidden_dim, 1)
         self.agent = ddpg.DDPG(self.actor, 
                                 self.target_actor, 
                                 self.critic, 
@@ -50,6 +51,7 @@ class Trainer:
         self.noise.set_seed(self.seed)
         self.memory = ddpg.ReplayMemory(self.mem_len)
 
+        # want to save the best policy
         self.best = None
 
         # send to GPU if flagged in experiment config file
@@ -62,7 +64,7 @@ class Trainer:
         if self.render:
             self.env.init_rendering()
 
-        # initialize experiment logging
+        # initialize experiment logging. This wipes any previous file with the same name
         self.logging = params["logging"]
         if self.logging:
             self.directory = os.getcwd()
@@ -96,10 +98,11 @@ class Trainer:
                 next_state, reward, done, info = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
 
-                # render the episode
+                # render the episode if render selected
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
                 
+                # transform to tensors before storing in memory
                 next_state = self.Tensor(next_state)
                 reward = self.Tensor([reward])
 
@@ -116,13 +119,20 @@ class Trainer:
                 # check if terminate
                 if done:
                     break
+
+                # step to next state
                 state = next_state
 
             if (self.best is None or running_reward > self.best) and self.save:
                 self.best = running_reward
-                print("Saving new DDPG model.")
+                print("Saving best DDPG model.")
                 utils.save(self.agent, self.directory + "/saved_policies/ddpg.pth.tar")
 
+            # anneal noise 
+            if ep > self.warmup:
+                self.noise.anneal()
+
+            # print running average and interval average, log average to csv file
             interval_avg.append(running_reward)
             avg = (avg*(ep-1)+running_reward)/ep   
             if ep % self.log_interval == 0:

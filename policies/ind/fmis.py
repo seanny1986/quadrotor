@@ -4,27 +4,15 @@ import torch.nn.functional as F
 import torch.nn.utils.rnn as rnn_utils
 from torch.distributions import Normal
 from collections import namedtuple
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+import numpy as np
 
 """
     Implements an architecture I'm calling Forward Model Importance Sampling. A statistical RNN 
     forward model is trained using the log-likelihood score function. The agent is trained under
     this model using PPO. 
 """
-
-class Dynamics(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(Dynamics,self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-
-        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.pred = torch.nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        x = F.tanh(self.l1(x))
-        x = self.pred(x)
-        return x
 
 class Actor(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -59,59 +47,64 @@ class Critic(torch.nn.Module):
         return value
 
 class FMIS(torch.nn.Module):
-    def __init__(self, pi, beta, critic, phi, env, network_settings, GPU=True):
+    def __init__(self, pi, beta, critic, env, network_settings, GPU=True):
         super(FMIS,self).__init__()
         self.pi = pi
         self.critic = critic
         self.beta = beta
-        self.phi = phi
+        
+        kern = C(1., (1e-3, 1e3))*RBF(1., (1e-2, 1e2))
+        self.phi = GaussianProcessRegressor(kernel=kern, alpha=1e-3, n_restarts_optimizer=9)
+
         self.gamma = network_settings["gamma"]
         self.eps = network_settings["eps"]
         self.lmbd = network_settings["lambda"]
         self.GPU = GPU
 
-        self.s0_mu = None
-        self.s0_logvar = None
         self.env = env
         self.observation_space = env.observation_space
         self.action_bound = env.action_bound[1]
-
-        self.state = []
-        self.action = []
-        self.log_prob = []
-        self.next_state = []
-        self.reward = []
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
             self.pi = self.pi.cuda()
             self.critic = self.critic.cuda()
             self.beta = self.beta.cuda()
-            self.phi = phi.cuda()
         else:
             self.Tensor = torch.Tensor
 
-    def rollout(self, s0, H):
+    def rollout(self, s0, H, samples=10):
         # rollout trajectory under model
         x = s0
+        states = []
+        actions = []
+        next_states = []
+        rewards = []
+        log_probs = []
         for t in range(H):
-            self.state.append(x)
+            states.append(x)
             action, lp = self.select_action(x)
-            state_action = torch.cat([x, action],dim=1)
-            delta = self.phi(state_action)
-            x += delta
-            r = 100*delta[:,15:].mean()-action.pow(2).sum()
-            self.next_state.append(x)
-            self.action.append(action)
-            self.log_prob.append(lp)
-            self.reward.append(r)
-        print(self.state)
-        input("Paused")
-        observations = {"states": self.state,
-                        "actions": self.action,
-                        "log_probs": self.log_prob,
-                        "next_states": self.next_state,
-                        "rewards": self.reward}
+            state_action = torch.cat([x, action],dim=1).cpu().numpy()
+            next_state = self.phi.predict(state_action)
+            next_state = torch.from_numpy(next_state)
+            if self.GPU:
+                next_state = next_state.cuda().float()
+            xyz = next_state[:,0:3].cpu().numpy().T
+            zeta = (torch.atan2(next_state[:,3:6], next_state[:,6:9])).cpu().numpy().T
+            uvw = next_state[:,9:12].cpu().numpy().T
+            pqr = next_state[:,12:15].cpu().numpy().T
+            a = action.cpu().numpy()[0]
+            r = sum(self.env.reward((xyz,zeta,uvw,pqr), a))
+            next_states.append(next_state)
+            actions.append(action)
+            log_probs.append(lp)
+            rewards.append(self.Tensor([r]))
+            x = next_state
+        observations = {"states": states,
+                        "actions": actions,
+                        "log_probs": log_probs,
+                        "next_states": next_states,
+                        "rewards": rewards}
         return observations
 
     def select_action(self, x):
@@ -129,21 +122,15 @@ class FMIS(torch.nn.Module):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
-    def model_update(self, optim, batch):
-        state = torch.stack(batch.state)
-        action = torch.stack(batch.action)
-        next_state = torch.stack(batch.next_state)
-        delta = (next_state-state).detach()
-
-        # compute model loss
-        xs = torch.cat([state, action],dim=1)
-        ys = delta
-        pred_ys = self.phi(xs)
-        loss = F.mse_loss(pred_ys, ys)
-        optim.zero_grad()
-        loss.backward()
-        optim.step()
-        return loss.item()
+    def model_update(self, memory):
+        data = Transition(*zip(*memory.pull()))
+        states = torch.stack(data.state)
+        actions = torch.stack(data.action)
+        next_states = torch.stack(data.next_state)
+        X = torch.cat([states, actions],dim=1).cpu().numpy()
+        y = next_states.cpu().numpy()
+        print("--- Model fit ---")
+        self.phi.fit(X, y)
 
     def policy_update(self, optim, s0, H):
 
@@ -182,11 +169,6 @@ class FMIS(torch.nn.Module):
         self.hard_update(self.beta, self.pi)
         loss.backward()
         optim.step()
-        del self.state[:]
-        del self.action[:]
-        del self.log_prob[:]
-        del self.next_state[:]
-        del self.reward[:]
 
 Transition = namedtuple('Transition', ['state', 'action', 'next_state'])
 class ReplayMemory(object):
@@ -207,6 +189,9 @@ class ReplayMemory(object):
         else:
             lst = random.sample(self.memory, batch_size)
             return lst
+    
+    def pull(self):
+        return self.memory
 
     def __len__(self):
         return len(self.memory)

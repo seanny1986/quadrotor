@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "attitude_control",
-        "algs": ["eddpg", "ddpg"]
+        "algs": ["ddpg"]
         }
 
 cem = { 
@@ -59,7 +59,7 @@ eddpg = {
         "mem_len": 1000000,
         "seed": 343,
         "log_interval": 10,
-        "warmup": 50,
+        "warmup": 10,
         "batch_size": 64,
         "ou_scale": 0.75,
         "ou_mu": 0.2,
@@ -88,7 +88,7 @@ fmis = {
         "hidden_dim": 32,
         "iterations": 5000,
         "seed": 343,
-        "log_interval": 10,
+        "log_interval": 1,
         "render": True,
         "save": False,
         "cuda": True,

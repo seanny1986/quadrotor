@@ -1,18 +1,17 @@
 import torch
-import simulation.quadrotor as quad
-import simulation.config as cfg
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.style as style
+import environments.envs as envs
 
 style.use("seaborn-deep")
 
 cuda = True
 
 def main():
-    
-    print("=> Loading one_step_accel.pth.tar")
+    env = envs.make("train_model")    
+    print("=> Loading one_step.pth.tar")
     dyn = torch.load("/home/seanny/quadrotor/models/one_step.pth.tar")
 
     print("=> Initializing aircraft from config")

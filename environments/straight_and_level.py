@@ -18,7 +18,7 @@ class Environment:
         self.T = 15
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 15+self.action_space
+        self.observation_space = 15+self.action_space+3
 
         # simulation parameters
         self.params = cfg.params
@@ -76,7 +76,7 @@ class Environment:
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
+        next_state = xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]
         reward = self.reward(xyz_dot, action)
         done = self.terminal((xyz, zeta))
         info = None
@@ -93,7 +93,7 @@ class Environment:
         action = self.trim
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
+        state = [xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
         return state
     
     def render(self):

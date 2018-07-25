@@ -22,7 +22,7 @@ class Environment:
         self.T = 2.5
         self.r = 1.5
         self.action_space = 4
-        self.observation_space = 15+self.action_space
+        self.observation_space = 15+self.action_space+3
 
         # simulation parameters
         self.params = cfg.params
@@ -95,7 +95,7 @@ class Environment:
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(action/self.action_bound[1]).tolist()
+        next_state = xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(action/self.action_bound[1]).tolist()
         info = self.reward((xyz, zeta, uvw, pqr), action)
         done = self.terminal((xyz, zeta))
         reward = sum(info)
@@ -118,7 +118,7 @@ class Environment:
         action = [x/self.action_bound[1] for x in self.trim]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
+        state = [xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+self.vec.T.tolist()[0]]
         return state
 
     def generate_goal(self, r):

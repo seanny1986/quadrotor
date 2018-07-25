@@ -20,10 +20,10 @@ class Actor(nn.Module):
         return F.sigmoid(mu)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, hidden_dim, action_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         super(Critic, self).__init__()
-        self.affine1 = nn.Linear(state_dim+action_dim, hidden_dim)
-        self.value_head = nn.Linear(hidden_dim, 1)
+        self.affine1 = nn.Linear(input_dim, hidden_dim)
+        self.value_head = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))

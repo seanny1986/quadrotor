@@ -26,7 +26,7 @@ class Environment:
         self.t = 0
         self.T = 5
         self.action_space = 4
-        self.observation_space = 12+self.action_space+6
+        self.observation_space = 15+self.action_space+6
 
         # simulation parameters
         self.params = cfg.params
@@ -59,7 +59,7 @@ class Environment:
         curr_att = zeta-self.goal_zeta
         dist_hat = np.linalg.norm(curr_dist)
         att_hat = np.linalg.norm(curr_att)
-        dist_rew = 100*(dist_hat-self.dist_norm)
+        dist_rew = -100*(dist_hat-self.dist_norm)
         att_rew = 10*(att_hat-self.att_norm)
         self.dist_norm = dist_hat
         self.att_norm = att_hat
@@ -71,7 +71,7 @@ class Environment:
             cmplt_rew = 10.
             self.goal_achieved = True
         time_rew = 0.1
-        return dist_rew, att_rew, ctrl_rew, cmplt_rew, time_rew
+        return dist_rew, ctrl_rew, cmplt_rew, time_rew
 
     def terminal(self, pos):
         xyz, zeta = pos
@@ -95,7 +95,8 @@ class Environment:
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(action/self.action_bound[1]).tolist()
+        a = (self.iris.rpm/self.action_bound[1]).tolist()
+        next_state = xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+a
         info = self.reward((xyz, zeta, uvw, pqr), action)
         done = self.terminal((xyz, zeta))
         reward = sum(info)
@@ -111,11 +112,11 @@ class Environment:
         self.vec_xyz = xyz-self.goal_xyz
         self.vec_zeta = zeta-self.goal_zeta
         tmp = zeta.T.tolist()[0]
-        action = [x/self.action_bound[1] for x in self.trim]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
+        a = (self.iris.rpm/self.action_bound[1]).tolist()
         goal = self.vec_xyz.T.tolist()[0]+self.vec_zeta.T.tolist()[0]
-        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action+goal]
+        state = [xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+a+goal]
         return state
     
     def render(self):

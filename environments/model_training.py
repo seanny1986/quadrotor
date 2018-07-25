@@ -1,4 +1,4 @@
-import simulation.quadrotor2 as quad
+import simulation.quadrotor3 as quad
 import simulation.config as cfg
 import simulation.animation as ani
 import matplotlib.pyplot as pl
@@ -47,7 +47,7 @@ class Environment:
         pl.ion()
         self.fig = pl.figure("Model Training")
         self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6)
+        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
 
     def set_nondeterministic_s0(self):
         self.deterministic_s0 = False
@@ -62,30 +62,26 @@ class Environment:
 
     def step(self, action):
         for _ in self.steps:
-            xyz, zeta, q, uvw, pqr = self.iris.step(np.array(action))
+            xyz, zeta, uvw, pqr = self.iris.step(np.array(action))
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        next_state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action.tolist()[0]]
+        next_state = [xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(self.iris.rpm/self.action_bound[1]).tolist()]
         self.t += self.ctrl_dt
         return next_state, None, None, None
 
     def reset(self):
         self.t = 0.
         if self.deterministic_s0:
-            xyz, zeta, _, uvw, pqr = self.iris.reset()
+            xyz, zeta, uvw, pqr = self.iris.reset()
         else:
             xyz, zeta, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
-        action = self.trim
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
-        state = [sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+action]
+        state = [xyz.T.tolist()[0]+sinx+cosx+uvw.T.tolist()[0]+pqr.T.tolist()[0]+(self.iris.rpm/self.action_bound[1]).tolist()]
         return state
-
-    def set_random(self):
-        pass
 
     def set_state(self, xyz, zeta, uvw, pqr):
         self.iris.set_state(xyz, zeta, uvw, pqr)
@@ -94,12 +90,12 @@ class Environment:
         return self.iris.get_state()
     
     def render(self):
-        pl.figure(0)
+        pl.figure("Model Training")
         self.axis3d.cla()
-        self.vis.draw3d(self.axis3d)
+        self.vis.draw3d_quat(self.axis3d)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)
-        self.axis3d.set_zlim(0, 6)
+        self.axis3d.set_zlim(-3, 3)
         self.axis3d.set_xlabel('West/East [m]')
         self.axis3d.set_ylabel('South/North [m]')
         self.axis3d.set_zlabel('Down/Up [m]')

@@ -176,6 +176,7 @@ class OUNoise:
         self.sigma = sigma
         self.state = np.ones(self.action_dimension)*self.mu
         self.reset()
+        self.alpha = 0.1
 
     def reset(self):
         self.state = np.ones(self.action_dimension)*self.mu
@@ -188,4 +189,17 @@ class OUNoise:
 
     def set_seed(self,seed):
         np.random.seed(seed=seed)
+    
+    def anneal(self):
+        # annealing the exploration noise by progressively stepping mu and sigma to 0. The reason
+        # for returning the mean and sigma is so that I can check the determinism of the noise that
+        # is being injected. If the noise is within a certain threshold, we probably don't want use 
+        # it, and instead let the policy act deterministically.
+        
+        if abs(self.mu) > 0:
+            d_mu = 0-self.mu
+            d_sig = 0-self.sigma
+            self.mu += self.alpha*d_mu
+            self.sigma += self.alpha*d_sig
+        return self.mu, self.sigma
     

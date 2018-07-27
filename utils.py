@@ -7,6 +7,7 @@ import matplotlib.style as style
 import pandas as pd
 import random
 import numpy as np
+from collections import namedtuple
 
 """
     This module contains utility functions and classes that would clutter up other scripts. These include getting
@@ -202,4 +203,56 @@ class OUNoise:
             self.mu += self.alpha*d_mu
             self.sigma += self.alpha*d_sig
         return self.mu, self.sigma
+
+Transition = namedtuple('Transition', ['state', 'action', 'next_state', 'reward'])
+class ReplayMemory:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position+1)%self.capacity
+
+    def sample(self, batch_size):
+        if self.__len__() < batch_size:
+            return self.memory
+        else:
+            return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
+
+class Actor(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(Actor,self).__init__()
+        self.__input_dim = input_dim
+        self.__hidden_dim = hidden_dim
+        self.__output_dim = output_dim
+
+        self.__l1 = torch.nn.Linear(input_dim, hidden_dim)
+        self.__mu = torch.nn.Linear(hidden_dim, output_dim)
+        self.__logvar = torch.nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        x = F.tanh(self.__l1(x))
+        mu = self.__mu(x)
+        logvar = self.__logvar(x)
+        return mu, logvar 
+
+
+class Critic(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(Critic, self).__init__()
+        self.__affine1 = nn.Linear(input_dim, hidden_dim)
+        self.__value_head = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        x = F.relu(self.__affine1(x))
+        q = self.__value_head(x)
+        return q
     

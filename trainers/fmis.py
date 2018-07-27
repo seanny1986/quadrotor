@@ -27,12 +27,12 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         network_settings = params["network_settings"]
 
-        self.pi = fmis.Actor(state_dim, hidden_dim, action_dim)
-        self.beta = fmis.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = fmis.Critic(state_dim, hidden_dim, 1)
-        self.agent = fmis.FMIS(self.pi, self.beta, self.critic, self.env, network_settings, GPU=self.cuda)
+        pi = utils.Actor(state_dim, hidden_dim, action_dim)
+        beta = utils.Actor(state_dim, hidden_dim, action_dim)
+        critic = utils.Critic(state_dim, hidden_dim, 1)
+        self.agent = fmis.FMIS(pi, beta, critic, self.env, network_settings, GPU=self.cuda)
 
-        self.pi_optim = torch.optim.Adam(self.pi.parameters())
+        self.pi_optim = torch.optim.Adam(self.agent.parameters())
 
         self.memory = fmis.ReplayMemory(1000000)
 
@@ -48,7 +48,7 @@ class Trainer:
         
         # use OU noise to explore and learn the model for n warmup episodes
         self.noise = utils.OUNoise(action_dim, mu=10)
-        self.warmup = 10
+        self.warmup = 5
 
         # initialize experiment logging
         self.logging = params["logging"]
@@ -99,6 +99,7 @@ class Trainer:
             
             self.agent.model_update(self.memory)
             if ep > self.warmup+1:
+                print("---OPTIMIZING POLICY---")
                 for _ in range(100):
                     self.agent.policy_update(self.pi_optim, s0, self.env.H)
                 

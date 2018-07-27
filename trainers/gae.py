@@ -27,9 +27,11 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
         network_settings = params["network_settings"]
-        self.actor = gae.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = gae.Critic(state_dim, hidden_dim, 1)
-        self.agent = gae.GAE(self.actor, self.critic, network_settings, GPU=cuda)
+
+        
+        actor = utils.Actor(state_dim, hidden_dim, action_dim)
+        critic = utils.Critic(state_dim, hidden_dim, 1)
+        self.agent = gae.GAE(actor, critic, network_settings, GPU=cuda)
         self.optim = torch.optim.Adam(self.agent.parameters())
 
         if cuda:

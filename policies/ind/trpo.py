@@ -8,6 +8,9 @@ from math import pi, log
 import numpy as np
 from collections import namedtuple
 
+"""
+    Port of Trust Region Policy Optimization by John Schulman.
+"""
 
 class Actor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):

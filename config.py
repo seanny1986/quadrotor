@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "attitude_control",
-        "algs": ["ddpg"]
+        "env": "hover",
+        "algs": ["sw_scv"]
         }
 
 cem = { 
@@ -45,28 +45,7 @@ ddpg = {
         "ou_sigma": 0.15,
         "render": True,
         "save": False,
-        "cuda": True,
-        "logging": True
-        }
-
-eddpg = {
-        "network_settings": {
-                                "gamma": 0.99,
-                                "tau": 0.01
-                                },
-        "hidden_dim": 32,
-        "iterations": 10000,
-        "mem_len": 1000000,
-        "seed": 343,
-        "log_interval": 10,
-        "warmup": 10,
-        "batch_size": 64,
-        "ou_scale": 0.75,
-        "ou_mu": 0.2,
-        "ou_sigma": 0.15,
-        "render": True,
-        "save": False,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -142,7 +121,7 @@ ppo = {
         "logging": True
         }
 
-qprop = {
+sw = {
         "network_settings": {
                                 "gamma": 0.99,
                                 "tau": 0.01

@@ -84,13 +84,15 @@ class Environment:
         curr_vel = uvw-self.goal_uvw
         curr_ang = pqr-self.goal_pqr
         
+        # magnitude of the distance from the goal 
         dist_hat = np.linalg.norm(curr_dist)
         att_hat_sin = np.linalg.norm(curr_att_sin)
         att_hat_cos = np.linalg.norm(curr_att_cos)
         vel_hat = np.linalg.norm(curr_vel)
         ang_hat = np.linalg.norm(curr_ang)
 
-        dist_rew = -10*(dist_hat-self.dist_norm)
+        # agent gets a negative reward based on how far away it is from the desired goal state
+        dist_rew = -100*(dist_hat)
         att_rew = -1*((att_hat_sin-self.att_norm_sin)+(att_hat_cos-self.att_norm_cos))
         vel_rew = -1*(vel_hat-self.vel_norm)
         ang_rew = -1*(ang_hat-self.ang_norm)
@@ -107,14 +109,17 @@ class Environment:
         self.vec_uvw = curr_vel
         self.vec_pqr = curr_ang
 
+        # agent gets a negative reward for excessive action inputs
         ctrl_rew = -np.sum(((action/self.action_bound[1])**2))
+
+        # agent gets a positive reward for time spent in flight
         time_rew = 10.
         return dist_rew, att_rew, vel_rew, ang_rew, ctrl_rew, time_rew
 
     def terminal(self, pos):
         xyz, zeta = pos
-        mask1 = zeta > pi/2
-        mask2 = zeta < -pi/2
+        mask1 = 0#zeta > pi/2
+        mask2 = 0#zeta < -pi/2
         mask3 = np.abs(xyz) > 3
         if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
             return True

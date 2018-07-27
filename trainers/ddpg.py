@@ -31,15 +31,14 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
         network_settings = params["network_settings"]
-        self.actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
-        self.target_actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = ddpg.Critic(state_dim+action_dim, hidden_dim, 1)
-        self.target_critic = ddpg.Critic(state_dim+action_dim, hidden_dim, 1)
-        self.agent = ddpg.DDPG(self.actor, 
-                                self.target_actor, 
-                                self.critic, 
-                                self.target_critic,
-                                self.action_bound,
+        actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
+        target_actor = ddpg.Actor(state_dim, hidden_dim, action_dim)
+        critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
+        target_critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
+        self.agent = ddpg.DDPG(actor, 
+                                target_actor, 
+                                critic, 
+                                target_critic,
                                 network_settings, 
                                 GPU=cuda)
 
@@ -49,7 +48,10 @@ class Trainer:
         ou_sigma = params["ou_sigma"]
         self.noise = utils.OUNoise(action_dim, scale=ou_scale, mu=ou_mu, sigma=ou_sigma)
         self.noise.set_seed(self.seed)
-        self.memory = ddpg.ReplayMemory(self.mem_len)
+        self.memory = utils.ReplayMemory(self.mem_len)
+
+        self.pol_opt = torch.optim.Adam(actor.parameters())
+        self.crit_opt = torch.optim.Adam(critic.parameters())
 
         # want to save the best policy
         self.best = None
@@ -113,8 +115,8 @@ class Trainer:
                 if ep >= self.warmup:
                     for i in range(5):
                         transitions = self.memory.sample(self.batch_size)
-                        batch = ddpg.Transition(*zip(*transitions))
-                        self.agent.update(batch)
+                        batch = utils.Transition(*zip(*transitions))
+                        self.agent.update(batch, self.crit_opt, self.pol_opt)
 
                 # check if terminate
                 if done:

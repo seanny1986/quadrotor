@@ -28,7 +28,7 @@ def main():
         ns = torch.cat([xyz, zeta, uvw, pqr, RPM],dim=1)
         state = np.array(env.step(action)[0],dtype="float32")
         action += add
-    print(ns-torch.from_numpy(state))
+    print("delta: ", ns-torch.from_numpy(state))
     print(torch.atan2(ns[:,3:6],ns[:,6:9]).detach().numpy())
     print(np.arctan2(state[:,3:6],state[:,6:9]))
 

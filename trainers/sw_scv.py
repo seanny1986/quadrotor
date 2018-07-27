@@ -1,5 +1,5 @@
 import environments.envs as envs 
-import policies.ind.qprop as qprop
+import policies.ind.sw_scv as sw
 import argparse
 import torch
 import torch.nn.functional as F
@@ -29,22 +29,24 @@ class Trainer:
         cuda = params["cuda"]
         network_settings = params["network_settings"]
 
-        self.actor = qprop.Actor(state_dim, hidden_dim, action_dim)
-        self.target_actor = qprop.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = qprop.Critic(state_dim+action_dim, hidden_dim, 1)
-        self.target_critic = qprop.Critic(state_dim+action_dim, hidden_dim, 1)
-        self.memory = qprop.ReplayMemory(1000000)
-        self.agent = qprop.QPROP(self.actor, 
-                                self.critic, 
-                                self.memory, 
-                                self.target_actor, 
-                                self.target_critic,
+        actor = utils.Actor(state_dim, hidden_dim, action_dim)
+        target_actor = utils.Actor(state_dim, hidden_dim, action_dim)
+        critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
+        target_critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
+        self.memory = utils.ReplayMemory(1000000)
+        self.agent = sw.Sleepwalk(actor, 
+                                critic,
+                                target_actor, 
+                                target_critic,
                                 network_settings,
                                 GPU=cuda)
 
         self.noise = utils.OUNoise(action_dim)
         self.noise.set_seed(self.seed)
-        self.memory = qprop.ReplayMemory(self.mem_len)
+        self.memory = utils.ReplayMemory(self.mem_len)
+
+        self.pol_opt = torch.optim.Adam(actor.parameters())
+        self.crit_opt = torch.optim.Adam(critic.parameters())
 
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
@@ -98,8 +100,8 @@ class Trainer:
                 if ep >= self.warmup:
                     for i in range(3):               
                         transitions = self.memory.sample(self.batch_size)
-                        batch = qprop.Transition(*zip(*transitions))
-                        self.agent.online_update(batch)
+                        batch = utils.Transition(*zip(*transitions))
+                        self.agent.online_update(self.crit_opt, batch)
                 if done:
                     break
                 state = next_state
@@ -112,7 +114,7 @@ class Trainer:
                         "actions": actions,
                         "rewards": rewards,
                         "log_probs": log_probs}
-            self.agent.offline_update(trajectory)
+            self.agent.offline_update(self.pol_opt, trajectory)
             interval_avg.append(running_reward)
             avg = (avg*(ep-1)+running_reward)/ep   
             if ep % self.log_interval == 0:

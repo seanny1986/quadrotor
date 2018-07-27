@@ -27,10 +27,10 @@ class Trainer:
 
         network_settings = params["network_settings"]
 
-        self.pi = ppo.Actor(state_dim, hidden_dim, action_dim)
-        self.beta = ppo.Actor(state_dim, hidden_dim, action_dim)
-        self.critic = ppo.Critic(state_dim, hidden_dim, 1)
-        self.agent = ppo.PPO(self.pi, self.beta, self.critic, network_settings, GPU=cuda)
+        pi = utils.Actor(state_dim, hidden_dim, action_dim)
+        beta = utils.Actor(state_dim, hidden_dim, action_dim)
+        critic = utils.Critic(state_dim, hidden_dim, 1)
+        self.agent = ppo.PPO(pi, beta, critic, network_settings, GPU=cuda)
 
         self.optim = torch.optim.Adam(self.agent.parameters())
 

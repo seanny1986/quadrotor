@@ -10,6 +10,8 @@ class Quadrotor:
     """
     
     def __init__(self, params):
+
+        # load aircraft parameters. See config file for a description of these.
         self.mass = params["mass"]
         self.prop_radius = params["prop_radius"]
         self.n_motors = params["n_motors"]
@@ -26,8 +28,7 @@ class Quadrotor:
         self.g = params["g"]
         self.dt = params["dt"]
 
-        # inertia tensor. Our aircraft is symmetric along x and y axes, so this is a diagonal matrix
-        # only.
+        # inertia tensor. Our aircraft is symmetric along x and y axes, so this is a diagonal matrix.
         self.J = np.array([[self.Jxx, 0., 0.],
                             [0., self.Jyy, 0.],
                             [0., 0., self.Jzz]])
@@ -39,8 +40,7 @@ class Quadrotor:
                             [-self.g]])
         
         # all rotation math handled by quaternions. This is secretly part of the state space. State
-        # vector is [xyz, q, uvw, pqr]^T, all in a single column vector. The reason for this is that
-        # we want to use the RK4 routine to 
+        # vector is [xyz, q, uvw, pqr]^T, all in a single column vector.
         self.state = np.array([[0.],
                             [0.],
                             [0.],
@@ -62,7 +62,9 @@ class Quadrotor:
         self.u_to_rpm = np.linalg.inv(np.array([[self.kt, self.kt, self.kt, self.kt],
                                                 [0., self.l*self.kt, 0., -self.l*self.kt],
                                                 [-self.l*self.kt, 0., self.l*self.kt, 0.],
-                                                [-self.kq, self.kq, -self.kq, self.kq]]))      
+                                                [-self.kq, self.kq, -self.kq, self.kq]]))
+        
+        # this matrix lets us calculate the 6x1 forces and moments vector using the rpm.
         self.rpm_to_u = np.array([[0., 0., 0., 0.],
                                 [0., 0., 0., 0.],
                                 [self.kt, self.kt, self.kt, self.kt],
@@ -74,8 +76,12 @@ class Quadrotor:
         self.hov_rpm = sqrt((self.mass*self.g)/self.n_motors/self.kt)
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
         self.max_thrust = self.kt*self.max_rpm
+
+        # rough velocity and rotation limits. 
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
+        
+        # preallocate memory here
         self.zero = np.array([[0.]])
         self.zero_array = np.array([[0.],[0.],[0.]])
         self.inv_quat = np.array([[1],[-1],[-1],[-1]])
@@ -139,11 +145,11 @@ class Quadrotor:
             the full multiplication here, and instead return Q(p).  
         """
 
-        p0, p1, p2, p3 = p[0,0], p[1,0], p[2,0], p[3,0]
+        p0, p1, p2, p3 = p
         return np.array([[p0, -p1, -p2, -p3],
                         [p1, p0, -p3, p2],
                         [p2, p3, p0, -p1],
-                        [p3, -p2, p1, p0]])
+                        [p3, -p2, p1, p0]]).reshape(4,-1)
 
     def q_conj(self, q):
         """
@@ -169,7 +175,7 @@ class Quadrotor:
         psi = atan2(2.*(q0*q3+q1*q2),q0**2+q1**2-q2**2-q3**2)
         return np.array([[phi],
                         [theta],
-                        [psi]])
+                        [psi]]).reshape(3,-1)
     
     def euler_to_q(self, zeta):
         """
@@ -185,39 +191,39 @@ class Quadrotor:
         return np.array([[q0],
                         [q1],
                         [q2],
-                        [q3]])
+                        [q3]]).reshape(4,-1)
 
     def aero_forces(self, uvw):
         """
             Calculates drag in the body xyz axis (E-N-U) due to linear velocity
         """
 
-        mag = np.linalg.norm(uvw)
-        if mag == 0:
-            return np.array([[0.],
+        mag = np.linalg.norm(uvw)               # get vector norm
+        if mag == 0:                            # don't want to divide by zero
+            return np.array([[0.],              # if velocity is zero, drag is zero
                             [0.],
                             [0.]])
         else:
-            unit = uvw/mag
-            return -(self.kd*mag**2)*unit
+            unit = uvw/mag                      # normalize velocity vector
+            return -(self.kd*mag**2)*unit       # add drag force in negative uvw dir
 
     def aero_moments(self, pqr):
         """
             Models aero moments about the body xyz axis (E-N-U) as a function of angular velocity
         """
 
-        mag = np.linalg.norm(pqr)
-        if mag == 0:
-            return np.array([[0.],
+        mag = np.linalg.norm(pqr)               # get vector norm
+        if mag == 0:                            # don't want to divide by zero
+            return np.array([[0.],              # if velocity is zero, drag is zero
                             [0.],
                             [0.]])
         else:
-            unit = pqr/mag
-            return -(self.km*mag**2)*unit
+            unit = pqr/mag                      # normalize velocity vector
+            return -(self.km*mag**2)*unit       # add aerodynamic moment in negative pqr dir
 
     def RK4(self, f):
         """
-            RK4 for ODE integration. Argument f is a function f(t, y), where y can be a
+            RK4 for ODE integration. Argument f is a function f(y), where y can be a
             multidimensional vector [y0, y1, y2, ..., yn]^T. If y is a vector, it should
             be passed as a numpy array.
         """
@@ -233,6 +239,7 @@ class Quadrotor:
 	            )(dt*f(y))
     
     def solve_accels(self, y):
+
         # thrust forces and moments, aerodynamic forces and moments
         fnm = self.rpm_to_u.dot(self.rpm**2)
         ft = fnm[0:3].reshape((3,1))
@@ -240,6 +247,7 @@ class Quadrotor:
         fa = self.aero_forces(y[7:10])
         ma = self.aero_moments(y[10:13])        
         
+        # sum forces and moments
         forces = ft+fa
         moments = mt+ma
 
@@ -255,11 +263,12 @@ class Quadrotor:
         uvw_dot = forces/self.mass+g_b-np.cross(y[10:13], y[7:10], axis=0)
         pqr_dot = np.linalg.inv(self.J).dot(moments-np.cross(y[10:13], H, axis=0))
 
-        # quaternion time derivative
+        # quaternion time derivative. Lots of vstack calls here which slows things down.
         q_dot = -0.5*self.q_mult(np.vstack([self.zero, y[10:13]])).dot(y[3:7])
         
         # velocity in the xyz plane (rotated velocity from body to inertial frame)
         xyz_dot = self.q_mult(Q_inv).dot(self.q_mult(np.vstack([self.zero, y[7:10]])).dot(y[3:7]))[1:]
+        
         return np.vstack([xyz_dot, q_dot, uvw_dot, pqr_dot])
 
     def step(self, control_signal, rpm_commands=True):
@@ -285,6 +294,7 @@ class Quadrotor:
             rpm_c = control_signal
             rpm_c = np.clip(rpm_c, 0., self.max_rpm)
         
+        # motor response modeled as first order linear differential equation. Step forward by dt
         rpm_err = self.rpm-rpm_c
         w_dot = -self.kw*rpm_err
         self.rpm += w_dot*self.dt

@@ -10,8 +10,8 @@ from collections import deque
     Implements policy network class for the cross-entropy method. This should be used as a sanity
     check and benchmark for other methods, since CEM is usually embarrassingly effective.
 
-    Credits to OpenAI for most of this code. Minor changes were made to fit in with the conventions
-    used in other policy search methods in ths library, but other than that, it's mostly intact.
+    Credits to Udacity for most of this code. Minor changes were made to fit in with the conventions
+    used in other policy search methods in this library, but other than that, it's mostly intact.
 """
 
 class CEM(nn.Module):

@@ -7,65 +7,37 @@ from torch.distributions import Normal
     PyTorch implementation of Proximal Policy Optimization (Schulman, 2017).
 """
 
-class Actor(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(Actor,self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-
-        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.mu = torch.nn.Linear(hidden_dim, output_dim)
-        self.logvar = torch.nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        x = F.tanh(self.l1(x))
-        mu = self.mu(x)
-        logvar = self.logvar(x)
-        return mu, logvar 
-
-class Critic(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(Critic,self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-
-        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.v = torch.nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        x = F.tanh(self.l1(x))
-        value = self.v(x)
-        return value
-
 class PPO(torch.nn.Module):
     def __init__(self, pi, beta, critic, network_settings, GPU=True):
         super(PPO,self).__init__()
-        self.pi = pi
-        self.critic = critic
-        self.beta = beta
+        self.__pi = pi
+        self.__beta = beta
+        self.__critic = critic
 
-        self.gamma = network_settings["gamma"]
-        self.lmbd = network_settings["lambda"]
-        self.eps = network_settings["eps"]
+        self.__gamma = network_settings["gamma"]
+        self.__lmbd = network_settings["lambda"]
+        self.__eps = network_settings["eps"]
     
-        self.GPU = GPU
+        self.__GPU = GPU
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
-            self.pi = self.pi.cuda()
-            self.beta = self.beta.cuda()
-            self.critic = self.critic.cuda()
+            self.__pi = self.__pi.cuda()
+            self.__beta = self.__beta.cuda()
+            self.__critic = self.__critic.cuda()
         else:
             self.Tensor = torch.Tensor
 
     def select_action(self, x):
-        mu, logvar = self.beta(x)
-        a = Normal(mu, logvar.exp().sqrt())
+        mu, logvar = self.__beta(x)
+        min_sigma = torch.ones(logvar.size())*1e-4
+        if self.__GPU:
+            min_sigma = min_sigma.cuda()
+        std = logvar.exp().sqrt()+min_sigma
+        a = Normal(mu, std)
         action = a.sample()
-        log_prob = a.log_prob(action)
-        return F.sigmoid(action).pow(0.5), log_prob
+        logprob = a.log_prob(action)
+        return F.sigmoid(action).pow(0.5), logprob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -81,27 +53,27 @@ class PPO(torch.nn.Module):
         # compute advantage estimates
         ret = []
         gae = 0
-        value = self.critic(state)
-        value_list = value.squeeze(1).tolist()
-        next_value = self.critic(next_state).squeeze(1).tolist()
+        value = self.__critic(state)
+        value_list = value.squeeze(1)
+        next_value = self.__critic(next_state).squeeze(1)
         for r, v0, v1 in list(zip(reward, value_list, next_value))[::-1]:
-            delta = r+self.gamma*v1-v0
-            gae = delta+self.gamma*self.lmbd*gae
+            delta = r+self.__gamma*v1-v0
+            gae = delta+self.__gamma*self.__lmbd*gae
             ret.insert(0, self.Tensor([gae]))
         ret = torch.stack(ret)
         advantage = ret-value
-        a_hat = (advantage-advantage.mean())/advantage.std()
+        a_hat = (advantage-advantage.mean())/(advantage.std()+1e-7)
 
         # compute probability ratio
-        mu_pi, logvar_pi = self.pi(state)
+        mu_pi, logvar_pi = self.__pi(state)
         dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
         pi_log_prob = dist_pi.log_prob(action)
         ratio = (pi_log_prob-beta_log_prob.detach()).sum(dim=1, keepdim=True).exp()
         optim.zero_grad()
-        actor_loss = -torch.min(ratio*a_hat, torch.clamp(ratio, 1-self.eps, 1+self.eps)*a_hat).sum()
+        actor_loss = -torch.min(ratio*a_hat, torch.clamp(ratio, 1-self.__eps, 1+self.__eps)*a_hat).sum()
         critic_loss = advantage.pow(2).sum()
         loss = actor_loss+critic_loss
-        self.hard_update(self.beta, self.pi)
+        self.hard_update(self.__beta, self.__pi)
         loss.backward()
         optim.step()
 

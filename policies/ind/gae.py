@@ -8,65 +8,34 @@ from torch.distributions import Normal
     Gaussian actions (i.e. diagonal covariance matrix)
 """
 
-class Actor(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(Actor,self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-
-        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.mu = torch.nn.Linear(hidden_dim, output_dim)
-        self.logvar = torch.nn.Linear(hidden_dim, output_dim)
-
-        self.GPU = False
-
-    def forward(self, x):
-        x = F.tanh(self.l1(x))
-        mu = self.mu(x)
-        logvar = self.logvar(x)
-        return mu, logvar 
-
-class Critic(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(Critic,self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-
-        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.v = torch.nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        x = F.tanh(self.l1(x))
-        value = self.v(x)
-        return value
-
 class GAE(torch.nn.Module):
     def __init__(self, actor, critic, network_settings, GPU=True):
         super(GAE,self).__init__()
-        self.actor = actor
-        self.critic = critic
+        self.__actor = actor
+        self.__critic = critic
 
-        self.gamma = network_settings["gamma"]
-        self.lmbd = network_settings["lambda"]
+        self.__gamma = network_settings["gamma"]
+        self.__lmbd = network_settings["lambda"]
     
-        self.GPU = GPU
+        self.__GPU = GPU
 
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
-            self.actor = self.actor.cuda()
-            actor.GPU = True
-            self.critic = self.critic.cuda()
+            self.__actor = self.__actor.cuda()
+            self.__critic = self.__critic.cuda()
         else:
             self.Tensor = torch.Tensor
 
     def select_action(self, x):
-        mu, logvar = self.actor(x)
-        a = Normal(mu, logvar.exp().sqrt())
-        action = F.tanh(a.sample())
-        log_prob = a.log_prob(action)
-        return action, log_prob
+        mu, logvar = self.__actor(x)
+        min_sigma = torch.ones(logvar.size())*1e-4
+        if self.__GPU:
+            min_sigma = min_sigma.cuda()
+        std = logvar.exp().sqrt()+min_sigma
+        a = Normal(mu, std)
+        action = a.sample()
+        logprob = a.log_prob(action)
+        return F.sigmoid(action).pow(0.5), logprob
 
     def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
@@ -81,16 +50,16 @@ class GAE(torch.nn.Module):
         # compute advantage estimates
         ret = []
         gae = 0
-        value = self.critic(state)
-        value_list = value.squeeze(1).tolist()
-        next_value = self.critic(next_state).squeeze(1).tolist()
+        value = self.__critic(state)
+        value_list = value.squeeze(1)
+        next_value = self.__critic(next_state).squeeze(1)
         for r, v0, v1 in list(zip(reward, value_list, next_value))[::-1]:
-            delta = r+self.gamma*v1-v0
-            gae = delta+self.gamma*self.lmbd*gae
+            delta = r+self.__gamma*v1-v0
+            gae = delta+self.__gamma*self.__lmbd*gae
             ret.insert(0, self.Tensor([gae]))
         ret = torch.stack(ret)
         advantage = ret-value
-        a_hat = (advantage-advantage.mean())/advantage.std()
+        a_hat = (advantage-advantage.mean())/(advantage.std()+1e-7)
 
         # calculate gradient and backprop
         optim.zero_grad()

@@ -44,10 +44,6 @@ def make(env_name, alg):
         params = cfg.ddpg
         import trainers.ddpg as ddpg_trainer
         return ddpg_trainer.Trainer(env_name, params)
-    if alg == "eddpg":
-        params = cfg.eddpg
-        import trainers.eddpg as eddpg_trainer
-        return eddpg_trainer.Trainer(env_name, params)
     if alg == "expected":
         params = cfg.expected
         import trainers.expected as expected_trainer
@@ -68,10 +64,10 @@ def make(env_name, alg):
         params = cfg.ppo
         import trainers.ppo as ppo_trainer
         return ppo_trainer.Trainer(env_name, params)
-    if alg == "qprop":
-        params = cfg.qprop
-        import trainers.qprop as qprop_trainer
-        return qprop_trainer.Trainer(env_name, params)
+    if alg == "sw_scv":
+        params = cfg.sw
+        import trainers.sw_scv as sw_trainer
+        return sw_trainer.Trainer(env_name, params)
     if alg == "trpo":
         params = cfg.trpo
         import trainers.trpo as trpo_trainer

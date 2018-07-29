@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "hover",
-        "algs": ["ppo"]
+        "algs": ["offpac"]
         }
 
 cem = { 
@@ -43,7 +43,7 @@ ddpg = {
         "ou_scale": 0.75,
         "ou_mu": 0.2,
         "ou_sigma": 0.15,
-        "render": True,
+        "render": False,
         "save": False,
         "cuda": False,
         "logging": True
@@ -79,6 +79,7 @@ gae = {
                                 "gamma": 0.995,
                                 "lambda": 0.92
                                 },
+        "heads": 4,
         "hidden_dim": 32,
         "iterations": 10000,
         "seed": 343,
@@ -111,6 +112,7 @@ ppo = {
                                 "lambda": 0.92,
                                 "eps": 0.2
                                 },
+        "heads": 4,
         "hidden_dim": 32,
         "iterations": 10000,
         "seed": 343,
@@ -153,7 +155,7 @@ trpo = {
         "warmup": 50,
         "batch_size": 64,
         "seed": 343,
-        "render": True,
+        "render": False,
         "save": False,
         "cuda": False,
         "logging": True

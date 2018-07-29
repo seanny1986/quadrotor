@@ -31,7 +31,7 @@ class Trainer:
         beta = ppo.ActorCritic(state_dim, hidden_dim, action_dim)
         self.agent = ppo.PPO(pi, beta, network_settings, GPU=cuda)
 
-        self.optim = torch.optim.Adam(self.agent.parameters())
+        self.optim = torch.optim.Adam(pi.parameters())
 
         if cuda:
             self.Tensor = torch.cuda.FloatTensor

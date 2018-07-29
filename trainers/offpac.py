@@ -26,11 +26,10 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
         network_settings = params["network_settings"]
-        pi = utils.Actor(state_dim, hidden_dim, action_dim)
-        beta = utils.Actor(state_dim, hidden_dim, action_dim)
-        critic = utils.Critic(state_dim, hidden_dim, 1)
-        self.agent = offpac.OFFPAC(pi, beta, critic, network_settings, GPU=cuda)
-        self.optim = torch.optim.Adam(self.agent.parameters())
+        pi = offpac.ActorCritic(state_dim, hidden_dim, action_dim)
+        beta = offpac.ActorCritic(state_dim, hidden_dim, action_dim)
+        self.agent = offpac.OFFPAC(pi, beta, network_settings, GPU=cuda)
+        self.optim = torch.optim.Adam(pi.parameters())
 
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
@@ -64,13 +63,13 @@ class Trainer:
             a_ = []
             ns_ = []
             r_ = []
+            v_ = []
             lp_ = []
             state = self.Tensor(self.env.reset())
             if ep % self.log_interval == 0 and self.render:
                 self.env.render()
             for _ in range(self.env.H):          
-                #action, log_prob = self.agent.select_action(state)
-                action, log_prob = Variable(self.Tensor([[1., 1., 1., 1.]])), self.Tensor([1e-5])
+                action, log_prob, value = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
                 
@@ -78,10 +77,13 @@ class Trainer:
                     self.env.render()
 
                 next_state = self.Tensor(next_state)
+                reward = self.Tensor([reward])
+
                 s_.append(state[0])
                 a_.append(action[0])
                 ns_.append(next_state[0])
                 r_.append(reward)
+                v_.append(value)
                 lp_.append(log_prob[0])
                 if done:
                     break
@@ -95,6 +97,7 @@ class Trainer:
                         "actions": a_,
                         "next_states": ns_,
                         "rewards": r_,
+                        "values": v_,
                         "log_probs": lp_}
             self.agent.update(self.optim, trajectory)
             interval_avg.append(running_reward)
@@ -105,20 +108,3 @@ class Trainer:
                 interval_avg = []
                 if self.logging:
                     self.writer.writerow([ep, avg])
-                self.test_policy()
-    
-    def test_policy(self):
-        running_reward = 0
-        state = self.Tensor(self.env.reset())
-        if self.render:
-            self.env.render()
-        for _ in range(self.env.H):
-            action, _ = self.agent.select_action(state)
-            state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
-            state = self.Tensor(state)
-            running_reward += reward
-            if self.render:
-                self.env.render()
-            if done:
-                break
-        print("Test reward: {:.2f}".format(running_reward))

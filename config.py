@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "hover",
-        "algs": ["sw_scv"]
+        "algs": ["ppo"]
         }
 
 cem = { 
@@ -83,9 +83,9 @@ gae = {
         "iterations": 10000,
         "seed": 343,
         "log_interval": 10,
-        "render": True,
+        "render": False,
         "save": False,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -115,9 +115,9 @@ ppo = {
         "iterations": 10000,
         "seed": 343,
         "log_interval": 10,
-        "render": True,
+        "render": False,
         "save": False,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 

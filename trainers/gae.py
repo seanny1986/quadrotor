@@ -28,10 +28,7 @@ class Trainer:
         cuda = params["cuda"]
         network_settings = params["network_settings"]
 
-        
-        actor = utils.Actor(state_dim, hidden_dim, action_dim)
-        critic = utils.Critic(state_dim, hidden_dim, 1)
-        self.agent = gae.GAE(actor, critic, network_settings, GPU=cuda)
+        self.agent = gae.GAE(state_dim, hidden_dim, action_dim, network_settings, GPU=cuda)
         self.optim = torch.optim.Adam(self.agent.parameters())
 
         if cuda:
@@ -66,24 +63,28 @@ class Trainer:
             a_ = []
             ns_ = []
             r_ = []
+            v_ = []
             lp_ = []
             state = self.Tensor(self.env.reset())
             if ep % self.log_interval == 0 and self.render:
                 self.env.render()
 
             for _ in range(self.env.H):          
-                action, log_prob = self.agent.select_action(state)
-                next_state, reward, done, info = self.env.step(self.trim+action[0].cpu().numpy()*50)
+                action, log_prob, value = self.agent.select_action(state)
+                next_state, reward, done, _ = self.env.step(self.trim+action[0].cpu().numpy()*50)
                 running_reward += reward
                 
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
 
                 next_state = self.Tensor(next_state)
+                reward = self.Tensor([reward])
+
                 s_.append(state[0])
                 a_.append(action[0])
                 ns_.append(next_state[0])
                 r_.append(reward)
+                v_.append(value[0])
                 lp_.append(log_prob[0])
                 if done:
                     break
@@ -97,6 +98,7 @@ class Trainer:
                         "actions": a_,
                         "next_states": ns_,
                         "rewards": r_,
+                        "values": v_,
                         "log_probs": lp_}
             self.agent.update(self.optim, trajectory)
             interval_avg.append(running_reward)

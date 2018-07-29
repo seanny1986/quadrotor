@@ -27,10 +27,9 @@ class Trainer:
 
         network_settings = params["network_settings"]
 
-        pi = utils.Actor(state_dim, hidden_dim, action_dim)
-        beta = utils.Actor(state_dim, hidden_dim, action_dim)
-        critic = utils.Critic(state_dim, hidden_dim, 1)
-        self.agent = ppo.PPO(pi, beta, critic, network_settings, GPU=cuda)
+        pi = ppo.ActorCritic(state_dim, hidden_dim, action_dim)
+        beta = ppo.ActorCritic(state_dim, hidden_dim, action_dim)
+        self.agent = ppo.PPO(pi, beta, network_settings, GPU=cuda)
 
         self.optim = torch.optim.Adam(self.agent.parameters())
 
@@ -66,12 +65,13 @@ class Trainer:
             a_ = []
             ns_ = []
             r_ = []
+            v_ = []
             lp_ = []
             state = self.Tensor(self.env.reset())
             if ep % self.log_interval == 0 and self.render:
                 self.env.render()
             for _ in range(self.env.H):            
-                action, log_prob = self.agent.select_action(state)
+                action, log_prob, value = self.agent.select_action(state)
                 next_state, reward, done, _ = self.env.step(action[0].cpu().numpy()*self.action_bound)
                 running_reward += reward
                 
@@ -79,10 +79,13 @@ class Trainer:
                     self.env.render()
 
                 next_state = self.Tensor(next_state)
+                reward = self.Tensor([reward])
+
                 s_.append(state[0])
                 a_.append(action[0])
                 ns_.append(next_state[0])
                 r_.append(reward)
+                v_.append(value[0])
                 lp_.append(log_prob[0])
                 if done:
                     break
@@ -96,13 +99,14 @@ class Trainer:
                         "actions": a_,
                         "next_states": ns_,
                         "rewards": r_,
+                        "values": v_,
                         "log_probs": lp_}
             self.agent.update(self.optim, trajectory)
             interval_avg.append(running_reward)
-            avg = (avg*(ep-1)+running_reward)/ep   
+            avg = (avg*(ep-1)+running_reward)/ep
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
-                    self.writer.writerow([ep, avg]) 
+                    self.writer.writerow([ep, avg])

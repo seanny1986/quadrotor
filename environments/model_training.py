@@ -41,13 +41,9 @@ class Environment:
         self.uvw_bound = 10
         self.pqr_bound = 1.
 
-    def init_rendering(self):
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure("Model Training")
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+        self.fig = None
+        self.axis3d = None
+        self.v = None
 
     def set_nondeterministic_s0(self):
         self.deterministic_s0 = False
@@ -77,6 +73,7 @@ class Environment:
         else:
             xyz, zeta, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
+        self.iris.set_rpm(np.array(self.trim))
         tmp = zeta.T.tolist()[0]
         sinx = [sin(x) for x in tmp]
         cosx = [cos(x) for x in tmp]
@@ -90,6 +87,14 @@ class Environment:
         return self.iris.get_state()
     
     def render(self):
+        if self.fig is None:
+            # rendering parameters
+            pl.close("all")
+            pl.ion()
+            self.fig = pl.figure("Model Training")
+            self.axis3d = self.fig.add_subplot(111, projection='3d')
+            self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+            
         pl.figure("Model Training")
         self.axis3d.cla()
         self.vis.draw3d_quat(self.axis3d)

@@ -16,13 +16,13 @@ class Environment:
         
         # environment parameters
         self.deterministic_s0 = True
-        self.goal = self.generate_goal(1.5)
+        self.goal = self.generate_goal(0.5)
         self.goal_thresh = 0.1
         self.t = 0
         self.T = 2.5
         self.r = 1.5
-        self.action_space = 4
-        self.observation_space = 15+self.action_space+3
+        self.action_space = np.zeros((4,))
+        self.observation_space = np.zeros((22,))
 
         # simulation parameters
         self.params = cfg.params
@@ -41,16 +41,14 @@ class Environment:
         self.uvw_bound = 10
         self.pqr_bound = 1.
 
-        self.vec = None
-        self.dist_norm = None
-    
-    def init_rendering(self):
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure("Flying Skills")
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+        xyz, _, _, _ = self.iris.get_state()
+
+        self.vec = xyz-self.goal
+        self.dist_norm = np.linalg.norm(self.vec)
+
+        self.fig = None
+        self.axis3d = None
+        self.v = None
 
     def set_nondeterministic_s0(self):
         self.deterministic_s0 = False
@@ -66,14 +64,14 @@ class Environment:
     def reward(self, state, action):
         xyz, _, _, _ = state
         curr_dist = xyz-self.goal
-        self.dist_norm = np.linalg.norm(curr_dist)
-        dist_rew = 100*(curr_dist-self.vec).mean()
+        curr_dist_norm = np.linalg.norm(curr_dist)
+        dist_rew = 100*(curr_dist_norm-self.dist_norm)
+        self.dist_norm = curr_dist_norm
         self.vec = curr_dist
         ctrl_rew = -np.sum(((action/self.action_bound[1])**2))
         cmplt_rew = 0.
         if self.dist_norm < self.goal_thresh:
             cmplt_rew = 10.
-            self.goal_achieved = True
         time_rew = 0.1
         return dist_rew, ctrl_rew, cmplt_rew, time_rew
 
@@ -81,10 +79,10 @@ class Environment:
         xyz, zeta = pos
         mask1 = 0#zeta > pi/2
         mask2 = 0#zeta < -pi/2
-        mask3 = np.abs(xyz) > 6
+        mask3 = np.abs(xyz) > 3
         if np.sum(mask1) > 0 or np.sum(mask2) > 0 or np.sum(mask3) > 0:
             return True
-        if self.goal_achieved:
+        elif self.t == self.T:
             return True
         else:
             return False
@@ -112,6 +110,7 @@ class Environment:
         else:
             xyz, zeta, uvw, pqr = self.generate_s0()
             self.iris.set_state(xyz, zeta, uvw, pqr)
+        self.iris.set_rpm(np.array(self.trim))
         self.goal = self.generate_goal(self.r)
         self.vec = xyz-self.goal
         tmp = zeta.T.tolist()[0]
@@ -132,13 +131,21 @@ class Environment:
                         [z]])
     
     def render(self):
+        if self.fig is None:
+            # rendering parameters
+            pl.close("all")
+            pl.ion()
+            self.fig = pl.figure("Flying Skills")
+            self.axis3d = self.fig.add_subplot(111, projection='3d')
+            self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+            
         pl.figure("Flying Skills")
         self.axis3d.cla()
         self.vis.draw3d_quat(self.axis3d)
         self.vis.draw_goal(self.axis3d, self.goal)
         self.axis3d.set_xlim(-3, 3)
         self.axis3d.set_ylim(-3, 3)
-        self.axis3d.set_zlim(0, 6)
+        self.axis3d.set_zlim(-3, 3)
         self.axis3d.set_xlabel('West/East [m]')
         self.axis3d.set_ylabel('South/North [m]')
         self.axis3d.set_zlabel('Down/Up [m]')

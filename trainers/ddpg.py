@@ -26,8 +26,8 @@ class Trainer:
         
         # initialize DDPG agent using experiment parameters from config file
         self.action_bound = self.env.action_bound[1]
-        state_dim = self.env.observation_space
-        action_dim = self.env.action_space
+        state_dim = self.env.observation_space.shape[0]
+        action_dim = self.env.action_space.shape[0]
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
         network_settings = params["network_settings"]
@@ -62,9 +62,6 @@ class Trainer:
             self.agent = self.agent.cuda()
         else:
             self.Tensor = torch.Tensor
-        
-        if self.render:
-            self.env.init_rendering()
 
         # initialize experiment logging. This wipes any previous file with the same name
         self.logging = params["logging"]

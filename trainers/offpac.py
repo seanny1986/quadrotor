@@ -37,9 +37,6 @@ class Trainer:
         else:
             self.Tensor = torch.Tensor
         
-        if self.render:
-            self.env.init_rendering()
-        
         self.best = None
 
         # initialize experiment logging

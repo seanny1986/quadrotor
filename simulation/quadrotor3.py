@@ -54,9 +54,6 @@ class Quadrotor:
                             [0.],
                             [0.],
                             [0.]])
-        
-        # action space
-        self.rpm = np.array([0.0, 0., 0., 0.])
 
         # we use this matrix to convert from a thrust/moment input to an rpm input.
         self.u_to_rpm = np.linalg.inv(np.array([[self.kt, self.kt, self.kt, self.kt],
@@ -77,6 +74,9 @@ class Quadrotor:
         self.max_rpm = sqrt(1./self.hov_p)*self.hov_rpm
         self.max_thrust = self.kt*self.max_rpm
 
+        # action space
+        self.rpm = np.array([self.hov_rpm, self.hov_rpm, self.hov_rpm, self.hov_rpm])
+
         # rough velocity and rotation limits. 
         self.terminal_velocity = sqrt((self.max_thrust+self.mass*self.g)/self.kd)
         self.terminal_rotation = sqrt(self.l*self.max_thrust/self.km)
@@ -93,6 +93,13 @@ class Quadrotor:
 
         q = self.euler_to_q(zeta)
         self.state = np.vstack([xyz, q, uvw, pqr])
+    
+    def set_rpm(self, rpm):
+        """
+            Sets current RPM value
+        """
+        
+        self.rpm = rpm
     
     def get_state(self):
         """
@@ -125,7 +132,7 @@ class Quadrotor:
                         [0.],
                         [0.]])
         zeta = self.q_to_euler(q)
-        self.rpm = np.array([0., 0., 0., 0.])
+        self.rpm = np.array([self.hov_rpm, self.hov_rpm, self.hov_rpm, self.hov_rpm])
         self.state = np.vstack([xyz, q, uvw, pqr])
         self.t = 0
         return xyz, zeta, uvw, pqr
@@ -292,12 +299,11 @@ class Quadrotor:
             rpm_c = (rpm_sq**0.5).flatten()
         else:
             rpm_c = control_signal
-            rpm_c = np.clip(rpm_c, 0., self.max_rpm)
         
-        # motor response modeled as first order linear differential equation. Step forward by dt
-        rpm_err = self.rpm-rpm_c
-        w_dot = -self.kw*rpm_err
+        # motor response modeled as first order linear differential equation. Step forward by dt and clip
+        w_dot = -self.kw*(self.rpm-rpm_c)
         self.rpm += w_dot*self.dt
+        self.rpm = np.clip(self.rpm, 0., self.max_rpm)
 
         # step simulation forward
         self.state += self.RK4(self.solve_accels)(self.state, self.dt)

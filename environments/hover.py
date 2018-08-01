@@ -18,7 +18,7 @@ class Environment:
         # environment parameters
         self.goal_xyz = np.array([[0.],
                                 [0.],
-                                [1.5]])
+                                [0.]])
         self.goal_zeta_sin = np.sin(np.array([[0.],
                                             [0.],
                                             [0.]]))
@@ -34,8 +34,8 @@ class Environment:
 
         self.t = 0
         self.T = 5
-        self.action_space = 4
-        self.observation_space = 15+self.action_space+15
+        self.action_space = np.zeros((4,))
+        self.observation_space = np.zeros((34,))
 
         # simulation parameters
         self.params = cfg.params
@@ -63,14 +63,9 @@ class Environment:
         self.vel_norm = np.linalg.norm(self.vec_uvw)
         self.ang_norm = np.linalg.norm(self.vec_pqr)
 
-    def init_rendering(self):
-
-        # rendering parameters
-        pl.close("all")
-        pl.ion()
-        self.fig = pl.figure("Hover")
-        self.axis3d = self.fig.add_subplot(111, projection='3d')
-        self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+        self.fig = None
+        self.axis3d = None
+        self.v = None     
 
     def reward(self, state, action):
         xyz, zeta, uvw, pqr = state
@@ -93,9 +88,9 @@ class Environment:
 
         # agent gets a negative reward based on how far away it is from the desired goal state
         dist_rew = -100*(dist_hat)
-        att_rew = -1*((att_hat_sin-self.att_norm_sin)+(att_hat_cos-self.att_norm_cos))
-        vel_rew = -1*(vel_hat-self.vel_norm)
-        ang_rew = -1*(ang_hat-self.ang_norm)
+        att_rew = -1*(att_hat_sin+att_hat_cos)
+        vel_rew = -1*(vel_hat)
+        ang_rew = -1*(ang_hat)
         
         self.dist_norm = dist_hat
         self.att_norm_sin = att_hat_sin
@@ -147,6 +142,7 @@ class Environment:
     def reset(self):
         self.t = 0.
         self.iris.set_state(self.goal_xyz, np.sin(self.goal_zeta_sin), self.goal_uvw, self.goal_pqr)
+        self.iris.set_rpm(np.array(self.trim))
         xyz, zeta, uvw, pqr = self.iris.get_state()
         sin_zeta = np.sin(zeta)
         cos_zeta = np.cos(zeta)
@@ -161,6 +157,14 @@ class Environment:
         return state
     
     def render(self):
+        if self.fig is None:
+            # rendering parameters
+            pl.close("all")
+            pl.ion()
+            self.fig = pl.figure("Hover")
+            self.axis3d = self.fig.add_subplot(111, projection='3d')
+            self.vis = ani.Visualization(self.iris, 6, quaternion=True)
+            
         pl.figure("Hover")
         self.axis3d.cla()
         self.vis.draw3d_quat(self.axis3d)

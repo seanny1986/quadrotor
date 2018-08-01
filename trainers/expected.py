@@ -22,9 +22,6 @@ class Trainer:
         self.log_interval = params["log_interval"]
         self.save = params["save"]
         
-        if self.render:
-            self.env.init_rendering()
-        
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:

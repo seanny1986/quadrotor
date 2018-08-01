@@ -242,8 +242,27 @@ class Actor(torch.nn.Module):
         x = F.tanh(self.__l1(x))
         mu = self.__mu(x)
         logvar = self.__logvar(x)
-        return mu, logvar 
+        return mu, logvar
 
+class ActorLSTM(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(ActorLSTM,self).__init__()
+        self.__input_dim = input_dim
+        self.__hidden_dim = hidden_dim
+        self.__output_dim = output_dim
+
+        self.__l1 = torch.nn.LSTMCell(input_dim, hidden_dim)
+        self.__mu = torch.nn.Linear(hidden_dim, output_dim)
+        self.__logvar = torch.nn.Linear(hidden_dim, output_dim)
+
+
+    def forward(self, inputs):
+        x, (hx, cx) = inputs
+        x = x.view(x.size(0), -1)
+        hx, cx = self.__l1(x, (hx, cx))
+        mu = self.__mu(hx)
+        logvar = self.__logvar(hx)
+        return mu, logvar, (hx, cx)
 
 class Critic(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):

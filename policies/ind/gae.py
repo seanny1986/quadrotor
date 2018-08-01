@@ -49,31 +49,35 @@ class GAE(torch.nn.Module):
             target_param.data.copy_(param.data)
 
     def update(self, optim, trajectory):
-        state = torch.stack(trajectory["states"]).float()
-        log_prob = torch.stack(trajectory["log_probs"]).float()
-        reward = torch.stack(trajectory["rewards"]).float()
-        value = torch.stack(trajectory["values"]).float()
-        next_state = torch.stack(trajectory["next_states"]).float()
+        log_probs = torch.stack(trajectory["log_probs"]).float()
+        rewards = torch.stack(trajectory["rewards"]).float()
+        values = torch.stack(trajectory["values"]).float()
+        masks = torch.stack(trajectory["dones"])
 
         # compute advantage estimates
-        ret = []
-        gae = 0
-        _, _, next_value = self.forward(next_state)
-        next_value = next_value.squeeze(1).detach()
-        for r, v0, v1 in list(zip(reward, value, next_value))[::-1]:
-            delta = r+self.__gamma*v1-v0
-            gae = delta+self.__gamma*self.__lmbd*gae
-            ret.insert(0, self.Tensor([gae]))
-        ret = torch.stack(ret)
-        advantage = ret-value
-        a_hat = (advantage-advantage.mean())/(advantage.std()+1e-7)
+        returns = self.Tensor(rewards.size(0),1)
+        deltas = self.Tensor(rewards.size(0),1)
+        advantages = self.Tensor(rewards.size(0),1)
+        prev_return = 0
+        prev_value = 0
+        prev_advantage = 0
+        for i in reversed(range(rewards.size(0))):
+            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
+            advantages[i] = deltas[i]+self.__gamma*self.__lmbd*prev_advantage*masks[i]
+            prev_return = returns[i, 0]
+            prev_value = values.data[i, 0]
+            prev_advantage = advantages[i, 0]
+        
+        advantages = returns-values
+        a_hat = (advantages-advantages.mean())/(advantages.std()+1e-7)
 
         # calculate gradient and backprop
         optim.zero_grad()
-        actor_loss = -(log_prob*a_hat).sum()
-        critic_loss = advantage.pow(2).sum()
+        actor_loss = -(log_probs*a_hat).mean()
+        critic_loss = advantages.pow(2).mean()
         loss = actor_loss+critic_loss
-        loss.backward()
+        loss.backward(retain_graph=True)
         optim.step()
 
         

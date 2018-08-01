@@ -109,6 +109,7 @@ class TRPO(nn.Module):
         actions = torch.Tensor(np.concatenate(batch.action, 0))
         states = torch.Tensor(batch.state)
         values = self.critic(Variable(states))
+        
         returns = torch.Tensor(actions.size(0),1)
         deltas = torch.Tensor(actions.size(0),1)
         advantages = torch.Tensor(actions.size(0),1)

@@ -27,13 +27,11 @@ class PPO(torch.nn.Module):
         super(PPO,self).__init__()
         self.__pi = pi
         self.__beta = beta
-
+        self._hard_update(self.__beta, self.__pi)
         self.__gamma = network_settings["gamma"]
         self.__lmbd = network_settings["lambda"]
         self.__eps = network_settings["eps"]
-    
         self.__GPU = GPU
-
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
             self.__pi = self.__pi.cuda()
@@ -50,43 +48,52 @@ class PPO(torch.nn.Module):
         a = Normal(mu, std)
         action = a.sample()
         logprob = a.log_prob(action)
-        return F.sigmoid(action).pow(0.5), logprob, value
+        return F.tanh(action), logprob, value
 
-    def hard_update(self, target, source):
+    def _hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
+    def set_theta_old(self):
+        self._hard_update(self.__beta, self.__pi)
+
     def update(self, optim, trajectory):
-        state = torch.stack(trajectory["states"]).float()
-        action = torch.stack(trajectory["actions"]).float()
-        beta_log_prob = torch.stack(trajectory["log_probs"]).float()
-        reward = torch.stack(trajectory["rewards"]).float()
-        value = torch.stack(trajectory["values"]).float()
-        next_state = torch.stack(trajectory["next_states"]).float()
+        states = torch.stack(trajectory["states"]).float()
+        actions = torch.stack(trajectory["actions"]).float()
+        beta_log_probs = torch.stack(trajectory["log_probs"]).float()
+        rewards = torch.stack(trajectory["rewards"]).float()
+        values = torch.stack(trajectory["values"]).float()
+        next_states = torch.stack(trajectory["next_states"]).float()
+        masks = torch.stack(trajectory["dones"])
 
         # compute advantage estimates
-        ret = []
-        gae = 0
-        _, _, next_value = self.__beta(next_state)
-        for r, v0, v1 in list(zip(reward, value, next_value))[::-1]:
-            delta = r+self.__gamma*v1-v0
-            gae = delta+self.__gamma*self.__lmbd*gae
-            ret.insert(0, self.Tensor([gae]))
-        ret = torch.stack(ret)
-        advantage = ret-value
-        a_hat = (advantage-advantage.mean())/(advantage.std()+1e-7)
+        returns = self.Tensor(states.size(0),1)
+        deltas = self.Tensor(states.size(0),1)
+        advantages = self.Tensor(states.size(0),1)
+        prev_return = 0
+        prev_value = 0
+        prev_advantage = 0
+        for i in reversed(range(rewards.size(0))):
+            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
+            advantages[i] = deltas[i]+self.__gamma*self.__lmbd*prev_advantage*masks[i]
+            prev_return = returns[i, 0]
+            prev_value = values.data[i, 0]
+            prev_advantage = advantages[i, 0]
+
+        advantages = returns-values
+        a_hat = (advantages-advantages.mean())/(advantages.std()+1e-7)
 
         # compute probability ratio
-        mu_pi, logvar_pi, _ = self.__pi(state)
+        mu_pi, logvar_pi, _ = self.__pi(states)
         dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
-        pi_log_prob = dist_pi.log_prob(action)
-        ratio = (pi_log_prob-beta_log_prob.detach()).sum(dim=1, keepdim=True).exp()
+        pi_log_probs = dist_pi.log_prob(actions)
+        ratio = (pi_log_probs-beta_log_probs.detach()).sum(dim=1, keepdim=True).exp()
         optim.zero_grad()
-        actor_loss = -torch.min(ratio*a_hat, torch.clamp(ratio, 1-self.__eps, 1+self.__eps)*a_hat).sum()
-        critic_loss = advantage.pow(2).sum()
+        actor_loss = -torch.min(ratio*a_hat, torch.clamp(ratio, 1-self.__eps, 1+self.__eps)*a_hat).mean()
+        critic_loss = advantages.pow(2).mean()
         loss = actor_loss+critic_loss
-        self.hard_update(self.__beta, self.__pi)
-        loss.backward()
+        loss.backward(retain_graph=True)
         optim.step()
 
         

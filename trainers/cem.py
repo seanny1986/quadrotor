@@ -40,9 +40,6 @@ class Trainer:
         else:
             self.Tensor = torch.Tensor
         
-        if self.render:
-            self.env.init_rendering()
-        
         # initialize experiment logging
         self.logging = params["logging"]
         if self.logging:

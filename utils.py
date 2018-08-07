@@ -177,7 +177,7 @@ class OUNoise:
         self.sigma = sigma
         self.state = np.ones(self.action_dimension)*self.mu
         self.reset()
-        self.alpha = 0.1
+        self.alpha = 0.01
 
     def reset(self):
         self.state = np.ones(self.action_dimension)*self.mu
@@ -251,18 +251,17 @@ class ActorLSTM(torch.nn.Module):
         self.__hidden_dim = hidden_dim
         self.__output_dim = output_dim
 
-        self.__l1 = torch.nn.LSTMCell(input_dim, hidden_dim)
+        self.__l1 = torch.nn.LSTM(input_dim, hidden_dim)
         self.__mu = torch.nn.Linear(hidden_dim, output_dim)
         self.__logvar = torch.nn.Linear(hidden_dim, output_dim)
 
-
     def forward(self, inputs):
-        x, (hx, cx) = inputs
+        x, hidden = inputs
         x = x.view(x.size(0), -1)
-        hx, cx = self.__l1(x, (hx, cx))
-        mu = self.__mu(hx)
-        logvar = self.__logvar(hx)
-        return mu, logvar, (hx, cx)
+        x, hidden = self.__l1(x, hidden)
+        mu = self.__mu(x)
+        logvar = self.__logvar(x)
+        return mu, logvar, hidden
 
 class Critic(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):

@@ -9,14 +9,15 @@
 """
 
 exp = { 
-        "env": "hover",
-        "algs": ["ddpg"]
+        "env": "hover-v0",
+        "algs": ["ppo"]
         }
 
 cem = { 
         "hidden_dim": 32,
         "iterations": 10000,
         "gamma": 0.99,
+        "lr": 1e-4,
         "seed": 343,
         "log_interval": 10,
         "pop_size": 32,
@@ -33,9 +34,10 @@ ddpg = {
                                 "gamma": 0.99,
                                 "tau": 0.01
                                 },
-        "hidden_dim": 32,
+        "hidden_dim": 64,
         "iterations": 10000,
         "mem_len": 1000000,
+        "lr": 1e-5,
         "seed": 343,
         "log_interval": 10,
         "warmup": 50,
@@ -49,31 +51,6 @@ ddpg = {
         "logging": True
         }
 
-expected = {
-        "iterations": 10000,
-        "seed": 343,
-        "log_interval": 10,
-        "render": True,
-        "save": False,
-        "logging": True                
-        }
-
-fmis = {
-        "network_settings": {
-                                "gamma": 0.99,
-                                "eps": 0.2,
-                                "lambda": 0.92
-                                },
-        "hidden_dim": 32,
-        "iterations": 5000,
-        "seed": 343,
-        "log_interval": 1,
-        "render": True,
-        "save": False,
-        "cuda": True,
-        "logging": True
-        }
-
 gae = {
         "network_settings": {
                                 "gamma": 0.995,
@@ -81,8 +58,9 @@ gae = {
                                 },
         "hidden_dim": 32,
         "iterations": 10000,
-        "batch_size": 5,
-        "epochs": 8,
+        "batch_size": 8,
+        "epochs": 16,
+        "lr": 1e-4,
         "seed": 343,
         "log_interval": 10,
         "render": True,
@@ -91,55 +69,22 @@ gae = {
         "logging": False
         }
 
-offpac = {
+ppo = { 
         "network_settings": {
-                                "gamma": 0.99,
-                                "lambda": 0.92,
-                                "lookback": 1
+                                "gamma": 0.995,
+                                "lambda": 0.97,
+                                "eps": 0.15
                                 },
-        "hidden_dim": 32,
-        "iterations": 50000,
+        "hidden_dim": 64,
+        "iterations": 5000,
+        "batch_size": 512,
+        "epochs":3,
+        "lr": 5e-5,
         "seed": 343,
         "log_interval": 10,
         "render": False,
         "save": False,
-        "cuda": False,
-        "logging": True
-        }
-
-ppo = { 
-        "network_settings": {
-                                "gamma": 0.99,
-                                "lambda": 0.92,
-                                "eps": 0.2
-                                },
-        "hidden_dim": 32,
-        "iterations": 10000,
-        "batch_size": 5,
-        "epochs": 16,
-        "seed": 343,
-        "log_interval": 10,
-        "render": True,
-        "save": False,
         "cuda": True,
-        "logging": True
-        }
-
-sw = {
-        "network_settings": {
-                                "gamma": 0.99,
-                                "tau": 0.01
-                                },
-        "hidden_dim": 32,
-        "iterations": 5000,
-        "mem_len": 1000000,
-        "seed": 343,
-        "log_interval": 10,
-        "warmup": 50,
-        "batch_size": 64,
-        "render": True,
-        "save": False,
-        "cuda": False,
         "logging": True
         }
 
@@ -151,13 +96,13 @@ trpo = {
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
-        "hidden_dim": 32,
+        "hidden_dim": 64,
         "iterations": 5000,
         "log_interval": 10,
         "warmup": 50,
-        "batch_size": 64,
+        "batch_size": 512,
         "seed": 343,
-        "render": False,
+        "render": True,
         "save": False,
         "cuda": False,
         "logging": True

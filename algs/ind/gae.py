@@ -87,6 +87,7 @@ class GAE(torch.nn.Module):
 class Trainer:
     def __init__(self, env_name, params):
         self.env = gym.make(env_name)
+        self.env_name = env_name
         self.params = params
         self.action_bound = self.env.action_bound[1]
         self.trim = np.array(self.env.trim)
@@ -117,7 +118,7 @@ class Trainer:
         self.logging = params["logging"]
         if self.logging:
             self.directory = os.getcwd()
-            filename = self.directory + "/data/gae.csv"
+            filename = self.directory + "/data/gae-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])

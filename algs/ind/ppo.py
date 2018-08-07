@@ -68,9 +68,9 @@ class PPO(torch.nn.Module):
         rewards = torch.stack(trajectory["rewards"]).float()
         values = torch.stack(trajectory["values"]).float()
         masks = torch.stack(trajectory["dones"])
-        returns = self.Tensor(rewards.size(0),1)
-        deltas = self.Tensor(rewards.size(0),1)
-        advantages = self.Tensor(rewards.size(0),1)
+        returns = self.Tensor(rewards.size())
+        deltas = self.Tensor(rewards.size())
+        advantages = self.Tensor(rewards.size())
         prev_return = 0
         prev_value = 0
         prev_advantage = 0
@@ -99,6 +99,7 @@ class PPO(torch.nn.Module):
 class Trainer:
     def __init__(self, env_name, params):
         self.env = gym.make(env_name)
+        self.env_name = env_name
         self.params = params
         self.iterations = params["iterations"]
         self.batch_size = params["batch_size"]
@@ -130,7 +131,7 @@ class Trainer:
         self.logging = params["logging"]
         if self.logging:
             self.directory = os.getcwd()
-            filename = self.directory + "/data/ppo.csv"
+            filename = self.directory + "/data/ppo-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
@@ -154,7 +155,7 @@ class Trainer:
                 running_reward = 0
                 for t in range(1, self.env.H+1):          
                     action, log_prob, value = self.agent.select_action(state)
-                    a = self.trim+action[0].cpu().numpy()*5
+                    a = self.trim+action.cpu().numpy()*5
                     next_state, reward, done, _ = self.env.step(a)
                     running_reward += reward
                 

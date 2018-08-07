@@ -107,6 +107,7 @@ class Trainer:
         # initialize environment
         self.env = gym.make(env_name)
         self.env_name = env_name
+        self.env_name = env_name
         self.trim = np.array(self.env.trim)
 
         # save important experiment parameters for the training loop
@@ -162,7 +163,7 @@ class Trainer:
         self.logging = params["logging"]
         if self.logging:
             self.directory = os.getcwd()
-            filename = self.directory + "/data/ddpg.csv"
+            filename = self.directory + "/data/ddpg-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])

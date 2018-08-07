@@ -66,8 +66,8 @@ class CEM(nn.Module):
 
 class Trainer:
     def __init__(self, env_name, params):
-        self.env_name = env_name
         self.env = gym.make(env_name)
+        self.env_name = env_name
         self.action_bound = self.env.action_bound[1]
         self.trim = np.array(self.env.trim)
         self.iterations = params["iterations"]
@@ -97,7 +97,7 @@ class Trainer:
         self.logging = params["logging"]
         if self.logging:
             directory = os.getcwd()
-            filename = directory + "/data/cem.csv"
+            filename = directory + "/data/cem-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])

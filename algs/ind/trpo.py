@@ -91,7 +91,7 @@ class TRPO(nn.Module):
             return (value_loss.data.double().numpy(), get_flat_grad_from(self.critic).data.double().numpy())
 
         def get_loss(volatile=False):
-            action_means, action_log_stds, action_stds = self.actor(Variable(states, volatile=volatile))
+            action_means, action_log_stds, action_stds = self.actor(Variable(states))
             log_prob = normal_log_density(Variable(actions), action_means, action_log_stds, action_stds)
             action_loss = -Variable(advantages)*torch.exp(log_prob-Variable(fixed_log_prob))
             return action_loss.mean()
@@ -165,7 +165,7 @@ def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
 
 def linesearch(model, f, x, fullstep, expected_improve_rate, max_backtracks=10, accept_ratio=.1):
     fval = f(True).data
-    print("fval before", fval[0])
+    print("fval before", fval.item())
     for (_n_backtracks, stepfrac) in enumerate(.5**np.arange(max_backtracks)):
         xnew = x+stepfrac*fullstep
         set_flat_params_to(model, xnew)
@@ -173,9 +173,9 @@ def linesearch(model, f, x, fullstep, expected_improve_rate, max_backtracks=10, 
         actual_improve = fval-newfval
         expected_improve = expected_improve_rate*stepfrac
         ratio = actual_improve / expected_improve
-        print("a/e/r", actual_improve[0], expected_improve[0], ratio[0])
-        if ratio[0] > accept_ratio and actual_improve[0] > 0:
-            print("fval after", newfval[0])
+        print("actual: {:.4f}, expected: {:.4f}, ratio: {:.4f}".format(actual_improve.item(), expected_improve.item(), ratio.item()))
+        if ratio.item() > accept_ratio and actual_improve.item() > 0:
+            print("fval after: {:.4f}\n".format(newfval.item()))
             return True, xnew
     return False, x
 
@@ -198,7 +198,7 @@ def trpo_step(model, get_loss, get_kl, max_kl, damping):
     lm = torch.sqrt(shs/max_kl)
     fullstep = stepdir/lm[0]
     neggdotstepdir = (-loss_grad*stepdir).sum(0, keepdim=True)
-    print(("lagrange multiplier:", lm[0], "grad_norm:", loss_grad.norm()))
+    print("lagrange multiplier: {:.4f}, grad_norm: {:.4f}".format(lm[0], loss_grad.norm().item()))
     prev_params = get_flat_params_from(model)
     success, new_params = linesearch(model, get_loss, prev_params, fullstep, neggdotstepdir/lm[0])
     set_flat_params_to(model, new_params)
@@ -242,6 +242,7 @@ def get_flat_grad_from(net, grad_grad=False):
 class Trainer:
     def __init__(self, env_name, params):
         self.env = gym.make(env_name)
+        self.env_name = env_name
         self.trim = np.array(self.env.trim)
         self.params = params
         self.action_bound = self.env.action_bound[1]
@@ -270,7 +271,7 @@ class Trainer:
         self.logging = params["logging"]
         if self.logging:
             self.directory = os.getcwd()
-            filename = self.directory + "/data/trpo.csv"
+            filename = self.directory + "/data/trpo-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])

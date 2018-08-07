@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "Hover-v0",
-        "algs": ["trpo"]
+        "algs": ["cem"]
         }
 
 cem = { 
@@ -66,7 +66,7 @@ gae = {
         "render": True,
         "save": False,
         "cuda": True,
-        "logging": False
+        "logging": True
         }
 
 ppo = { 
@@ -82,7 +82,7 @@ ppo = {
         "lr": 5e-5,
         "seed": 343,
         "log_interval": 10,
-        "render": False,
+        "render": True,
         "save": False,
         "cuda": True,
         "logging": True

@@ -8,6 +8,7 @@ from math import pi, log
 import numpy as np
 from collections import namedtuple
 import gym
+import gym_aero
 import utils
 import numpy as np
 import csv
@@ -22,14 +23,9 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         self.affine1 = nn.Linear(input_dim, hidden_dim)
         self.action_mean = nn.Linear(hidden_dim, output_dim)
-        self.action_log_std = nn.Parameter(torch.zeros(1, output_dim))
-
+        self.action_log_std = nn.Parameter(torch.zeros(output_dim))
         self.action_mean.weight.data.mul_(0.1)
         self.action_mean.bias.data.mul_(0.0)
-
-        self.saved_actions = []
-        self.rewards = []
-        self.final_value = 0
 
     def forward(self, x):
         x = F.tanh(self.affine1(x.float()))
@@ -73,7 +69,6 @@ class TRPO(nn.Module):
             self.Tensor = torch.Tensor
 
     def select_action(self, state):
-        state = torch.from_numpy(state).unsqueeze(0)
         action_mean, _, action_std = self.actor(Variable(state))
         action = torch.normal(action_mean, action_std)
         return F.tanh(action)
@@ -109,20 +104,17 @@ class TRPO(nn.Module):
             kl = log_std1-log_std0+(std0.pow(2)+(mean0-mean1).pow(2))/(2.*std1.pow(2))-0.5
             return kl.sum(1, keepdim=True)
 
-        rewards = torch.Tensor(batch.reward)
-        masks = torch.Tensor(batch.mask)
-        actions = torch.Tensor(np.concatenate(batch.action, 0))
-        states = torch.Tensor(batch.state)
+        rewards = torch.stack(batch.reward)
+        masks = torch.stack(batch.mask)
+        actions = torch.stack(batch.action)
+        states = torch.stack(batch.state)
         values = self.critic(Variable(states))
-        
         returns = torch.Tensor(actions.size(0),1)
         deltas = torch.Tensor(actions.size(0),1)
         advantages = torch.Tensor(actions.size(0),1)
         prev_return = 0
         prev_value = 0
         prev_advantage = 0
-
-        # calculate advantages
         for i in reversed(range(rewards.size(0))):
             returns[i] = rewards[i]+self.gamma*prev_return*masks[i]
             deltas[i] = rewards[i]+self.gamma*prev_value*masks[i]-values.data[i]
@@ -130,7 +122,6 @@ class TRPO(nn.Module):
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
-        
         targets = Variable(returns)
         flat_params, _, opt_info = scipy.optimize.fmin_l_bfgs_b(get_value_loss, get_flat_params_from(self.critic).double().numpy(), maxiter=25)
         set_flat_params_to(self.critic, torch.Tensor(flat_params))
@@ -139,7 +130,7 @@ class TRPO(nn.Module):
         fixed_log_prob = normal_log_density(Variable(actions), action_means, action_log_stds, action_stds).data.clone()
         trpo_step(self.actor, get_loss, get_kl, self.max_kl, self.damping)
 
-Transition = namedtuple('Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
+Transition = namedtuple('Transition', ['state', 'action', 'mask', 'next_state', 'reward'])
 class Memory(object):
     def __init__(self):
         self.memory = []
@@ -158,15 +149,15 @@ def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
     x = torch.zeros(b.size())
     r = b.clone()
     p = b.clone()
-    rdotr = torch.dot(r, r)
+    rdotr = torch.dot(r,r)
     for i in range(nsteps):
         _Avp = Avp(p)
-        alpha = rdotr/torch.dot(p, _Avp)
+        alpha = rdotr/torch.dot(p,_Avp)
         x += alpha*p
         r -= alpha*_Avp
-        new_rdotr = torch.dot(r, r)
-        betta = new_rdotr/rdotr
-        p = r + betta*p
+        new_rdotr = torch.dot(r,r)
+        beta = new_rdotr/rdotr
+        p = r+beta*p
         rdotr = new_rdotr
         if rdotr < residual_tol:
             break
@@ -295,29 +286,27 @@ class Trainer:
             num_episodes = 0
             while num_steps < self.batch_size+1:
                 state = self.env.reset()
-                state = self.running_state(state[0])
+                state = self.running_state(state)
+                state = self.Tensor(state)
                 reward_sum = 0
                 if i_episode % self.log_interval == 0 and self.render:
                     self.env.render()
                 for t in range(1, self.env.H):
                     action = self.agent.select_action(state)
-                    action = action.data[0].numpy()
-                    a = action
+                    a = action.data.numpy()
                     next_state, reward, done, _ = self.env.step(self.trim+a*15)
+                    next_state = self.running_state(next_state)
                     reward_sum += reward
-                    
                     if i_episode % self.log_interval == 0 and self.render:
                         self.env.render()
-
-                    next_state = self.running_state(next_state[0])
-                    mask = 1
-                    if done:
-                        mask = 0
-                    memory.push(state, np.array([action]), mask, next_state, reward)
-                        
+                    next_state = self.Tensor(next_state)
+                    reward = self.Tensor([reward])
+                    mask = self.Tensor([not done])
+                    memory.push(state, action, mask, next_state, reward)    
                     if done:
                         break
                     state = next_state
+
                 num_steps += (t-1)
                 num_episodes += 1
                 reward_batch += reward_sum
@@ -330,7 +319,7 @@ class Trainer:
             batch = memory.sample()
             self.agent.update(batch)
             if i_episode % self.log_interval == 0:
-                print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(i_episode, reward_sum, reward_batch))
+                print('Episode {}\tLast reward: {:.3f}\tAverage reward {:.3f}'.format(i_episode, reward_sum, reward_batch))
                 if self.logging:
                     self.writer.writerow([i_episode, reward_batch]) 
 

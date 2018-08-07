@@ -3,6 +3,7 @@ import random
 import torch.nn.functional as F
 from torch.distributions import Normal
 import gym
+import gym_aero
 import utils
 import csv
 import os
@@ -144,7 +145,7 @@ class Trainer:
                 running_reward = 0
                 for _ in range(self.env.H):          
                     action, log_prob, value = self.agent.select_action(state)
-                    a = self.trim+action[0].cpu().numpy()*5
+                    a = self.trim+action.cpu().numpy()*5
                     next_state, reward, done, _ = self.env.step(a)
                     running_reward += reward
                 
@@ -154,12 +155,12 @@ class Trainer:
                     next_state = self.Tensor(next_state)
                     reward = self.Tensor([reward])
 
-                    s_.append(state[0])
-                    a_.append(action[0])
-                    ns_.append(next_state[0])
+                    s_.append(state)
+                    a_.append(action)
+                    ns_.append(next_state)
                     r_.append(reward)
-                    v_.append(value[0])
-                    lp_.append(log_prob[0])
+                    v_.append(value)
+                    lp_.append(log_prob)
                     dones.append(self.Tensor([not done]))
                     if done:
                         break

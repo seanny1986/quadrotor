@@ -164,12 +164,12 @@ class Trainer:
                     next_state = self.Tensor(next_state)
                     reward = self.Tensor([reward])
 
-                    s_.append(state[0])
-                    a_.append(action[0])
-                    ns_.append(next_state[0])
+                    s_.append(state)
+                    a_.append(action)
+                    ns_.append(next_state)
                     r_.append(reward)
-                    v_.append(value[0])
-                    lp_.append(log_prob[0])
+                    v_.append(value)
+                    lp_.append(log_prob)
                     dones.append(self.Tensor([not done]))
                     if done:
                         break

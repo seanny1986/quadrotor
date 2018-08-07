@@ -6,6 +6,7 @@ import math
 import numpy as np
 from collections import deque
 import gym
+import gym_aero
 import utils
 import numpy as np
 from collections import deque
@@ -68,7 +69,7 @@ class Trainer:
         self.env_name = env_name
         self.env = gym.make(env_name)
         self.action_bound = self.env.action_bound[1]
-
+        self.trim = np.array(self.env.trim)
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]
         self.seed = params["seed"]
@@ -79,8 +80,8 @@ class Trainer:
         self.log_interval = params["log_interval"]
         self.save = params["save"]
 
-        state_dim = self.env.observation_space
-        action_dim = self.env.action_space
+        state_dim = self.env.observation_space.shape[0]
+        action_dim = self.env.action_space.shape[0]
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
 
@@ -114,7 +115,7 @@ class Trainer:
             for t in range(self.env.H):
                 state = self.Tensor(state)
                 action = self.agent(state)
-                state, reward, done, _ = self.env.step(action*self.action_bound)
+                state, reward, done, _ = self.env.step(self.trim+action*5)
                 if rend:
                     self.env.render()
                 episode_return += reward*math.pow(self.gamma, t)

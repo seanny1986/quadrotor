@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "hover-v0",
-        "algs": ["ppo"]
+        "env": "Hover-v0",
+        "algs": ["trpo"]
         }
 
 cem = { 

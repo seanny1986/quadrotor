@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 import gym
+import gym_aero
 import utils
 import csv
 import os
@@ -51,12 +52,12 @@ class DDPG(nn.Module):
         self.__actor.train()
         if noise is not None:
             sigma = self.Tensor(noise.noise())
-            return torch.clamp(mu+sigma,-1,1)
+            return F.tanh(mu+sigma)
         else:
-            return torch.clamp(mu,-1,1)
+            return F.tanh(mu)
 
     def random_action(self, noise):
-        action = self.Tensor([noise.noise()])
+        action = self.Tensor(noise.noise())
         return action
     
     def _soft_update(self, target, source, tau):
@@ -186,9 +187,9 @@ class Trainer:
                     action = self.agent.random_action(self.noise).data
                 else:
                     action = self.agent.select_action(state, noise=self.noise).data
-            
+
                 # step simulation forward
-                a = self.trim+action[0].cpu().numpy()*15
+                a = self.trim+action.cpu().numpy()*15
                 next_state, reward, done, _ = self.env.step(a)
                 running_reward += reward
 
@@ -202,7 +203,7 @@ class Trainer:
                 done = self.Tensor([done])
 
                 # push to replay memory
-                self.memory.push(state[0], action[0], next_state[0], reward, done)
+                self.memory.push(state, action, next_state, reward, done)
             
                 # online training if out of warmup phase
                 if ep >= self.warmup:

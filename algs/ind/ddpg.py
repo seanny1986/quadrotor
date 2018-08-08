@@ -17,6 +17,8 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         self.__affine1 = nn.Linear(state_dim, hidden_dim)
         self.__action_head = nn.Linear(hidden_dim, action_dim)
+        self.__action_head.weight.data.mul_(0.1)
+        self.__action_head.bias.data.mul_(0.0)
 
     def forward(self, x):
         x = F.tanh(self.__affine1(x))
@@ -46,12 +48,16 @@ class DDPG(nn.Module):
             self.Tensor = torch.FloatTensor
 
     def select_action(self, state, noise=None):
+        #print("State: {}".format(state))
         self.__actor.eval()
         with torch.no_grad():
             mu = self.__actor((Variable(state)))
         self.__actor.train()
         if noise is not None:
             sigma = self.Tensor(noise.noise())
+            #print("Mu: {}".format(mu))
+            #print("Sigma: {}".format(sigma))
+            #print(F.tanh(mu+sigma))
             return F.tanh(mu+sigma)
         else:
             return F.tanh(mu)
@@ -109,6 +115,7 @@ class Trainer:
         self.env_name = env_name
         self.env_name = env_name
         self.trim = np.array(self.env.trim)
+        self.action_bandwidth = params["action_bandwidth"]
 
         # save important experiment parameters for the training loop
         self.iterations = params["iterations"]
@@ -118,6 +125,7 @@ class Trainer:
         self.log_interval = params["log_interval"]
         self.warmup = params["warmup"]
         self.batch_size = params["batch_size"]
+        self.critic_updates = params["critic_updates"]
         self.save = params["save"]
         
         # initialize DDPG agent using experiment parameters from config file
@@ -146,8 +154,8 @@ class Trainer:
         self.noise.set_seed(self.seed)
         self.memory = ReplayMemory(self.mem_len)
 
-        self.pol_opt = torch.optim.Adam(actor.parameters())
-        self.crit_opt = torch.optim.Adam(critic.parameters())
+        self.pol_opt = torch.optim.Adam(actor.parameters(), params["actor_lr"])
+        self.crit_opt = torch.optim.Adam(critic.parameters(),params["critic_lr"])
 
         # want to save the best policy
         self.best = None
@@ -181,7 +189,7 @@ class Trainer:
             running_reward = 0
             if ep % self.log_interval == 0 and self.render:
                 self.env.render()
-            for t in range(self.env.H):
+            for t in range(10000):
             
                 # select an action using either random policy or trained policy
                 if ep < self.warmup:
@@ -190,7 +198,7 @@ class Trainer:
                     action = self.agent.select_action(state, noise=self.noise).data
 
                 # step simulation forward
-                a = self.trim+action.cpu().numpy()*15
+                a = self.trim+action.cpu().numpy()*self.action_bandwidth
                 next_state, reward, done, _ = self.env.step(a)
                 running_reward += reward
 
@@ -208,7 +216,7 @@ class Trainer:
             
                 # online training if out of warmup phase
                 if ep >= self.warmup:
-                    for i in range(3):
+                    for i in range(self.critic_updates):
                         transitions = self.memory.sample(self.batch_size)
                         batch = Transition(*zip(*transitions))
                         self.agent.update(batch, self.crit_opt, self.pol_opt)

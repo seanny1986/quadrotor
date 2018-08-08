@@ -237,6 +237,10 @@ class Actor(torch.nn.Module):
         self.__l1 = torch.nn.Linear(input_dim, hidden_dim)
         self.__mu = torch.nn.Linear(hidden_dim, output_dim)
         self.__logvar = torch.nn.Linear(hidden_dim, output_dim)
+        self.__mu.weight.data.mul_(0.1)
+        self.__mu.bias.data.mul_(0.0)
+        self.__logvar.weight.data.mul_(0.1)
+        self.__logvar.bias.data.mul_(0.0)
 
     def forward(self, x):
         x = F.tanh(self.__l1(x))
@@ -268,6 +272,9 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
         self.__affine1 = nn.Linear(input_dim, hidden_dim)
         self.__value_head = nn.Linear(hidden_dim, output_dim)
+        self.__value_head.weight.data.mul_(0.1)
+        self.__value_head.bias.data.mul_(0.0)
+        
 
     def forward(self, x):
         x = F.relu(self.__affine1(x))

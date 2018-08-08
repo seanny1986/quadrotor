@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "Hover-v0",
-        "algs": ["cem"]
+        "env": "StaticWaypoint-v0",
+        "algs": ["ppo"]
         }
 
 cem = { 
@@ -34,16 +34,19 @@ ddpg = {
                                 "gamma": 0.99,
                                 "tau": 0.01
                                 },
+        "action_bandwidth": 25,
         "hidden_dim": 64,
         "iterations": 10000,
         "mem_len": 1000000,
-        "lr": 1e-5,
+        "actor_lr": 1e-5,
+        "critic_lr": 1e-4,
+        "critic_updates": 5,
         "seed": 343,
         "log_interval": 10,
-        "warmup": 50,
+        "warmup": 150,
         "batch_size": 64,
         "ou_scale": 0.75,
-        "ou_mu": 0.2,
+        "ou_mu": 0.75,
         "ou_sigma": 0.15,
         "render": True,
         "save": False,
@@ -53,7 +56,7 @@ ddpg = {
 
 gae = {
         "network_settings": {
-                                "gamma": 0.995,
+                                "gamma": 0.99,
                                 "lambda": 0.92
                                 },
         "hidden_dim": 32,
@@ -71,20 +74,20 @@ gae = {
 
 ppo = { 
         "network_settings": {
-                                "gamma": 0.995,
-                                "lambda": 0.97,
-                                "eps": 0.15
+                                "gamma": 0.99,
+                                "lambda": 0.92,
+                                "eps": 0.1
                                 },
         "hidden_dim": 64,
         "iterations": 5000,
         "batch_size": 512,
-        "epochs":3,
-        "lr": 5e-5,
+        "epochs":4,
+        "lr": 3e-4,
         "seed": 343,
         "log_interval": 10,
         "render": True,
         "save": False,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 

@@ -144,7 +144,7 @@ class Trainer:
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
                 running_reward = 0
-                for _ in range(self.env.H):          
+                for _ in range(10000):          
                     action, log_prob, value = self.agent.select_action(state)
                     a = self.trim+action.cpu().numpy()*5
                     next_state, reward, done, _ = self.env.step(a)

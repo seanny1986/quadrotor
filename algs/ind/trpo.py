@@ -292,7 +292,7 @@ class Trainer:
                 reward_sum = 0
                 if i_episode % self.log_interval == 0 and self.render:
                     self.env.render()
-                for t in range(1, self.env.H):
+                for t in range(10000):
                     action = self.agent.select_action(state)
                     a = action.data.numpy()
                     next_state, reward, done, _ = self.env.step(self.trim+a*15)

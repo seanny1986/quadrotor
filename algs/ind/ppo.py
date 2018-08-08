@@ -16,50 +16,47 @@ from torch.autograd import Variable
 
 class ActorCritic(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(ActorCritic,self).__init__()
-        self.__l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.__mu = torch.nn.Linear(hidden_dim, output_dim)
-        self.__logvar = torch.nn.Linear(hidden_dim, output_dim)
-        self.__value = torch.nn.Linear(hidden_dim, 1)
-
+        super(ActorCritic, self).__init__()
+        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
+        self.action_mu = torch.nn.Linear(hidden_dim, output_dim)
+        self.action_logvar = torch.nn.Linear(hidden_dim, output_dim)
+        self.value_head = torch.nn.Linear(hidden_dim, 1)
+    
     def forward(self, x):
-        x = F.tanh(self.__l1(x))
-        mu = self.__mu(x)
-        logvar = self.__logvar(x)
-        value = self.__value(x)
+        x = F.tanh(self.l1(x))
+        mu = self.action_mu(x)
+        logvar = self.action_logvar(x)
+        value = self.value_head(x)
         return mu, logvar, value
 
 class PPO(torch.nn.Module):
-    def __init__(self, pi, beta, network_settings, GPU=True):
+    def __init__(self, pi, beta, params, GPU=True):
         super(PPO,self).__init__()
-        self.__pi = pi
-        self.__beta = beta
-        self._hard_update(self.__beta, self.__pi)
-        self.__gamma = network_settings["gamma"]
-        self.__lmbd = network_settings["lambda"]
-        self.__eps = network_settings["eps"]
-        self.__GPU = GPU
+        self.pi = pi
+        self.beta = beta
+        self.hard_update(self.beta, self.pi)
+        self.gamma = params["gamma"]
+        self.lmbd = params["lambda"]
+        self.eps = params["eps"]
+        self.GPU = GPU
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
-            self.__pi = self.__pi.cuda()
-            self.__beta = self.__beta.cuda()
+            self.pi = self.pi.cuda()
+            self.beta = self.beta.cuda()
         else:
             self.Tensor = torch.Tensor
 
     def select_action(self, x):
-        mu, logvar, value = self.__beta(Variable(x))
-        std = logvar.exp().sqrt()+1e-4
-        a = Normal(mu, std)
-        action = a.sample()
-        logprob = a.log_prob(action)
-        return F.tanh(action), logprob, value
+        mu, logvar, value = self.pi(x)
+        sigma = logvar.exp().sqrt()
+        dist = Normal(mu, sigma)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        return action, log_prob, value
 
-    def _hard_update(self, target, source):
+    def hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
-
-    def set_theta_old(self):
-        self._hard_update(self.__beta, self.__pi)
 
     def update(self, optim, trajectory):
         states = torch.stack(trajectory["states"]).float()
@@ -68,32 +65,31 @@ class PPO(torch.nn.Module):
         rewards = torch.stack(trajectory["rewards"]).float()
         values = torch.stack(trajectory["values"]).float()
         masks = torch.stack(trajectory["dones"])
-        returns = self.Tensor(rewards.size())
-        deltas = self.Tensor(rewards.size())
-        advantages = self.Tensor(rewards.size())
+        returns = self.Tensor(rewards.size(0),1)
+        deltas = self.Tensor(rewards.size(0),1)
+        advantages = self.Tensor(rewards.size(0),1)
         prev_return = 0
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__lmbd*prev_advantage*masks[i]
+            returns[i] = rewards[i]+self.gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.gamma*prev_value*masks[i]-values.data[i]
+            advantages[i] = deltas[i]+self.gamma*self.lmbd*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
         advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
         returns = (returns-returns.mean())/(returns.std()+1e-10)
-        mu_pi, logvar_pi, _ = self.__pi(states)
+        mu_pi, logvar_pi, _ = self.pi(states)
         dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
         pi_log_probs = dist_pi.log_prob(actions)
         ratio = (pi_log_probs-beta_log_probs.detach()).sum(dim=1, keepdim=True).exp()
         optim.zero_grad()
-        actor_loss = -torch.min(ratio*advantages, torch.clamp(ratio, 1-self.__eps, 1+self.__eps)*advantages).mean()
+        actor_loss = -torch.min(ratio*advantages, torch.clamp(ratio, 1-self.eps, 1+self.eps)*advantages).mean()
         critic_loss = F.smooth_l1_loss(values, returns)
         loss = actor_loss+critic_loss
         loss.backward(retain_graph=True)
         optim.step()
-        return dist_pi.entropy().mean(dim=0).detach()
 
 
 class Trainer:
@@ -108,7 +104,6 @@ class Trainer:
         self.render = params["render"]
         self.log_interval = params["log_interval"]
         self.save = params["save"]
-        self.action_bound = self.env.action_bound[1]
         hidden_dim = params["hidden_dim"]
         state_dim = self.env.observation_space.shape[0]
         action_dim = self.env.action_space.shape[0]
@@ -119,7 +114,6 @@ class Trainer:
         beta = ActorCritic(state_dim, hidden_dim, action_dim)
         self.agent = PPO(pi, beta, network_settings, GPU=cuda)
         self.optim = torch.optim.Adam(pi.parameters(), lr=learning_rate)
-        self.trim = np.array(self.env.trim)
         self.best = None
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
@@ -153,9 +147,9 @@ class Trainer:
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
                 running_reward = 0
-                for t in range(1, self.env.H+1):          
+                for t in range(10000):          
                     action, log_prob, value = self.agent.select_action(state)
-                    a = self.trim+action.cpu().numpy()*5
+                    a = action.cpu().numpy()
                     next_state, reward, done, _ = self.env.step(a)
                     running_reward += reward
                 
@@ -191,8 +185,7 @@ class Trainer:
             entropy = []
             for _ in range(self.epochs):
                 entropy.append(self.agent.update(self.optim, trajectory))
-            #print("---Policy Entropy: {}".format(torch.stack(entropy).mean(dim=0).cpu().numpy()))
-            self.agent.set_theta_old()
+            self.agent.hard_update(self.agent.beta, self.agent.pi)
             interval_avg.append(batch_mean_rwd)
             avg = (avg*(ep-1)+running_reward)/ep   
             if ep % self.log_interval == 0:

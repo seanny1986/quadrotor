@@ -15,10 +15,9 @@ import os
 
 """
     Implements policy network class for the cross-entropy method. This should be used as a sanity
-    check and benchmark for other methods, since CEM is usually embarrassingly effective.
-
-    Credits to Udacity for most of this code. Minor changes were made to fit in with the conventions
-    used in other policy search methods in this library, but other than that, it's mostly intact.
+    check and benchmark for other methods, since CEM is usually embarrassingly effective. Credits 
+    to Udacity for most of this code. Minor changes were made to fit in with the conventions used 
+    in other policy search methods in this library, but other than that, it's mostly intact.
 """
 
 class CEM(nn.Module):
@@ -112,7 +111,7 @@ class Trainer:
             state = self.env.reset()
             if rend:
                 self.env.render()
-            for t in range(self.env.H):
+            for t in range(10000):
                 state = self.Tensor(state)
                 action = self.agent(state)
                 state, reward, done, _ = self.env.step(self.trim+action*5)

@@ -136,6 +136,6 @@ class Trainer:
                 reward = evaluate(best_weight, False)
             scores_deque.append(reward)
             if i_iteration % self.log_interval == 0:
-                print('Episode {}\tAverage Score: {:.2f}'.format(i_iteration, np.mean(scores_deque)))
+                print('Episode {}\tAverage Score: {:.3f}'.format(i_iteration, np.mean(scores_deque)))
                 if self.logging:
                     self.writer.writerow([i_iteration, np.mean(scores_deque).item()])

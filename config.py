@@ -9,8 +9,8 @@
 """
 
 exp = { 
-        "env": "StaticWaypoint-v0",
-        "algs": ["ppo"]
+        "env": "Hover-v0",
+        "algs": ["gae"]
         }
 
 cem = { 
@@ -59,16 +59,16 @@ gae = {
                                 "gamma": 0.99,
                                 "lambda": 0.92
                                 },
-        "hidden_dim": 32,
-        "iterations": 10000,
-        "batch_size": 8,
-        "epochs": 16,
-        "lr": 1e-4,
+        "hidden_dim": 64,
+        "iterations": 5000,
+        "batch_size": 512,
+        "epochs": 4,
+        "lr": 3e-4,
         "seed": 343,
         "log_interval": 10,
         "render": True,
         "save": False,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 

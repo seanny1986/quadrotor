@@ -242,7 +242,7 @@ class Trainer:
             avg = (avg*(ep-1)+running_reward)/ep   
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                print("Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}".format(ep, interval, avg))
+                print("Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}".format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
                     self.writer.writerow([ep, avg])

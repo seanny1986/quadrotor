@@ -15,49 +15,42 @@ import numpy as np
 """
 
 class GAE(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, network_settings, GPU=True):
+    def __init__(self, input_dim, hidden_dim, output_dim, params, GPU=True):
         super(GAE,self).__init__()
-        self.__l1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.__mu = torch.nn.Linear(hidden_dim, output_dim)
-        self.__logvar = torch.nn.Linear(hidden_dim, output_dim)
-        self.__value = torch.nn.Linear(hidden_dim, 1)
-
-        self.__gamma = network_settings["gamma"]
-        self.__lmbd = network_settings["lambda"]
-    
-        self.__GPU = GPU
-
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.l1 = torch.nn.Linear(input_dim, hidden_dim)
+        self.action_mu = torch.nn.Linear(hidden_dim, output_dim)
+        self.action_logvar = torch.nn.Linear(hidden_dim, output_dim)
+        self.value_head = torch.nn.Linear(hidden_dim, 1)
+        self.gamma = params["gamma"]
+        self.lmbd = params["lambda"]
+        self.GPU = GPU
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
         else:
             self.Tensor = torch.Tensor
 
     def forward(self, x):
-        x = F.tanh(self.__l1(x))
-        mu = self.__mu(x)
-        logvar = self.__logvar(x)
-        value = self.__value(x)
+        x = F.tanh(self.l1(x))
+        mu = self.action_mu(x)
+        logvar = self.action_logvar(x)
+        value = self.value_head(x)
         return mu, logvar, value
 
     def select_action(self, x):
-        mu, logvar, value = self.forward(x)     
-        std = logvar.exp().sqrt()+1e-4
-        a = Normal(mu, std)
-        action = a.sample()
-        logprob = a.log_prob(action)
-        return F.tanh(action), logprob, value
-
-    def hard_update(self, target, source):
-        for target_param, param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(param.data)
+        mu, logvar, value = self.forward(x)
+        dist = Normal(mu, logvar.exp().sqrt())
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        return action, log_prob, value
 
     def update(self, optim, trajectory):
         log_probs = torch.stack(trajectory["log_probs"]).float()
         rewards = torch.stack(trajectory["rewards"]).float()
         values = torch.stack(trajectory["values"]).float()
         masks = torch.stack(trajectory["dones"])
-
-        # compute advantage estimates
         returns = self.Tensor(rewards.size(0),1)
         deltas = self.Tensor(rewards.size(0),1)
         advantages = self.Tensor(rewards.size(0),1)
@@ -65,20 +58,17 @@ class GAE(torch.nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__lmbd*prev_advantage*masks[i]
+            returns[i] = rewards[i]+self.gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.gamma*prev_value*masks[i]-values.data[i]
+            advantages[i] = deltas[i]+self.gamma*self.lmbd*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
-        
-        advantages = returns-values
-        a_hat = (advantages-advantages.mean())/(advantages.std()+1e-7)
-
-        # calculate gradient and backprop
+        advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
+        returns = (returns-returns.mean())/(returns.std()+1e-10)
         optim.zero_grad()
-        actor_loss = -(log_probs*a_hat).mean()
-        critic_loss = advantages.pow(2).mean()
+        actor_loss = -(log_probs*advantages).mean()
+        critic_loss = F.smooth_l1_loss(values, returns)
         loss = actor_loss+critic_loss
         loss.backward(retain_graph=True)
         optim.step()
@@ -130,35 +120,24 @@ class Trainer:
         interval_avg = []
         avg = 0
         for ep in range(1, self.iterations+1):
-            
-            s_ = []
-            a_ = []
-            ns_ = []
-            r_ = []
-            v_ = []
-            lp_ = []
-            dones = []
+            r_, v_, lp_, dones = [], [], [], []
             batch_mean_rwd = 0
-            for i in range(1, self.batch_size+1):
+            bsize = 1
+            num_episodes = 1
+            while bsize<self.batch_size+1:
                 state = self.Tensor(self.env.reset())
                 if ep % self.log_interval == 0 and self.render:
                     self.env.render()
                 running_reward = 0
-                for _ in range(10000):          
+                for t in range(10000):          
                     action, log_prob, value = self.agent.select_action(state)
-                    a = self.trim+action.cpu().numpy()*5
+                    a = action.cpu().numpy()
                     next_state, reward, done, _ = self.env.step(a)
                     running_reward += reward
-                
                     if ep % self.log_interval == 0 and self.render:
                         self.env.render()
-
                     next_state = self.Tensor(next_state)
                     reward = self.Tensor([reward])
-
-                    s_.append(state)
-                    a_.append(action)
-                    ns_.append(next_state)
                     r_.append(reward)
                     v_.append(value)
                     lp_.append(log_prob)
@@ -166,26 +145,24 @@ class Trainer:
                     if done:
                         break
                     state = next_state
-            
-                if (self.best is None or running_reward > self.best) and self.save:
+                bsize += t
+                batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
+                num_episodes += 1
+            if (self.best is None or batch_mean_rwd > self.best) and self.save:
                     self.best = running_reward
                     utils.save(self.agent, self.directory + "/saved_policies/gae.pth.tar")
-                batch_mean_rwd = (running_reward*(i-1)+running_reward)/i
-            
-            trajectory = {"states": s_,
-                        "actions": a_,
-                        "next_states": ns_,
+            trajectory = {
                         "rewards": r_,
                         "dones": dones,
                         "values": v_,
                         "log_probs": lp_}
-            for i in range(self.epochs):
+            for _ in range(self.epochs):
                 self.agent.update(self.optim, trajectory)
             interval_avg.append(batch_mean_rwd)
             avg = (avg*(ep-1)+running_reward)/ep   
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
+                print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
-                    self.writer.writerow([ep, avg])        
+                    self.writer.writerow([ep, avg])

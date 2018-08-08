@@ -48,7 +48,7 @@ class PPO(torch.nn.Module):
 
     def select_action(self, x):
         mu, logvar, value = self.pi(x)
-        sigma = logvar.exp().sqrt()
+        sigma = logvar.exp().sqrt()+1e-10
         dist = Normal(mu, sigma)
         action = dist.sample()
         log_prob = dist.log_prob(action)
@@ -169,12 +169,12 @@ class Trainer:
                     if done:
                         break
                     state = next_state
-                bsize += (t-1)
+                bsize += t
                 batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
                 num_episodes += 1
             if (self.best is None or batch_mean_rwd > self.best) and self.save:
                     self.best = running_reward
-                    utils.save(self.agent, self.directory + "/saved_policies/gae.pth.tar")
+                    utils.save(self.agent, self.directory + "/saved_policies/ppo.pth.tar")
             trajectory = {"states": s_,
                         "actions": a_,
                         "next_states": ns_,
@@ -182,15 +182,14 @@ class Trainer:
                         "dones": dones,
                         "values": v_,
                         "log_probs": lp_}
-            entropy = []
             for _ in range(self.epochs):
-                entropy.append(self.agent.update(self.optim, trajectory))
+                self.agent.update(self.optim, trajectory)
             self.agent.hard_update(self.agent.beta, self.agent.pi)
             interval_avg.append(batch_mean_rwd)
             avg = (avg*(ep-1)+running_reward)/ep   
             if ep % self.log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                print('Episode {}\t Interval average: {:.2f}\t Average reward: {:.2f}'.format(ep, interval, avg))
+                print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.logging:
                     self.writer.writerow([ep, avg])

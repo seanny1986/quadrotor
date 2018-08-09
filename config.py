@@ -10,7 +10,7 @@
 
 exp = { 
         "env": "Hover-v0",
-        "algs": ["gae"]
+        "algs": ["trpo"]
         }
 
 cem = { 
@@ -23,8 +23,8 @@ cem = {
         "pop_size": 32,
         "elite_frac": 0.2,
         "sigma": 0.2,
-        "render": True,
-        "save": False,
+        "render": False,
+        "save": True,
         "cuda": True,
         "logging": True
         }
@@ -34,22 +34,21 @@ ddpg = {
                                 "gamma": 0.99,
                                 "tau": 0.01
                                 },
-        "action_bandwidth": 25,
         "hidden_dim": 64,
         "iterations": 10000,
         "mem_len": 1000000,
         "actor_lr": 1e-5,
         "critic_lr": 1e-4,
-        "critic_updates": 5,
+        "learning_updates": 5,
         "seed": 343,
         "log_interval": 10,
-        "warmup": 150,
+        "warmup": 100,
         "batch_size": 64,
         "ou_scale": 0.75,
         "ou_mu": 0.75,
         "ou_sigma": 0.15,
-        "render": True,
-        "save": False,
+        "render": False,
+        "save": True,
         "cuda": True,
         "logging": True
         }
@@ -66,8 +65,8 @@ gae = {
         "lr": 3e-4,
         "seed": 343,
         "log_interval": 10,
-        "render": True,
-        "save": False,
+        "render": False,
+        "save": True,
         "cuda": False,
         "logging": True
         }
@@ -85,8 +84,8 @@ ppo = {
         "lr": 3e-4,
         "seed": 343,
         "log_interval": 10,
-        "render": True,
-        "save": False,
+        "render": False,
+        "save": True,
         "cuda": False,
         "logging": True
         }
@@ -105,8 +104,8 @@ trpo = {
         "warmup": 50,
         "batch_size": 512,
         "seed": 343,
-        "render": True,
-        "save": False,
+        "render": False,
+        "save": True,
         "cuda": False,
         "logging": True
         }

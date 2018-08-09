@@ -60,7 +60,7 @@ class CEM(nn.Module):
     def forward(self, x):
         x = F.tanh(self.fc1(x))
         x = F.tanh(self.fc2(x))
-        return x.cpu().detach().numpy()[0]
+        return x.cpu().detach().numpy()
 
 
 class Trainer:
@@ -78,31 +78,30 @@ class Trainer:
         self.render = params["render"]
         self.log_interval = params["log_interval"]
         self.save = params["save"]
-
         state_dim = self.env.observation_space.shape[0]
         action_dim = self.env.action_space.shape[0]
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
-
         self.agent = CEM(state_dim, hidden_dim, action_dim, GPU=cuda)
-
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
             self.agent = self.agent.cuda()
         else:
             self.Tensor = torch.Tensor
+        self.best = None
         
         # initialize experiment logging
         self.logging = params["logging"]
+        self.directory = os.getcwd()
         if self.logging:
-            directory = os.getcwd()
-            filename = directory + "/data/cem-"+self.env_name+".csv"
+            filename = self.directory + "/data/cem-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
                 self.train()
         else:
             self.train()
+        
 
     def train(self):
         def evaluate(weights, rend):
@@ -114,7 +113,7 @@ class Trainer:
             for t in range(10000):
                 state = self.Tensor(state)
                 action = self.agent(state)
-                state, reward, done, _ = self.env.step(self.trim+action*5)
+                state, reward, done, _ = self.env.step(action)
                 if rend:
                     self.env.render()
                 episode_return += reward*math.pow(self.gamma, t)
@@ -131,9 +130,14 @@ class Trainer:
             elite_weights = [weights_pop[i] for i in elite_idxs]
             best_weight = np.array(elite_weights).mean(axis=0)
             if i_iteration % self.log_interval == 0:
-                reward = evaluate(best_weight, True)
+                reward = evaluate(best_weight, self.render)
             else:
                 reward = evaluate(best_weight, False)
+            if (self.best is None or reward > self.best) and self.save:
+                print("---Saving best CEM policy---")
+                self.best = reward
+                self.agent.set_weights(best_weight)
+                utils.save(self.agent, self.directory+"/saved_policies/cem-"+self.env_name+".pth.tar")
             scores_deque.append(reward)
             if i_iteration % self.log_interval == 0:
                 print('Episode {}\tAverage Score: {:.3f}'.format(i_iteration, np.mean(scores_deque)))

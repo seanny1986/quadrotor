@@ -15,7 +15,7 @@ import csv
 import os
 
 """
-    Port of Trust Region Policy Optimization by John Schulman.
+    Port of Trust Region Policy Optimization by John Schulman (2016).
 """
 
 class Actor(nn.Module):
@@ -52,15 +52,12 @@ class TRPO(nn.Module):
         super(TRPO, self).__init__()
         self.actor = actor
         self.critic = critic
-        
         self.gamma = params["gamma"]
         self.tau = params["tau"]
         self.l2_reg = params["l2_reg"]
         self.max_kl = params["max_kl"]
         self.damping = params["damping"]
-
         self.GPU = GPU
-
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
             self.actor = self.actor.cuda()
@@ -71,7 +68,7 @@ class TRPO(nn.Module):
     def select_action(self, state):
         action_mean, _, action_std = self.actor(Variable(state))
         action = torch.normal(action_mean, action_std)
-        return F.tanh(action)
+        return action
 
     def update(self, batch):
         
@@ -269,17 +266,17 @@ class Trainer:
 
         # initialize experiment logging
         self.logging = params["logging"]
+        self.directory = os.getcwd()
         if self.logging:
-            self.directory = os.getcwd()
             filename = self.directory + "/data/trpo-"+self.env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.writer = csv.writer(csvfile)
                 self.writer.writerow(["episode", "reward"])
-                self.train()
+                self.run_algo()
         else:
-            self.train()
+            self.run_algo()
     
-    def train(self):
+    def run_algo(self):
         for i_episode in range(1, self.iterations+1):
             memory = Memory()
             num_steps = 1
@@ -294,8 +291,7 @@ class Trainer:
                     self.env.render()
                 for t in range(10000):
                     action = self.agent.select_action(state)
-                    a = action.data.numpy()
-                    next_state, reward, done, _ = self.env.step(self.trim+a*15)
+                    next_state, reward, done, _ = self.env.step(action.data.numpy())
                     next_state = self.running_state(next_state)
                     reward_sum += reward
                     if i_episode % self.log_interval == 0 and self.render:
@@ -314,8 +310,9 @@ class Trainer:
             reward_batch /= num_episodes
 
             if (self.best is None or reward_batch > self.best) and self.save:
+                print("---Saving best TRPO policy---")
                 self.best = reward_batch
-                utils.save(self.agent, self.directory + "/saved_policies/trpo.pth.tar")
+                utils.save(self.agent, self.directory + "/saved_policies/trpo-"+self.env_name+".pth.tar")
 
             batch = memory.sample()
             self.agent.update(batch)

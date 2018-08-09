@@ -48,19 +48,15 @@ class DDPG(nn.Module):
             self.Tensor = torch.FloatTensor
 
     def select_action(self, state, noise=None):
-        #print("State: {}".format(state))
         self.__actor.eval()
         with torch.no_grad():
             mu = self.__actor((Variable(state)))
         self.__actor.train()
         if noise is not None:
             sigma = self.Tensor(noise.noise())
-            #print("Mu: {}".format(mu))
-            #print("Sigma: {}".format(sigma))
-            #print(F.tanh(mu+sigma))
-            return F.tanh(mu+sigma)
+            return mu+sigma
         else:
-            return F.tanh(mu)
+            return mu
 
     def random_action(self, noise):
         action = self.Tensor(noise.noise())
@@ -83,55 +79,47 @@ class DDPG(nn.Module):
             done = Variable(torch.cat(batch.done))
         reward = torch.unsqueeze(reward, 1)
         done = torch.unsqueeze(done, 1)
-
-        next_action = self.__target_actor(next_state)                                                 # take off-policy action
+        next_action = self.__target_actor(next_state)                                               # take off-policy action
         next_state_action = torch.cat([next_state, next_action],dim=1)                              # next state-action batch
-        next_state_action_value = self.__target_critic(next_state_action)                             # target q-value
+        next_state_action_value = self.__target_critic(next_state_action)                           # target q-value
         with torch.no_grad():
-            expected_state_action_value = reward+self.__gamma*next_state_action_value*(1-done)             # value iteration
-
-        crit_opt.zero_grad()                                                                   # zero gradients in optimizer
-        state_action_value = self.__critic(torch.cat([state, action],dim=1))                          # zero gradients in optimizer
+            expected_state_action_value = reward+self.__gamma*next_state_action_value*(1-done)      # value iteration
+        crit_opt.zero_grad()                                                                        # zero gradients in optimizer
+        state_action_value = self.__critic(torch.cat([state, action],dim=1))                        # zero gradients in optimizer
         value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)              # (critic-target) loss
         value_loss.backward()                                                                       # backpropagate value loss
-        crit_opt.step()                                                                        # update value function
-        
-        pol_opt.zero_grad()                                                                    # zero gradients in optimizer
-        policy_loss = self.__critic(torch.cat([state, self.__actor(state)],1))                          # use critic to estimate pol gradient
+        crit_opt.step()                                                                             # update value function
+        pol_opt.zero_grad()                                                                         # zero gradients in optimizer
+        policy_loss = self.__critic(torch.cat([state, self.__actor(state)],1))                      # use critic to estimate pol gradient
         policy_loss = -policy_loss.mean()                                                           # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
         if self.__clip is not None:
-            torch.nn.utils.clip_grad_norm_(self.__critic.parameters(), self.__clip)                     # clip gradient
-        pol_opt.step()                                                                         # update policy function
-        
-        self._soft_update(self.__target_critic, self.__critic, self.__tau)                                 # soft update of target networks
-        self._soft_update(self.__target_actor, self.__actor, self.__tau)                                   # soft update of target networks
+            torch.nn.utils.clip_grad_norm_(self.__critic.parameters(), self.__clip)                 # clip gradient
+        pol_opt.step()                                                                              # update policy function
+        self._soft_update(self.__target_critic, self.__critic, self.__tau)                          # soft update of target networks
+        self._soft_update(self.__target_actor, self.__actor, self.__tau)                            # soft update of target networks
 
 
 class Trainer:
     def __init__(self, env_name, params):
         # initialize environment
-        self.env = gym.make(env_name)
-        self.env_name = env_name
-        self.env_name = env_name
-        self.trim = np.array(self.env.trim)
-        self.action_bandwidth = params["action_bandwidth"]
-
+        self.__env = gym.make(env_name)
+        self.__env_name = env_name
+        
         # save important experiment parameters for the training loop
-        self.iterations = params["iterations"]
-        self.mem_len = params["mem_len"]
-        self.seed = params["seed"]
-        self.render = params["render"]
-        self.log_interval = params["log_interval"]
-        self.warmup = params["warmup"]
-        self.batch_size = params["batch_size"]
-        self.critic_updates = params["critic_updates"]
-        self.save = params["save"]
+        self.__iterations = params["iterations"]
+        self.__mem_len = params["mem_len"]
+        self.__seed = params["seed"]
+        self.__render = params["render"]
+        self.__log_interval = params["log_interval"]
+        self.__warmup = params["warmup"]
+        self.__batch_size = params["batch_size"]
+        self.__learning_updates = params["learning_updates"]
+        self.__save = params["save"]
         
         # initialize DDPG agent using experiment parameters from config file
-        self.action_bound = self.env.action_bound[1]
-        state_dim = self.env.observation_space.shape[0]
-        action_dim = self.env.action_space.shape[0]
+        state_dim = self.__env.observation_space.shape[0]
+        action_dim = self.__env.action_space.shape[0]
         hidden_dim = params["hidden_dim"]
         cuda = params["cuda"]
         network_settings = params["network_settings"]
@@ -139,7 +127,7 @@ class Trainer:
         target_actor = Actor(state_dim, hidden_dim, action_dim)
         critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
         target_critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
-        self.agent = DDPG(actor, 
+        self.__agent = DDPG(actor, 
                         target_actor, 
                         critic, 
                         target_critic,
@@ -150,76 +138,74 @@ class Trainer:
         ou_scale = params["ou_scale"]
         ou_mu = params["ou_mu"]
         ou_sigma = params["ou_sigma"]
-        self.noise = utils.OUNoise(action_dim, scale=ou_scale, mu=ou_mu, sigma=ou_sigma)
-        self.noise.set_seed(self.seed)
-        self.memory = ReplayMemory(self.mem_len)
-
-        self.pol_opt = torch.optim.Adam(actor.parameters(), params["actor_lr"])
-        self.crit_opt = torch.optim.Adam(critic.parameters(),params["critic_lr"])
+        self.__noise = utils.OUNoise(action_dim, scale=ou_scale, mu=ou_mu, sigma=ou_sigma)
+        self.__noise.set_seed(self.__seed)
+        self.__memory = ReplayMemory(self.__mem_len)
+        self.__pol_opt = torch.optim.Adam(actor.parameters(), params["actor_lr"])
+        self.__crit_opt = torch.optim.Adam(critic.parameters(),params["critic_lr"])
 
         # want to save the best policy
-        self.best = None
+        self.__best = None
 
         # send to GPU if flagged in experiment config file
         if cuda:
-            self.Tensor = torch.cuda.FloatTensor
-            self.agent = self.agent.cuda()
+            self.__Tensor = torch.cuda.FloatTensor
+            self.__agent = self.__agent.cuda()
         else:
-            self.Tensor = torch.Tensor
+            self.__Tensor = torch.Tensor
 
         # initialize experiment logging. This wipes any previous file with the same name
-        self.logging = params["logging"]
-        if self.logging:
-            self.directory = os.getcwd()
-            filename = self.directory + "/data/ddpg-"+self.env_name+".csv"
+        self.__logging = params["logging"]
+        self.__directory = os.getcwd()
+        if self.__logging:
+            filename = self.__directory + "/data/ddpg-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
-                self.writer = csv.writer(csvfile)
-                self.writer.writerow(["episode", "reward"])
-                self.train()
+                self.__writer = csv.writer(csvfile)
+                self.__writer.writerow(["episode", "reward"])
+                self._run_algo()
         else:
-            self.train()
+            self._run_algo()
 
-    def train(self):
+    def _run_algo(self):
         interval_avg = []
         avg = 0
-        for ep in range(1, self.iterations+1):
+        for ep in range(1, self.__iterations+1):
 
-            state = self.Tensor(self.env.reset())
-            self.noise.reset()
+            state = self.__Tensor(self.__env.reset())
+            self.__noise.reset()
             running_reward = 0
-            if ep % self.log_interval == 0 and self.render:
-                self.env.render()
+            if ep % self.__log_interval == 0 and self.__render:
+                self.__env.render()
             for t in range(10000):
             
                 # select an action using either random policy or trained policy
-                if ep < self.warmup:
-                    action = self.agent.random_action(self.noise).data
+                if ep < self.__warmup:
+                    action = self.__agent.random_action(self.__noise).data
                 else:
-                    action = self.agent.select_action(state, noise=self.noise).data
+                    action = self.__agent.select_action(state, noise=self.__noise).data
 
                 # step simulation forward
-                a = self.trim+action.cpu().numpy()*self.action_bandwidth
-                next_state, reward, done, _ = self.env.step(a)
+                next_state, reward, done, _ = self.__env.step(action.cpu().numpy())
                 running_reward += reward
 
                 # render the episode if render selected
-                if ep % self.log_interval == 0 and self.render:
-                    self.env.render()
+                if ep % self.__log_interval == 0 and self.__render:
+                    self.__env.render()
                 
                 # transform to tensors before storing in memory
-                next_state = self.Tensor(next_state)
-                reward = self.Tensor([reward])
-                done = self.Tensor([done])
+                next_state = self.__Tensor(next_state)
+                reward = self.__Tensor([reward])
+                done = self.__Tensor([done])
 
                 # push to replay memory
-                self.memory.push(state, action, next_state, reward, done)
+                self.__memory.push(state, action, next_state, reward, done)
             
                 # online training if out of warmup phase
-                if ep >= self.warmup:
-                    for i in range(self.critic_updates):
-                        transitions = self.memory.sample(self.batch_size)
+                if ep >= self.__warmup:
+                    for i in range(self.__learning_updates):
+                        transitions = self.__memory.sample(self.__batch_size)
                         batch = Transition(*zip(*transitions))
-                        self.agent.update(batch, self.crit_opt, self.pol_opt)
+                        self.__agent.update(batch, self.__crit_opt, self.__pol_opt)
 
                 # check if terminate
                 if done:
@@ -228,24 +214,24 @@ class Trainer:
                 # step to next state
                 state = next_state
 
-            if (self.best is None or running_reward > self.best) and self.save:
-                self.best = running_reward
-                print("Saving best DDPG model.")
-                utils.save(self.agent, self.directory + "/saved_policies/ddpg.pth.tar")
+            if (self.__best is None or running_reward > self.__best) and ep > self.__warmup and self.__save:
+                self.__best = running_reward
+                print("---Saving best DDPG policy---")
+                utils.save(self.__agent, self.__directory + "/saved_policies/ddpg-"+self.__env_name+".pth.tar")
 
             # anneal noise 
-            if ep > self.warmup:
-                self.noise.anneal()
+            if ep > self.__warmup:
+                self.__noise.anneal()
 
             # print running average and interval average, log average to csv file
             interval_avg.append(running_reward)
             avg = (avg*(ep-1)+running_reward)/ep   
-            if ep % self.log_interval == 0:
+            if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print("Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}".format(ep, interval, avg))
                 interval_avg = []
-                if self.logging:
-                    self.writer.writerow([ep, avg])
+                if self.__logging:
+                    self.__writer.writerow([ep, avg])
 
 
 Transition = namedtuple("Transition", ["state", "action", "next_state", "reward", "done"])

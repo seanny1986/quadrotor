@@ -27,7 +27,7 @@ class Actor(nn.Module):
 
 class DDPG(nn.Module):
     def __init__(self, actor, target_actor, critic, target_critic, network_settings, GPU=True, clip=None):
-        super(DDPG, self).__init__() 
+        super(DDPG, self).__init__()
         self.__actor = actor
         self.__target_actor = target_actor
         self.__critic = critic
@@ -61,11 +61,11 @@ class DDPG(nn.Module):
     def random_action(self, noise):
         action = self.Tensor(noise.noise())
         return action
-    
+
     def _soft_update(self, target, source, tau):
 	    for target_param, param in zip(target.parameters(), source.parameters()):
 		    target_param.data.copy_(target_param.data*(1.0-tau)+param.data*tau)
-    
+
     def _hard_update(self, target, source):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
@@ -105,7 +105,7 @@ class Trainer:
         # initialize environment
         self.__env = gym.make(env_name)
         self.__env_name = env_name
-        
+
         # save important experiment parameters for the training loop
         self.__iterations = params["iterations"]
         self.__mem_len = params["mem_len"]
@@ -116,7 +116,7 @@ class Trainer:
         self.__batch_size = params["batch_size"]
         self.__learning_updates = params["learning_updates"]
         self.__save = params["save"]
-        
+
         # initialize DDPG agent using experiment parameters from config file
         state_dim = self.__env.observation_space.shape[0]
         action_dim = self.__env.action_space.shape[0]
@@ -127,11 +127,11 @@ class Trainer:
         target_actor = Actor(state_dim, hidden_dim, action_dim)
         critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
         target_critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
-        self.__agent = DDPG(actor, 
-                        target_actor, 
-                        critic, 
+        self.__agent = DDPG(actor,
+                        target_actor,
+                        critic,
                         target_critic,
-                        network_settings, 
+                        network_settings,
                         GPU=cuda)
 
         # intitialize ornstein-uhlenbeck noise for random action exploration
@@ -177,7 +177,7 @@ class Trainer:
             if ep % self.__log_interval == 0 and self.__render:
                 self.__env.render()
             for t in range(10000):
-            
+
                 # select an action using either random policy or trained policy
                 if ep < self.__warmup:
                     action = self.__agent.random_action(self.__noise).data
@@ -191,7 +191,7 @@ class Trainer:
                 # render the episode if render selected
                 if ep % self.__log_interval == 0 and self.__render:
                     self.__env.render()
-                
+
                 # transform to tensors before storing in memory
                 next_state = self.__Tensor(next_state)
                 reward = self.__Tensor([reward])
@@ -199,7 +199,7 @@ class Trainer:
 
                 # push to replay memory
                 self.__memory.push(state, action, next_state, reward, done)
-            
+
                 # online training if out of warmup phase
                 if ep >= self.__warmup:
                     for i in range(self.__learning_updates):
@@ -215,17 +215,18 @@ class Trainer:
                 state = next_state
 
             if (self.__best is None or running_reward > self.__best) and ep > self.__warmup and self.__save:
+            #if ep % self.__log_interval == 0:
                 self.__best = running_reward
                 print("---Saving best DDPG policy---")
                 utils.save(self.__agent, self.__directory + "/saved_policies/ddpg-"+self.__env_name+".pth.tar")
 
-            # anneal noise 
+            # anneal noise
             if ep > self.__warmup:
                 self.__noise.anneal()
 
             # print running average and interval average, log average to csv file
             interval_avg.append(running_reward)
-            avg = (avg*(ep-1)+running_reward)/ep   
+            avg = (avg*(ep-1)+running_reward)/ep
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print("Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}".format(ep, interval, avg))
@@ -255,4 +256,3 @@ class ReplayMemory:
 
     def __len__(self):
         return len(self.memory)
-            

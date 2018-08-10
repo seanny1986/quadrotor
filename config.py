@@ -9,7 +9,8 @@
 """
 
 exp = {
-        "env": "Land-v0",
+        #"env": "Land-v0",
+        "env": "Hover-v0",
         "algs": ["ddpg"]
         }
 
@@ -35,7 +36,7 @@ ddpg = {
                                 "tau": 0.01
                                 },
         "hidden_dim": 64,
-        "iterations": 100,
+        "iterations": 1000,
         "mem_len": 1000000,
         "actor_lr": 1e-5,
         "critic_lr": 1e-4,
@@ -47,7 +48,7 @@ ddpg = {
         "ou_scale": 0.75,
         "ou_mu": 0.75,
         "ou_sigma": 0.15,
-        "render": True,
+        "render": False,
         "save": True,
         "cuda": False,
         "logging": True

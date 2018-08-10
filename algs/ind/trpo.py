@@ -71,7 +71,7 @@ class TRPO(nn.Module):
         return action
 
     def update(self, batch):
-        
+
         # Original code uses the same LBFGS to optimize the value loss
         def get_value_loss(flat_params):
             set_flat_params_to(self.critic, torch.Tensor(flat_params))
@@ -80,7 +80,7 @@ class TRPO(nn.Module):
                     param.grad.data.fill_(0)
             values_ = self.critic(Variable(states))
             value_loss = (values_-targets).pow(2).mean()
-            
+
             # weight decay
             for param in self.critic.parameters():
                 value_loss += param.pow(2).sum()*self.l2_reg
@@ -195,7 +195,7 @@ def trpo_step(model, get_loss, get_kl, max_kl, damping):
     lm = torch.sqrt(shs/max_kl)
     fullstep = stepdir/lm[0]
     neggdotstepdir = (-loss_grad*stepdir).sum(0, keepdim=True)
-    print("lagrange multiplier: {:.4f}, grad_norm: {:.4f}".format(lm[0], loss_grad.norm().item()))
+    #print("lagrange multiplier: {:.4f}, grad_norm: {:.4f}".format(lm[0], loss_grad.norm().item()))
     prev_params = get_flat_params_from(model)
     success, new_params = linesearch(model, get_loss, prev_params, fullstep, neggdotstepdir/lm[0])
     set_flat_params_to(model, new_params)
@@ -275,7 +275,7 @@ class Trainer:
                 self.run_algo()
         else:
             self.run_algo()
-    
+
     def run_algo(self):
         for i_episode in range(1, self.iterations+1):
             memory = Memory()
@@ -299,7 +299,7 @@ class Trainer:
                     next_state = self.Tensor(next_state)
                     reward = self.Tensor([reward])
                     mask = self.Tensor([not done])
-                    memory.push(state, action, mask, next_state, reward)    
+                    memory.push(state, action, mask, next_state, reward)
                     if done:
                         break
                     state = next_state
@@ -319,7 +319,7 @@ class Trainer:
             if i_episode % self.log_interval == 0:
                 print('Episode {}\tLast reward: {:.3f}\tAverage reward {:.3f}'.format(i_episode, reward_sum, reward_batch))
                 if self.logging:
-                    self.writer.writerow([i_episode, reward_batch]) 
+                    self.writer.writerow([i_episode, reward_batch])
 
 class RunningStat(object):
     def __init__(self, shape):
@@ -382,4 +382,3 @@ class ZFilter:
 
     def output_shape(self, input_space):
         return input_space.shape
-

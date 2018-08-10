@@ -8,12 +8,12 @@
     -- Sean Morrison, 2018
 """
 
-exp = { 
-        "env": "Hover-v0",
-        "algs": ["trpo"]
+exp = {
+        "env": "Land-v0",
+        "algs": ["ddpg"]
         }
 
-cem = { 
+cem = {
         "hidden_dim": 32,
         "iterations": 10000,
         "gamma": 0.99,
@@ -25,7 +25,7 @@ cem = {
         "sigma": 0.2,
         "render": False,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -35,21 +35,21 @@ ddpg = {
                                 "tau": 0.01
                                 },
         "hidden_dim": 64,
-        "iterations": 10000,
+        "iterations": 100,
         "mem_len": 1000000,
         "actor_lr": 1e-5,
         "critic_lr": 1e-4,
         "learning_updates": 5,
         "seed": 343,
-        "log_interval": 10,
+        "log_interval": 25,
         "warmup": 100,
         "batch_size": 64,
         "ou_scale": 0.75,
         "ou_mu": 0.75,
         "ou_sigma": 0.15,
-        "render": False,
+        "render": True,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -71,7 +71,7 @@ gae = {
         "logging": True
         }
 
-ppo = { 
+ppo = {
         "network_settings": {
                                 "gamma": 0.99,
                                 "lambda": 0.92,
@@ -99,14 +99,13 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 64,
-        "iterations": 5000,
-        "log_interval": 10,
+        "iterations": 50,
+        "log_interval": 25,
         "warmup": 50,
         "batch_size": 512,
         "seed": 343,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": False,
         "logging": True
         }
-        

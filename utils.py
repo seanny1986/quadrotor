@@ -82,9 +82,13 @@ def print_gradients(model):
     for param in model.parameters():
         print(param.grad)
 
-def save(state, filename='checkpoint.pth.tar'):
-    print("=> saving model in '{}'".format(filename))
-    torch.save(state, filename)
+def save(model, filename):
+    print("=> Saving model in '{}'".format(filename))
+    torch.save(model.state_dict(), filename)
+
+def load(model, filename):
+    print("=> Loading '{}'".format(filename))
+    model.load_state_dict(torch.load(filename))
 
 def resume(model):
     print("=> loading model '{}'".format(model))

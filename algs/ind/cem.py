@@ -67,8 +67,6 @@ class Trainer:
     def __init__(self, env_name, params):
         self.env = gym.make(env_name)
         self.env_name = env_name
-        self.action_bound = self.env.action_bound[1]
-        self.trim = np.array(self.env.trim)
         self.iterations = params["iterations"]
         self.gamma = params["gamma"]
         self.seed = params["seed"]

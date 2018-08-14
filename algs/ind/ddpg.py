@@ -89,6 +89,7 @@ class DDPG(nn.Module):
         value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)              # (critic-target) loss
         value_loss.backward()                                                                       # backpropagate value loss
         crit_opt.step()                                                                             # update value function
+        crit_opt.zero_grad()
         pol_opt.zero_grad()                                                                         # zero gradients in optimizer
         policy_loss = self.__critic(torch.cat([state, self.__actor(state)],1))                      # use critic to estimate pol gradient
         policy_loss = -policy_loss.mean()                                                           # sum losses

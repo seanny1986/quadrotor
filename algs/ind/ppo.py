@@ -148,18 +148,17 @@ class Trainer:
                 if ep % self.__log_interval == 0 and self.__render:
                     self.__env.render()
                 running_reward = 0
-                for t in range(10000):          
+                done = False
+                t = 0
+                while not done:          
                     action, log_prob, value = self.__agent.select_action(state)
                     a = action.cpu().numpy()
                     next_state, reward, done, _ = self.__env.step(a)
                     running_reward += reward
-                
                     if ep % self.__log_interval == 0 and self.__render:
                         self.__env.render()
-
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
-
                     s_.append(state)
                     a_.append(action)
                     ns_.append(next_state)
@@ -167,15 +166,14 @@ class Trainer:
                     v_.append(value)
                     lp_.append(log_prob)
                     dones.append(self.__Tensor([not done]))
-                    if done:
-                        break
                     state = next_state
+                    t += 1
                 bsize += t
                 batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
                 num_episodes += 1
             if (self.__best is None or batch_mean_rwd > self.__best) and self.__save:
                 print("---Saving best PPO policy---")
-                self.__best = running_reward
+                self.__best = batch_mean_rwd
                 utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+".pth.tar")
             trajectory = {"states": s_,
                         "actions": a_,
@@ -188,7 +186,7 @@ class Trainer:
                 self.__agent.update(self.__optim, trajectory)
             self.__agent.hard_update()
             interval_avg.append(batch_mean_rwd)
-            avg = (avg*(ep-1)+running_reward)/ep   
+            avg = (avg*(ep-1)+batch_mean_rwd)/ep   
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))

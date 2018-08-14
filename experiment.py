@@ -35,22 +35,32 @@ def make(env_name, alg):
     if alg == "cem":
         params = cfg.cem
         import algs.ind.cem as cem
+        print("---Initializing CEM in env: "+env_name+"---")
         return cem.Trainer(env_name, params)
     if alg == "ddpg":
         params = cfg.ddpg
         import algs.ind.ddpg as ddpg
+        print("---Initializing DDPG in env: "+env_name+"---")
         return ddpg.Trainer(env_name, params)
     if alg == "gae":
         params = cfg.gae
         import algs.ind.gae as gae
+        print("---Initializing GAE in env: "+env_name+"---")
         return gae.Trainer(env_name, params)
     if alg == "ppo":
         params = cfg.ppo
         import algs.ind.ppo as ppo
+        print("---Initializing PPO in env: "+env_name+"---")
         return ppo.Trainer(env_name, params)
+    if alg == "scv":
+        params = cfg.scv
+        import algs.ind.scv as scv
+        print("---Initializing SCV in env: "+env_name+"---")
+        return scv.Trainer(env_name, params)
     if alg == "trpo":
         params = cfg.trpo
         import algs.ind.trpo as trpo
+        print("---Initializing TRPO in env: "+env_name+"---")
         return trpo.Trainer(env_name, params)
     
 

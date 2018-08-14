@@ -9,7 +9,6 @@
 """
 
 exp = {
-        #"env": "Land-v0",
         "env": "Hover-v0",
         "algs": ["ddpg"]
         }
@@ -36,7 +35,7 @@ ddpg = {
                                 "tau": 0.01
                                 },
         "hidden_dim": 64,
-        "iterations": 1000,
+        "iterations": 15000,
         "mem_len": 1000000,
         "actor_lr": 1e-5,
         "critic_lr": 1e-4,
@@ -50,7 +49,7 @@ ddpg = {
         "ou_sigma": 0.15,
         "render": False,
         "save": True,
-        "cuda": False,
+        "cuda": True,
         "logging": True
         }
 
@@ -60,15 +59,15 @@ gae = {
                                 "lambda": 0.92
                                 },
         "hidden_dim": 64,
-        "iterations": 5000,
-        "batch_size": 512,
-        "epochs": 4,
-        "lr": 3e-4,
+        "iterations": 25000,
+        "batch_size": 256,
+        "epochs": 2,
+        "lr": 1e-4,
         "seed": 343,
         "log_interval": 10,
         "render": False,
         "save": True,
-        "cuda": False,
+        "cuda": True,
         "logging": True
         }
 
@@ -79,10 +78,34 @@ ppo = {
                                 "eps": 0.1
                                 },
         "hidden_dim": 64,
-        "iterations": 5000,
-        "batch_size": 512,
+        "iterations": 25000,
+        "batch_size": 256,
         "epochs":4,
-        "lr": 3e-4,
+        "lr": 1e-4,
+        "seed": 343,
+        "log_interval": 10,
+        "render": False,
+        "save": True,
+        "cuda": True,
+        "logging": True
+        }
+
+scv = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "tau": 0.01,
+                                "eps": 0.1
+                                },
+        "mem_len": 1000000,
+        "actor_lr": 1e-5,
+        "critic_lr": 1e-4,
+        "learning_updates": 5,
+        "hidden_dim": 64,
+        "iterations": 5000,
+        "warmup": 50,
+        "batch_size": 128,
+        "policy_batch_size": 256,
+        "epochs":4,
         "seed": 343,
         "log_interval": 10,
         "render": False,
@@ -93,17 +116,17 @@ ppo = {
 
 trpo = {
         "network_settings": {
-                                "gamma": 0.995,
+                                "gamma": 0.99,
                                 "tau": 0.97,
                                 "l2_reg": 1e-3,
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
         "hidden_dim": 64,
-        "iterations": 50,
+        "iterations": 15000,
         "log_interval": 25,
         "warmup": 50,
-        "batch_size": 512,
+        "batch_size": 256,
         "seed": 343,
         "render": True,
         "save": True,

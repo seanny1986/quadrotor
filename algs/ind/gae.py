@@ -148,7 +148,7 @@ class Trainer:
                 num_episodes += 1
             if (self.__best is None or batch_mean_rwd > self.__best) and self.__save:
                 print("---Saving best GAE policy---")
-                self.__best = running_reward
+                self.__best = batch_mean_rwd
                 utils.save(self.__agent, self.__directory+"/saved_policies/gae-"+self.__env_name+".pth.tar")
             trajectory = {
                         "rewards": r_,

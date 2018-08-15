@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Hover-v0",
-        "algs": ["ddpg"]
+        "env": "Land-v0",
+        "algs": ["trpo"]
         }
 
 cem = {
@@ -123,12 +123,12 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 64,
-        "iterations": 15000,
-        "log_interval": 25,
+        "iterations": 2500,
+        "log_interval": 250,
         "warmup": 50,
         "batch_size": 256,
         "seed": 343,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": False,
         "logging": True

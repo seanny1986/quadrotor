@@ -25,6 +25,7 @@ fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
 
 def main():
     env_name = args.env+"-v0"
+    print(env_name)
     env = gym.make(env_name)
     agent = utils.load(fp)
     state = torch.Tensor(env.reset())
@@ -32,10 +33,17 @@ def main():
     done = False
     running_reward = 0
     while not done:
+
         action  = agent.select_action(state)
         if isinstance(action, tuple):
             action = action[0]
-        state, reward, done, _  = env.step(action.cpu().numpy())
+
+        #print(args.env)
+        if(args.pol == 'trpo'):
+            state, reward, done, _  = env.step(action.data.numpy())
+        else:
+            state, reward, done, _  = env.step(action.cpu().numpy())
+
         running_reward += reward
         state = torch.Tensor(state)
         env.render()

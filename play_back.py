@@ -4,52 +4,44 @@ import matplotlib.pyplot as plt
 import gym
 import gym_aero
 import numpy as np
-import algs.ind.gae as gae
+import algs.ind.ppo as ppo
 import utils
+import argparse
+import config as cfg
 
-##WORKS with ddpg, ppo gae and trpo only!!
+"""
+    function to play back saved policies.
+
+    -- Sean Morrison, 2018
+"""
+
+parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
+parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
+parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
+args = parser.parse_args()
 
 directory = os.getcwd()
-fp = directory + "/saved_policies/gae-Hover-v0.pth.tar"
-alg = 'gae'
+fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
 
 def main():
-    env = gym.make('Hover-v0')
-    hidden_dim = 64
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-    #pi = ppo.ActorCritic(state_dim, hidden_dim, action_dim)
-    #beta = ppo.ActorCritic(state_dim, hidden_dim, action_dim)
-    network_settings = {
-                                "gamma": 0.99,
-                                "lambda": 0.92
-                                }
-
-    agent = gae.GAE(state_dim, hidden_dim, action_dim, network_settings, GPU=False)
-    utils.load(agent, fp)
-    __Tensor = torch.Tensor
-    state = np.array(env.reset(), dtype="float32")
-    s_torch = torch.from_numpy(state.copy())
-    if alg == 'gae' or alg == 'ppo':
-        action, _, _  = agent.select_action(s_torch)
-    else:  #for ddpg and trpo only
-        action = agent.select_action(s_torch)
+    env_name = args.env+"-v0"
+    env = gym.make(env_name)
+    agent = utils.load(fp)
+    state = torch.Tensor(env.reset())
     env.render()
     done = False
     running_reward = 0
     while not done:
+        action  = agent.select_action(state)
+        if isinstance(action, tuple):
+            action = action[0]
         state, reward, done, _  = env.step(action.cpu().numpy())
         running_reward += reward
-        state = __Tensor(state)
-        if alg == 'gae' or alg == 'ppo':
-            action, _, _  = agent.select_action(state)
-        else:  #for ddpg and trpo only
-            action = agent.select_action(state)
+        state = torch.Tensor(state)
         env.render()
-
         if done:
             break
-    print("Running reward: {:.5f}".format(running_reward))
+    print("Running reward: {:.3f}".format(running_reward))
 
 if __name__ == "__main__":
     main()

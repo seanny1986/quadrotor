@@ -40,5 +40,5 @@ for f in os.listdir(directory):
             ax.plot(xs, ys, label=name)
 plt.legend()         
 plt.show()
-fig.savefig(curr_dir + "/figures/reward_gain.pdf", bbox_inches="tight")
+fig.savefig(curr_dir + "/figures/"+args.e+".pdf", bbox_inches="tight")
 print("Figure saved")

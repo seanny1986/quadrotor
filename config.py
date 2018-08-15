@@ -15,7 +15,7 @@ exp = {
 
 cem = {
         "hidden_dim": 32,
-        "iterations": 10000,
+        "iterations": 15000,
         "gamma": 0.99,
         "lr": 1e-4,
         "seed": 343,
@@ -37,8 +37,8 @@ ddpg = {
         "hidden_dim": 64,
         "iterations": 15000,
         "mem_len": 1000000,
-        "actor_lr": 1e-5,
-        "critic_lr": 1e-4,
+        "actor_lr": 1e-4,
+        "critic_lr": 1e-3,
         "learning_updates": 5,
         "seed": 343,
         "log_interval": 25,
@@ -59,7 +59,7 @@ gae = {
                                 "lambda": 0.92
                                 },
         "hidden_dim": 64,
-        "iterations": 25000,
+        "iterations": 15000,
         "batch_size": 256,
         "epochs": 2,
         "lr": 1e-4,
@@ -78,7 +78,7 @@ ppo = {
                                 "eps": 0.1
                                 },
         "hidden_dim": 64,
-        "iterations": 25000,
+        "iterations": 15000,
         "batch_size": 256,
         "epochs":4,
         "lr": 1e-4,
@@ -101,7 +101,7 @@ scv = {
         "critic_lr": 1e-4,
         "learning_updates": 5,
         "hidden_dim": 64,
-        "iterations": 5000,
+        "iterations": 15000,
         "warmup": 50,
         "batch_size": 128,
         "policy_batch_size": 256,
@@ -128,7 +128,7 @@ trpo = {
         "warmup": 50,
         "batch_size": 256,
         "seed": 343,
-        "render": True,
+        "render": False,
         "save": True,
         "cuda": False,
         "logging": True

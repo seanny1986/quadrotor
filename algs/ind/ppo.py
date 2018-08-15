@@ -195,5 +195,3 @@ class Trainer:
                     self.__writer.writerow([ep, avg])
 
         
-
-        

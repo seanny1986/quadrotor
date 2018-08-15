@@ -84,11 +84,11 @@ def print_gradients(model):
 
 def save(model, filename):
     print("=> Saving model in '{}'".format(filename))
-    torch.save(model.state_dict(), filename)
+    torch.save(model, filename)
 
-def load(model, filename):
+def load(filename):
     print("=> Loading '{}'".format(filename))
-    model.load_state_dict(torch.load(filename))
+    return torch.load(filename, map_location=lambda storage, loc: storage)
 
 def resume(model):
     print("=> loading model '{}'".format(model))

@@ -301,7 +301,6 @@ class Trainer:
                     if done:
                         break
                     state = next_state
-
                 num_steps += (t-1)
                 num_episodes += 1
                 reward_batch += reward_sum

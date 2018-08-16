@@ -59,7 +59,7 @@ def animate(i, P, state_data, ax, goal):
     q3 = np.matlib.repmat(xyz.T,n+1,1)+q3
     q4 = np.matlib.repmat(xyz.T,n+1,1)+q4
 
-    # plot rotated
+    # plot rotated points
     ax.cla()
     ax.plot(q1[:,0], q1[:,1], q1[:,2],'k')
     ax.plot(q2[:,0], q2[:,1], q2[:,2],'k')
@@ -73,7 +73,10 @@ def animate(i, P, state_data, ax, goal):
     ax.set_xlim(-3, 3)
     ax.set_ylim(-3, 3)
     ax.set_zlim(-3, 3)
-
+    ax.set_xlabel('West/East [m]')
+    ax.set_ylabel('South/North [m]')
+    ax.set_zlabel('Down/Up [m]')
+    ax.set_title("Time %.3f s" %(i*0.05))
     return ax
 
 # generate plot points for rotors
@@ -110,6 +113,10 @@ def main():
     ax.set_xlim(-3, 3)
     ax.set_ylim(-3, 3)
     ax.set_zlim(-3, 3)
+    ax.set_xlabel('West/East [m]')
+    ax.set_ylabel('South/North [m]')
+    ax.set_zlabel('Down/Up [m]')
+    ax.set_title("Time %.3f s" %(0.))
 
     env_name = args.env+"-v0"
     env = gym.make(env_name)

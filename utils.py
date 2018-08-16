@@ -16,7 +16,15 @@ from collections import namedtuple
     doesn't make sense for it to go anywhere else, this is where it belongs.
 """
 
-style.use('seaborn-white')
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 def numpy_to_pytorch(xyz, zeta, uvw, pqr, cuda=True):
     xyz = torch.from_numpy(xyz.T).float()
@@ -29,48 +37,6 @@ def numpy_to_pytorch(xyz, zeta, uvw, pqr, cuda=True):
         uvw = uvw.cuda()
         pqr = pqr.cuda()
     return xyz, zeta, uvw, pqr
-
-def get_trajectories(df, state_dim, action_dim, batchsize, H, dt):
-    seq_len = int(H/dt)
-    states = np.zeros((seq_len, batchsize, state_dim+1))
-    actions = np.zeros((seq_len, batchsize, action_dim))
-    next_states = np.zeros((seq_len, batchsize, state_dim))
-    data = df.loc[df['len'] == seq_len]
-    for i in range(batchsize):
-        initial = data.sample(n=1)
-        key = initial[['key']].values
-        sequence = df.loc[df['key'] == key[0][0]]
-        states[:,i,:] = sequence[['X0','Y0','Z0','ROLL0','PITCH0','YAW0','U0','V0','W0','Q01','Q02','Q03','O01','O02','O03','O04','dt']].values
-        actions[:,i,:] = sequence[['A01','A02','A03','A04']].values
-        next_states[:,i,:] = sequence[['X1','Y1','Z1','ROLL1','PITCH1','YAW1','U1','V1','W1','Q11','Q12','Q13','O11','O12','O13','O14']].values
-    return states, actions, next_states
-
-def euler_angle_to_quaternion(roll, pitch, yaw):
-    cr = math.cos(roll*0.5)
-    sr = math.sin(roll*0.5)
-    cp = math.cos(pitch*0.5)
-    sp = math.sin(pitch*0.5)
-    cy = math.cos(yaw*0.5)
-    sy = math.sin(yaw*0.5)
-    q_w = cy*cr*cp+sy*sr*sp
-    q_x = cy*sr*cp-sy*cr*sp
-    q_y = cy*cr*sp+sy*sr*cp
-    q_z = sy*cr*cp-cy*sr*sp
-    return [q_x, q_y, q_z, q_w]
-
-def quaternion_to_euler_angle(x, y, z, w):
-	ysqr = y*y
-	t0 = +2.0*(w*x+y*z)
-	t1 = +1.0-2.0*(x*x+ysqr)
-	roll = math.atan2(t0,t1)
-	t2 = +2.0*(w*y-z*x)
-	t2 = +1.0 if t2 > +1.0 else t2
-	t2 = -1.0 if t2 < -1.0 else t2
-	pitch = math.asin(t2)
-	t3 = +2.0*(w*z+x*y)
-	t4 = +1.0-2.0*(ysqr+z*z)
-	yaw = math.atan2(t3,t4)
-	return roll, pitch, yaw
 
 def average_gradient(model):
     mean = []
@@ -90,10 +56,6 @@ def load(filename):
     print("=> Loading '{}'".format(filename))
     return torch.load(filename, map_location=lambda storage, loc: storage)
 
-def resume(model):
-    print("=> loading model '{}'".format(model))
-    return torch.load(model)
-
 def progress(count, total, loss):
     bar_len = 50
     filled_len = int(round(bar_len * count / float(total)))
@@ -101,63 +63,6 @@ def progress(count, total, loss):
     loss = tuple([round(x, 5) if isinstance(x, float) else x for x in loss])
     bar = '#' * filled_len + '-' * (bar_len - filled_len)
     print('[{}] {}%, Loss: {}'.format(bar, percent, loss), end='\r', flush=True)
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-class Logger:
-    def __init__(self, title, xlab, ylab):
-        self.fig1 = plt.figure()
-        self.ax1 = self.fig1.add_subplot(111)
-        self.ax1.set_title(title)
-        self.ax1.set_xlabel(xlab)
-        self.ax1.set_ylabel(ylab)
-        self.fig1.subplots_adjust(hspace=0.3)
-        self.fig1.subplots_adjust(wspace=0.3)
-        #self.fig1.tight_layout()
-        self.fig1.show()
-
-        self.legend = None
-
-        self.ax1_data = [[],[]]
-        self.ax1_val = [[],[]]
-
-        self.model_counter = 0
-        self.title = title
-        self.xlab = xlab
-        self.ylab = ylab
-
-    def plot_graphs(self):
-        self.ax1.clear()
-        if not self.legend == None:
-            self.legend.remove()
-        p5, p6 = self.ax1.plot(self.ax1_data[:][0],self.ax1_data[:][1],self.ax1_val[:][0],self.ax1_val[:][1])
-
-        self.ax1.set_title(self.title)
-        self.ax1.set_xlabel(self.xlab)
-        self.ax1.set_ylabel(self.ylab)
-        
-        self.legend = self.fig1.legend((p5, p6), ('Train', 'Validation'))
-
-        self.fig1.canvas.draw()
-
-    def update_data(self, J, J_val):
-        i = self.model_counter
-        self.ax1_data[0].append(i)
-        self.ax1_data[1].append(J)
-        self.ax1_val[0].append(i)
-        self.ax1_val[1].append(J_val)
-        self.model_counter += 1
-
-    def save_figure(self, name):
-        self.fig1.savefig(name + '.pdf', bbox_inches='tight')
 
 def set_seed(seed):
     random.seed(seed)
@@ -170,6 +75,68 @@ def cuda_if(torch_object, cuda):
 def set_lr(optimizer, lr):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+class RunningStat(object):
+    def __init__(self, shape):
+        self._n = 0
+        self._M = np.zeros(shape)
+        self._S = np.zeros(shape)
+
+    def push(self, x):
+        x = np.asarray(x)
+        assert x.shape == self._M.shape
+        self._n += 1
+        if self._n == 1:
+            self._M[...] = x
+        else:
+            oldM = self._M.copy()
+            self._M[...] = oldM+(x-oldM)/self._n
+            self._S[...] = self._S+(x-oldM)*(x-self._M)
+
+    @property
+    def n(self):
+        return self._n
+
+    @property
+    def mean(self):
+        return self._M
+
+    @property
+    def var(self):
+        return self._S/(self._n-1) if self._n>1 else np.square(self._M)
+
+    @property
+    def std(self):
+        return np.sqrt(self.var)
+
+    @property
+    def shape(self):
+        return self._M.shape
+
+class ZFilter:
+    """
+    y = (x-mean)/std
+    using running estimates of mean,std
+    """
+
+    def __init__(self, shape, demean=True, destd=True, clip=10.0):
+        self.demean = demean
+        self.destd = destd
+        self.clip = clip
+        self.rs = RunningStat(shape)
+
+    def __call__(self, x, update=True):
+        if update: self.rs.push(x)
+        if self.demean:
+            x = x-self.rs.mean
+        if self.destd:
+            x = x/(self.rs.std+1e-8)
+        if self.clip:
+            x = np.clip(x, -self.clip, self.clip)
+        return x
+
+    def output_shape(self, input_space):
+        return input_space.shape
 
 # from https://github.com/songrotek/DDPG/blob/master/ou_noise.py
 class OUNoise:
@@ -229,7 +196,6 @@ class ReplayMemory:
 
     def __len__(self):
         return len(self.memory)
-
 
 class Actor(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):

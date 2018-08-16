@@ -254,8 +254,7 @@ class Trainer:
         self.pi = Actor(state_dim, hidden_dim, action_dim)
         self.critic = Critic(state_dim, hidden_dim, 1)
         self.agent = TRPO(self.pi, self.critic, params["network_settings"], GPU=cuda)
-        self.running_state = ZFilter((state_dim,), clip=5)
-        self.running_reward = ZFilter((1,), demean=False, clip=10)
+        self.running_state = utils.ZFilter((state_dim,), clip=5)
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
         else:
@@ -317,65 +316,3 @@ class Trainer:
                 print('Episode {}\tLast reward: {:.3f}\tAverage reward {:.3f}'.format(i_episode, reward_sum, reward_batch))
                 if self.logging:
                     self.writer.writerow([i_episode, reward_batch])
-
-class RunningStat(object):
-    def __init__(self, shape):
-        self._n = 0
-        self._M = np.zeros(shape)
-        self._S = np.zeros(shape)
-
-    def push(self, x):
-        x = np.asarray(x)
-        assert x.shape == self._M.shape
-        self._n += 1
-        if self._n == 1:
-            self._M[...] = x
-        else:
-            oldM = self._M.copy()
-            self._M[...] = oldM + (x - oldM) / self._n
-            self._S[...] = self._S + (x - oldM) * (x - self._M)
-
-    @property
-    def n(self):
-        return self._n
-
-    @property
-    def mean(self):
-        return self._M
-
-    @property
-    def var(self):
-        return self._S / (self._n - 1) if self._n > 1 else np.square(self._M)
-
-    @property
-    def std(self):
-        return np.sqrt(self.var)
-
-    @property
-    def shape(self):
-        return self._M.shape
-
-class ZFilter:
-    """
-    y = (x-mean)/std
-    using running estimates of mean,std
-    """
-
-    def __init__(self, shape, demean=True, destd=True, clip=10.0):
-        self.demean = demean
-        self.destd = destd
-        self.clip = clip
-        self.rs = RunningStat(shape)
-
-    def __call__(self, x, update=True):
-        if update: self.rs.push(x)
-        if self.demean:
-            x = x - self.rs.mean
-        if self.destd:
-            x = x / (self.rs.std + 1e-8)
-        if self.clip:
-            x = np.clip(x, -self.clip, self.clip)
-        return x
-
-    def output_shape(self, input_space):
-        return input_space.shape

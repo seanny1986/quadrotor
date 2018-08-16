@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Hover-v0",
-        "algs": ["ddpg"]
+        "env": "StaticWaypoint-v0",
+        "algs": ["gae"]
         }
 
 cem = {

@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
+parser.add_argument("--repeats", type=int, default=3, metavar="R", help="how many attempts we want to record")
 args = parser.parse_args()
 
 # animation callback function
@@ -123,21 +124,24 @@ def main():
     env_name = args.env+"-v0"
     env = gym.make(env_name)
     agent = utils.load(fp)
-    state = torch.Tensor(env.reset())
-    goal = env.get_goal()
-    done = False
-    running_reward = 0
-    while not done:
-        action  = agent.select_action(state)
-        if isinstance(action, tuple):
-            action = action[0]
-        state, reward, done, _  = env.step(action.detach().cpu().numpy())
-        state_data.append(state)
-        running_reward += reward
-        state = torch.Tensor(state)
-        if done:
-            break
-    print("Running reward: {:.3f}".format(running_reward))
+    batch_rwd = 0
+    for k in range(1, args.repeats+1):
+        state = torch.Tensor(env.reset())
+        goal = env.get_goal()
+        done = False
+        running_reward = 0
+        while not done:
+            action  = agent.select_action(state)
+            if isinstance(action, tuple):
+                action = action[0]
+            state, reward, done, _  = env.step(action.detach().cpu().numpy())
+            state_data.append(state)
+            running_reward += reward
+            state = torch.Tensor(state)
+            if done:
+                break
+        batch_rwd = (batch_rwd*(k-1)+running_reward)/k
+    print("Mean reward: {:.3f}".format(batch_rwd))
     ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, goal), repeat=False, frames=len(state_data), interval=50)
     print("Saving video in: "+video_path+".mp4")
     ani.save(video_path+".mp4", writer='ffmpeg', extra_args=['-loglevel', 'verbose'])

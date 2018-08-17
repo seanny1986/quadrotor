@@ -134,7 +134,6 @@ class Trainer:
                         target_critic,
                         network_settings,
                         GPU=cuda)
-        self.__running_state = utils.ZFilter((state_dim,), clip=5)
 
         # intitialize ornstein-uhlenbeck noise for random action exploration
         ou_scale = params["ou_scale"]
@@ -174,7 +173,6 @@ class Trainer:
         for ep in range(1, self.__iterations+1):
 
             state = self.__env.reset()
-            state = self.__running_state(state)
             state = self.__Tensor(state)
             self.__noise.reset()
             running_reward = 0
@@ -190,7 +188,6 @@ class Trainer:
 
                 # step simulation forward
                 next_state, reward, done, _ = self.__env.step(action.cpu().numpy())
-                next_state = self.running_state(next_state)
                 running_reward += reward
 
                 # render the episode if render selected

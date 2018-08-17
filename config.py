@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "StaticWaypoint-v0",
-        "algs": ["gae"]
+        "env": "RandomWaypoint-v0",
+        "algs": ["ppo"]
         }
 
 cem = {

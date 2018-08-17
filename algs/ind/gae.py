@@ -93,7 +93,6 @@ class Trainer:
         cuda = params["cuda"]
         network_settings = params["network_settings"]
         self.__agent = GAE(state_dim, hidden_dim, action_dim, network_settings, GPU=cuda)
-        self.__running_state = utils.ZFilter((state_dim,), clip=5)
         self.__optim = torch.optim.Adam(self.__agent.parameters())
         if cuda:
             self.__Tensor = torch.cuda.FloatTensor
@@ -125,7 +124,6 @@ class Trainer:
             num_episodes = 1
             while bsize<self.__batch_size+1:
                 state = self.__env.reset()
-                state = self.__running_state(state)
                 state = self.__Tensor(state)
                 if ep % self.__log_interval == 0 and self.__render:
                     self.__env.render()
@@ -134,7 +132,6 @@ class Trainer:
                     action, log_prob, value = self.__agent.select_action(state)
                     a = action.cpu().numpy()
                     next_state, reward, done, _ = self.__env.step(a)
-                    next_state = self.__running_state(next_state)
                     running_reward += reward
                     if ep % self.__log_interval == 0 and self.__render:
                         self.__env.render()

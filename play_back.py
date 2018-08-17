@@ -24,8 +24,10 @@ parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy 
 parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
 args = parser.parse_args()
 
-# helper functions
+# animation callback function
 def animate(i, P, state_data, ax, goal):
+    
+    # rotation matrix. Only used for plotting, has no effect on simulation calcs.
     def R1(zeta):
         phi = zeta[0,0]
         theta = zeta[1,0]
@@ -53,13 +55,13 @@ def animate(i, P, state_data, ax, goal):
     q3 = np.einsum('ij,kj->ik', p3, R.T)
     q4 = np.einsum('ij,kj->ik', p4, R.T)
 
-    # shift to z
+    # translate to aircraft position
     q1 = np.matlib.repmat(xyz.T,n+1,1)+q1
     q2 = np.matlib.repmat(xyz.T,n+1,1)+q2
     q3 = np.matlib.repmat(xyz.T,n+1,1)+q3
     q4 = np.matlib.repmat(xyz.T,n+1,1)+q4
 
-    # plot rotated points
+    # plot rotated, translated points
     ax.cla()
     ax.plot(q1[:,0], q1[:,1], q1[:,2],'k')
     ax.plot(q2[:,0], q2[:,1], q2[:,2],'k')
@@ -82,7 +84,7 @@ def animate(i, P, state_data, ax, goal):
 # generate plot points for rotors
 n = 6           # number of points for plotting rotors
 r = 0.1         # propeller radius. This is cosmetic only
-l = 0.23        # distance from COM to COT
+l = 0.23        # distance from COM to COT, cosmetic only
 
 # generate circular points
 p1 = np.array([[cos(2*pi/n*x)*r, sin(2*pi/n*x)*r, 0] for x in range(n+1)])

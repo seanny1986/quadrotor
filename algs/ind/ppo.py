@@ -21,7 +21,7 @@ class ActorCritic(torch.nn.Module):
         self.__action_mu = torch.nn.Linear(hidden_dim, output_dim)
         self.__action_logvar = torch.nn.Linear(hidden_dim, output_dim)
         self.__value_head = torch.nn.Linear(hidden_dim, 1)
-    
+
     def forward(self, x):
         x = F.tanh(self.__l1(x))
         mu = self.__action_mu(x)
@@ -150,7 +150,7 @@ class Trainer:
                 running_reward = 0
                 done = False
                 t = 0
-                while not done:          
+                while not done:
                     action, log_prob, value = self.__agent.select_action(state)
                     a = action.cpu().numpy()
                     next_state, reward, done, _ = self.__env.step(a)
@@ -171,10 +171,11 @@ class Trainer:
                 bsize += t
                 batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
                 num_episodes += 1
-            if (self.__best is None or batch_mean_rwd > self.__best) and self.__save:
+            if (self.__best is None or batch_mean_rwd > self.__best) and self.__save or ep % self.__log_interval == 0:
                 print("---Saving best PPO policy---")
                 self.__best = batch_mean_rwd
-                utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+".pth.tar")
+                utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"XX.pth.tar")
+
             trajectory = {"states": s_,
                         "actions": a_,
                         "next_states": ns_,
@@ -186,12 +187,10 @@ class Trainer:
                 self.__agent.update(self.__optim, trajectory)
             self.__agent.hard_update()
             interval_avg.append(batch_mean_rwd)
-            avg = (avg*(ep-1)+batch_mean_rwd)/ep   
+            avg = (avg*(ep-1)+batch_mean_rwd)/ep
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, avg])
-
-        

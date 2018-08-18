@@ -7,10 +7,10 @@
 
     -- Sean Morrison, 2018
 """
-
+##LandPara
 exp = {
         "env": "Land-v0",
-        "algs": ["trpo"]
+        "algs": ["ppo"]
         }
 
 cem = {
@@ -83,10 +83,10 @@ ppo = {
         "epochs":4,
         "lr": 1e-4,
         "seed": 343,
-        "log_interval": 10,
-        "render": False,
+        "log_interval": 1000  ,
+        "render": True,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 

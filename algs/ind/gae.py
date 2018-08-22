@@ -165,3 +165,4 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, avg])
+        utils.save(self.__agent, self.__directory + "/saved_policies/gae-"+self.__env_name+"final.pth.tar")

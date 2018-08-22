@@ -22,12 +22,22 @@ parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
+<<<<<<< HEAD
 parser.add_argument("--repeats", type=int, default=5, metavar="R", help="how many attempts we want to record")
 args = parser.parse_args()
 
 # animation callback function
 def animate(i, P, state_data, ax, goal):
 
+=======
+parser.add_argument("--repeats", type=int, default=3, metavar="R", help="how many attempts we want to record")
+parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
+args = parser.parse_args()
+
+# animation callback function
+def animate(i, P, state_data, ax, g, time):
+
+>>>>>>> 041bd7ead2c8a84a5bb5e0f4a488ae7e054a65a9
     # rotation matrix. Only used for plotting, has no effect on simulation calcs.
     def R1(zeta):
         phi = zeta[0,0]
@@ -46,6 +56,7 @@ def animate(i, P, state_data, ax, goal):
         return R_z.dot(R_y.dot(R_x))
 
     p1, p2, p3, p4 = P
+    goal = g[i]
     xyz, zeta, uvw, pqr = state_data[i][0:3], state_data[i][3:6], state_data[i][6:9], state_data[i][9:12]
     xyz, zeta, uvw, pqr = np.array(xyz).reshape(-1,1), np.array(zeta).reshape(-1,1), np.array(uvw).reshape(-1,1), np.array(pqr).reshape(-1,1)
     R = R1(zeta)
@@ -79,7 +90,7 @@ def animate(i, P, state_data, ax, goal):
     ax.set_xlabel('West/East [m]')
     ax.set_ylabel('South/North [m]')
     ax.set_zlabel('Down/Up [m]')
-    ax.set_title("Time %.3f s" %(i*0.05))
+    ax.set_title("Time %.3f s" %(time[i]))
     return ax
 
 # generate plot points for rotors
@@ -102,9 +113,11 @@ p4 += np.array([[0.0, l, 0.0] for x in range(n+1)])
 def main():
     # initialize filepaths
     directory = os.getcwd()
+
     fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
     video_path = directory + "/movies/"+args.pol+"-"+args.env
     print(fp)
+
     # create list to store state information over the flight. This is... doing it the hard way,
     # but the matplotlib animation class doesn't want to do this easily :/
     state_data = []
@@ -126,12 +139,18 @@ def main():
     env = gym.make(env_name)
     agent = utils.load(fp)
     batch_rwd = 0
+    g = []
+    time = []
     for k in range(1, args.repeats+1):
         state = torch.Tensor(env.reset())
         goal = env.get_goal()
         done = False
+        t = 0
         running_reward = 0
         while not done:
+            g.append(goal)
+            time.append(t)
+            t += 0.05
             action  = agent.select_action(state)
             if isinstance(action, tuple):
                 action = action[0]
@@ -145,8 +164,10 @@ def main():
         batch_rwd = (batch_rwd*(k-1)+running_reward)/k
 
     print("Mean reward: {:.3f}".format(batch_rwd))
-    FFwriter = animation.FFMpegWriter(fps=30, extra_args=['-vcodec', 'libx264']);
-    ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, goal), repeat=True, frames=len(state_data), interval=50)
+
+    ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, g, time), repeat=False, frames=len(state_data), interval=50)
+    #plt.show()
+
     print("Saving video in: "+video_path+".mp4")
 
     #ani.save(video_path+".mp4", writer=FFwriter)#, extra_args=['-loglevel', 'verbose'])

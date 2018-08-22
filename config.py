@@ -11,6 +11,7 @@
 exp = {
         "env": "Land-v0",
         "algs": ["ppo"]
+
         }
 
 cem = {
@@ -60,7 +61,7 @@ gae = {
                                 },
         "hidden_dim": 64,
         "iterations": 15000,
-        "batch_size": 256,
+        "batch_size": 128,
         "epochs": 2,
         "lr": 1e-4,
         "seed": 343,
@@ -77,10 +78,32 @@ ppo = {
                                 "lambda": 0.92,
                                 "eps": 0.1
                                 },
-        "hidden_dim": 64,
+
+        "hidden_dim": 128,
         "iterations": 10000,
         "batch_size": 256,
-        "epochs":4,
+        "epochs": 4,
+        "lr": 1e-4,
+        "seed": 343,
+        "log_interval": 10,
+        "render": False,
+        "save": True,
+        "cuda": True,
+        "logging": True
+        }
+
+ppo_inf = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "lambda": 0.92,
+                                "eps": 0.1
+                                },
+        "hidden_dim": 128,
+        "iterations": 10000,
+        "batch_size": 256,
+        "mem_len": 1000000,
+        "epochs": 4,
+        "dyn_epochs": 32,
         "lr": 1e-4,
         "seed": 343,
         "log_interval": 100 ,
@@ -126,7 +149,7 @@ trpo = {
         "iterations": 2500,
         "log_interval": 250,
         "warmup": 50,
-        "batch_size": 256,
+        "batch_size": 128,
         "seed": 343,
         "render": True,
         "save": True,

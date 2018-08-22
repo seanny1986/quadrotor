@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
-parser.add_argument("--repeats", type=int, default=5, metavar="R", help="how many attempts we want to record")
+parser.add_argument("--repeats", type=int, default=3, metavar="R", help="how many attempts we want to record")
 args = parser.parse_args()
 
 # animation callback function
@@ -102,7 +102,7 @@ p4 += np.array([[0.0, l, 0.0] for x in range(n+1)])
 def main():
     # initialize filepaths
     directory = os.getcwd()
-    fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
+    fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v02.pth.tar"
     video_path = directory + "/movies/"+args.pol+"-"+args.env
     print(fp)
     # create list to store state information over the flight. This is... doing it the hard way,
@@ -145,12 +145,10 @@ def main():
         batch_rwd = (batch_rwd*(k-1)+running_reward)/k
 
     print("Mean reward: {:.3f}".format(batch_rwd))
-    FFwriter = animation.FFMpegWriter(fps=30, extra_args=['-vcodec', 'libx264']);
-    ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, goal), repeat=True, frames=len(state_data), interval=50)
-    print("Saving video in: "+video_path+".mp4")
+    #ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, goal), repeat=False, frames=len(state_data), interval=50)
+    #print("Saving video in: "+video_path+".mp4")
+    #ani.save(video_path+".mp4", writer='ffmpeg', extra_args=['-loglevel', 'verbose'])
 
-    #ani.save(video_path+".mp4", writer=FFwriter)#, extra_args=['-loglevel', 'verbose'])
-    #plt.show()
 
 if __name__ == "__main__":
     main()

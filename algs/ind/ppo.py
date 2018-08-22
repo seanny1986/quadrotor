@@ -171,10 +171,10 @@ class Trainer:
                 bsize += t
                 batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
                 num_episodes += 1
-            if (self.__best is None or batch_mean_rwd > self.__best) and self.__save or ep % self.__log_interval == 0:
+            if (self.__best is None or batch_mean_rwd > self.__best and self.__save): ## or ep % self.__log_interval == 0:
                 print("---Saving best PPO policy---")
                 self.__best = batch_mean_rwd
-                utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"XX.pth.tar")
+                utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"_V4.pth.tar")
 
             trajectory = {"states": s_,
                         "actions": a_,

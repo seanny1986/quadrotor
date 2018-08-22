@@ -235,6 +235,7 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, avg])
+        utils.save(self.__agent, self.__directory + "/saved_policies/ddpg-"+self.__env_name+"final.pth.tar")
 
 
 Transition = namedtuple("Transition", ["state", "action", "next_state", "reward", "done"])

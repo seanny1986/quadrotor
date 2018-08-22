@@ -313,3 +313,4 @@ class Trainer:
                 print('Episode {}\tLast reward: {:.3f}\tAverage reward {:.3f}'.format(i_episode, reward_sum, reward_batch))
                 if self.logging:
                     self.writer.writerow([i_episode, reward_batch])
+        utils.save(self.agent, self.directory + "/saved_policies/trpo-"+self.env_name+"final.pth.tar")

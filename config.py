@@ -10,7 +10,7 @@
 
 exp = {
         "env": "RandomWaypoint-v0",
-        "algs": ["ppo"]
+        "algs": ["ppo_inf"]
         }
 
 cem = {
@@ -60,7 +60,7 @@ gae = {
                                 },
         "hidden_dim": 64,
         "iterations": 15000,
-        "batch_size": 256,
+        "batch_size": 128,
         "epochs": 2,
         "lr": 1e-4,
         "seed": 343,
@@ -77,10 +77,31 @@ ppo = {
                                 "lambda": 0.92,
                                 "eps": 0.1
                                 },
-        "hidden_dim": 64,
-        "iterations": 15000,
+        "hidden_dim": 128,
+        "iterations": 10000,
         "batch_size": 256,
-        "epochs":4,
+        "epochs": 4,
+        "lr": 1e-4,
+        "seed": 343,
+        "log_interval": 10,
+        "render": False,
+        "save": True,
+        "cuda": True,
+        "logging": True
+        }
+
+ppo_inf = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "lambda": 0.92,
+                                "eps": 0.1
+                                },
+        "hidden_dim": 128,
+        "iterations": 10000,
+        "batch_size": 256,
+        "mem_len": 1000000,
+        "epochs": 4,
+        "dyn_epochs": 32,
         "lr": 1e-4,
         "seed": 343,
         "log_interval": 10,
@@ -126,7 +147,7 @@ trpo = {
         "iterations": 15000,
         "log_interval": 25,
         "warmup": 50,
-        "batch_size": 256,
+        "batch_size": 128,
         "seed": 343,
         "render": False,
         "save": True,

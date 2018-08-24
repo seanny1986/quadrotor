@@ -254,8 +254,6 @@ class Trainer:
         self.pi = Actor(state_dim, hidden_dim, action_dim)
         self.critic = Critic(state_dim, hidden_dim, 1)
         self.agent = TRPO(self.pi, self.critic, params["network_settings"], GPU=cuda)
-        self.running_state = ZFilter((state_dim,), clip=5)
-        self.running_reward = ZFilter((1,), demean=False, clip=10)
         if cuda:
             self.Tensor = torch.cuda.FloatTensor
         else:
@@ -282,7 +280,6 @@ class Trainer:
             num_episodes = 0
             while num_steps < self.batch_size+1:
                 state = self.env.reset()
-                state = self.running_state(state)
                 state = self.Tensor(state)
                 reward_sum = 0
                 if i_episode % self.log_interval == 0 and self.render:
@@ -290,7 +287,6 @@ class Trainer:
                 for t in range(10000):
                     action = self.agent.select_action(state)
                     next_state, reward, done, _ = self.env.step(action.data.numpy())
-                    next_state = self.running_state(next_state)
                     reward_sum += reward
                     if i_episode % self.log_interval == 0 and self.render:
                         self.env.render()
@@ -317,5 +313,4 @@ class Trainer:
                 print('Episode {}\tLast reward: {:.3f}\tAverage reward {:.3f}'.format(i_episode, reward_sum, reward_batch))
                 if self.logging:
                     self.writer.writerow([i_episode, reward_batch])
-
         utils.save(self.agent, self.directory + "/saved_policies/trpo-"+self.env_name+"final.pth.tar")

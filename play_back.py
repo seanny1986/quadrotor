@@ -22,14 +22,6 @@ parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
-<<<<<<< HEAD
-parser.add_argument("--repeats", type=int, default=5, metavar="R", help="how many attempts we want to record")
-args = parser.parse_args()
-
-# animation callback function
-def animate(i, P, state_data, ax, goal):
-
-=======
 parser.add_argument("--repeats", type=int, default=3, metavar="R", help="how many attempts we want to record")
 parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
 args = parser.parse_args()
@@ -37,7 +29,6 @@ args = parser.parse_args()
 # animation callback function
 def animate(i, P, state_data, ax, g, time):
 
->>>>>>> 041bd7ead2c8a84a5bb5e0f4a488ae7e054a65a9
     # rotation matrix. Only used for plotting, has no effect on simulation calcs.
     def R1(zeta):
         phi = zeta[0,0]
@@ -114,7 +105,7 @@ def main():
     # initialize filepaths
     directory = os.getcwd()
 
-    fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
+    fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0final.pth.tar"
     video_path = directory + "/movies/"+args.pol+"-"+args.env
     print(fp)
 

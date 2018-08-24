@@ -150,7 +150,8 @@ class Trainer:
             bsize = 1
             num_episodes = 1
             while bsize<self.__batch_size+1:
-                state = self.__Tensor(self.__env.reset())
+                state = self.__env.reset()
+                state = self.__Tensor(state)
                 if ep % self.__log_interval == 0 and self.__render:
                     self.__env.render()
                 running_reward = 0
@@ -177,11 +178,10 @@ class Trainer:
                 bsize += t
                 batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
                 num_episodes += 1
-            if (self.__best is None or batch_mean_rwd > self.__best and self.__save): ## or ep % self.__log_interval == 0:
+            if (self.__best is None or batch_mean_rwd > self.__best) and self.__save:
                 print("---Saving best PPO policy---")
                 self.__best = batch_mean_rwd
-                utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"_V4.pth.tar")
-
+                utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+".pth.tar")
             trajectory = {"states": s_,
                         "actions": a_,
                         "next_states": ns_,
@@ -200,5 +200,4 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, avg])
-
-        #utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"final.pth.tar")
+        utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"final.pth.tar")

@@ -11,7 +11,6 @@
 exp = {
         "env": "Land-v0",
         "algs": ["ppo"]
-
         }
 
 cem = {
@@ -85,10 +84,10 @@ ppo = {
         "epochs": 4,
         "lr": 1e-4,
         "seed": 343,
-        "log_interval": 10,
-        "render": False,
+        "log_interval": 250,
+        "render": True,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -146,8 +145,8 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 64,
-        "iterations": 2500,
-        "log_interval": 250,
+        "iterations": 1000,
+        "log_interval": 100,
         "warmup": 50,
         "batch_size": 128,
         "seed": 343,

@@ -27,13 +27,11 @@ def main(env_name, algs):
             p.start()
 
         # Wait for processes to finish
-        [p.join() for p in processes]
+        [p.join() for p in processes];
 
     #Listens for ctrl+c input
     except KeyboardInterrupt:
-        print("---Terminating all processes---")
-        for p in processes:
-            p.terminate()
+        terminate(processes);
 
 def make(env_name, alg):
     """

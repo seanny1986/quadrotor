@@ -7,10 +7,10 @@
 
     -- Sean Morrison, 2018
 """
-
+##LandPara
 exp = {
-        "env": "RandomWaypoint-v0",
-        "algs": ["ppo_inf"]
+        "env": "Land-v0",
+        "algs": ["ppo"]
         }
 
 cem = {
@@ -77,16 +77,17 @@ ppo = {
                                 "lambda": 0.92,
                                 "eps": 0.1
                                 },
+
         "hidden_dim": 128,
         "iterations": 10000,
         "batch_size": 256,
         "epochs": 4,
         "lr": 1e-4,
         "seed": 343,
-        "log_interval": 10,
-        "render": False,
+        "log_interval": 250,
+        "render": True,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -104,10 +105,10 @@ ppo_inf = {
         "dyn_epochs": 32,
         "lr": 1e-4,
         "seed": 343,
-        "log_interval": 10,
-        "render": False,
+        "log_interval": 100 ,
+        "render": True,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -144,12 +145,12 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 64,
-        "iterations": 15000,
-        "log_interval": 25,
+        "iterations": 1000,
+        "log_interval": 100,
         "warmup": 50,
         "batch_size": 128,
         "seed": 343,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": False,
         "logging": True

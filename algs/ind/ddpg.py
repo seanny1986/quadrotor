@@ -172,8 +172,7 @@ class Trainer:
         avg = 0
         for ep in range(1, self.__iterations+1):
 
-            state = self.__env.reset()
-            state = self.__Tensor(state)
+            state = self.__Tensor(self.__env.reset())
             self.__noise.reset()
             running_reward = 0
             if ep % self.__log_interval == 0 and self.__render:

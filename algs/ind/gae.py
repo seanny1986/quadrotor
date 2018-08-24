@@ -123,8 +123,7 @@ class Trainer:
             bsize = 1
             num_episodes = 1
             while bsize<self.__batch_size+1:
-                state = self.__env.reset()
-                state = self.__Tensor(state)
+                state = self.__Tensor(self.__env.reset())
                 if ep % self.__log_interval == 0 and self.__render:
                     self.__env.render()
                 running_reward = 0

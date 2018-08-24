@@ -10,12 +10,12 @@
 
 exp = {
         "env": "RandomWaypoint-v0",
-        "algs": ["ppo_inf"]
+        "algs": ["gae"]
         }
 
 cem = {
-        "hidden_dim": 32,
-        "iterations": 15000,
+        "hidden_dim": 128,
+        "iterations": 5000,
         "gamma": 0.99,
         "lr": 1e-4,
         "seed": 343,
@@ -34,8 +34,8 @@ ddpg = {
                                 "gamma": 0.99,
                                 "tau": 0.01
                                 },
-        "hidden_dim": 64,
-        "iterations": 15000,
+        "hidden_dim": 128,
+        "iterations": 5000,
         "mem_len": 1000000,
         "actor_lr": 1e-4,
         "critic_lr": 1e-3,
@@ -58,9 +58,9 @@ gae = {
                                 "gamma": 0.99,
                                 "lambda": 0.92
                                 },
-        "hidden_dim": 64,
-        "iterations": 15000,
-        "batch_size": 128,
+        "hidden_dim": 128,
+        "iterations": 5000,
+        "batch_size": 256,
         "epochs": 2,
         "lr": 1e-4,
         "seed": 343,
@@ -78,7 +78,7 @@ ppo = {
                                 "eps": 0.1
                                 },
         "hidden_dim": 128,
-        "iterations": 10000,
+        "iterations": 5000,
         "batch_size": 256,
         "epochs": 4,
         "lr": 1e-4,
@@ -97,7 +97,7 @@ ppo_inf = {
                                 "eps": 0.1
                                 },
         "hidden_dim": 128,
-        "iterations": 10000,
+        "iterations": 5000,
         "batch_size": 256,
         "mem_len": 1000000,
         "epochs": 4,
@@ -121,8 +121,8 @@ scv = {
         "actor_lr": 1e-5,
         "critic_lr": 1e-4,
         "learning_updates": 5,
-        "hidden_dim": 64,
-        "iterations": 15000,
+        "hidden_dim": 128,
+        "iterations": 5000,
         "warmup": 50,
         "batch_size": 128,
         "policy_batch_size": 256,
@@ -143,11 +143,11 @@ trpo = {
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
-        "hidden_dim": 64,
-        "iterations": 15000,
+        "hidden_dim": 128,
+        "iterations": 5000,
         "log_interval": 25,
         "warmup": 50,
-        "batch_size": 128,
+        "batch_size": 256,
         "seed": 343,
         "render": False,
         "save": True,

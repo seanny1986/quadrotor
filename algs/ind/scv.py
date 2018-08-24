@@ -14,6 +14,10 @@ from collections import namedtuple
 import random
 import scipy.optimize
 
+"""
+    An attempt at an online-offline version of the Stein Control Variate version of PPO.
+"""
+
 class Actor(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
         super(Actor, self).__init__()
@@ -33,7 +37,6 @@ class SCV(nn.Module):
     def __init__(self, actor, target_actor, critic, target_critic, network_settings, GPU=True, clip=None):
         super(SCV, self).__init__()
         self.__actor = actor
-        self.__target_actor = target_actor
         self.__critic = critic
         self.__target_critic = target_critic
         self.__gamma = network_settings["gamma"]
@@ -68,7 +71,7 @@ class SCV(nn.Module):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
-    def online_update(self, batch):
+    def online_update(self, opt, batch):
         state = Variable(torch.stack(batch.state))
         action = Variable(torch.stack(batch.action))
         with torch.no_grad():
@@ -78,19 +81,16 @@ class SCV(nn.Module):
         reward = torch.unsqueeze(reward, 1)
         done = torch.unsqueeze(done, 1)
 
-        def get_value_loss(flat_params):
-            next_action, _ = self.__target_actor(next_state)
-            next_state_action = torch.cat([next_state, next_action],dim=1)
-            next_state_action_value = self.__target_critic(next_state_action)
-            with torch.no_grad():
-                expected_state_action_value = reward+self.__gamma*next_state_action_value*(1-done)
-            state_action_value = self.__critic(torch.cat([state, action],dim=1))   
-            value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)
-            value_loss.backward()
-            return (value_loss.data.double().numpy(), get_flat_grad_from(self.__critic).data.double().numpy())
-        
-        flat_params, _, opt_info = scipy.optimize.fmin_l_bfgs_b(get_value_loss, get_flat_params_from(self.__critic).double().numpy(), maxiter=25)
-        set_flat_params_to(self.__critic, torch.Tensor(flat_params))
+        next_action, _ = self.__actor(next_state)
+        next_state_action = torch.cat([next_state, next_action],dim=1)
+        next_state_action_value = self.__target_critic(next_state_action)
+        with torch.no_grad():
+            expected_state_action_value = reward+self.__gamma*next_state_action_value*(1-done)
+        state_action_value = self.__critic(torch.cat([state, action],dim=1))   
+        value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)
+        opt.zero_grad()
+        value_loss.backward()
+        opt.step()
         self._soft_update(self.__target_critic, self.__critic, self.__tau)
         
     def offline_update(self, trajectory):
@@ -125,7 +125,6 @@ class SCV(nn.Module):
 
         flat_params, _, opt_info = scipy.optimize.fmin_l_bfgs_b(get_policy_loss, get_flat_params_from(self.__actor).double().numpy(), maxiter=25)
         set_flat_params_to(self.__actor, torch.Tensor(flat_params))
-        self._soft_update(self.__target_actor, self.__actor, self.__tau)
 
 class Trainer:
     def __init__(self, env_name, params):

@@ -273,6 +273,8 @@ class Trainer:
             self.run_algo()
 
     def run_algo(self):
+        interval_avg = []
+        avg = 0
         for i_episode in range(1, self.iterations+1):
             memory = Memory()
             num_steps = 1
@@ -301,7 +303,8 @@ class Trainer:
                 num_episodes += 1
                 reward_batch += reward_sum
             reward_batch /= num_episodes
-
+            interval_avg.append(reward_batch)
+            avg = (avg*(i_episode-1)+reward_batch)/i_episode   
             if (self.best is None or reward_batch > self.best) and self.save:
                 print("---Saving best TRPO policy---")
                 self.best = reward_batch
@@ -310,7 +313,9 @@ class Trainer:
             batch = memory.sample()
             self.agent.update(batch)
             if i_episode % self.log_interval == 0:
-                print('Episode {}\tLast reward: {:.3f}\tAverage reward {:.3f}'.format(i_episode, reward_sum, reward_batch))
+                interval = float(sum(interval_avg))/float(len(interval_avg))
+                print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(i_episode, interval, avg))
+                interval_avg = []
                 if self.logging:
                     self.writer.writerow([i_episode, reward_batch])
-        utils.save(self.agent, self.directory + "/saved_policies/trpo-"+self.env_name+"final.pth.tar")
+        utils.save(self.agent, self.directory + "/saved_policies/trpo-"+self.env_name+"-final.pth.tar")

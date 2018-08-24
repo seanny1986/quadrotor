@@ -62,6 +62,11 @@ def make(env_name, alg):
         import algs.ind.ppo as ppo
         print("---Initializing PPO in env: "+env_name+"---")
         return ppo.Trainer(env_name, params)
+    if alg == "ppo_one":
+        params = cfg.ppo
+        import algs.ind.ppo_one as ppo_one
+        print("---Initializing PPO_ONE in env: "+env_name+"---")
+        return ppo_one.Trainer(env_name, params)
     if alg == "ppo_inf":
         params = cfg.ppo_inf
         import algs.ind.ppo_inf as ppo_inf

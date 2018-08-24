@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
-parser.add_argument("--repeats", type=int, default=3, metavar="R", help="how many attempts we want to record")
+parser.add_argument("--repeats", type=int, default=10, metavar="R", help="how many attempts we want to record")
 parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
 args = parser.parse_args()
 
@@ -105,7 +105,7 @@ def main():
     # initialize filepaths
     directory = os.getcwd()
     if args.final:
-        fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0final.pth.tar"
+        fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0-final.pth.tar"
         video_path = directory + "/movies/"+args.pol+"-"+args.env+"-final"
     else:
         fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"

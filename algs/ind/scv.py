@@ -34,7 +34,7 @@ class Actor(nn.Module):
         return mu, logvar
 
 class SCV(nn.Module):
-    def __init__(self, actor, target_actor, critic, target_critic, network_settings, GPU=True, clip=None):
+    def __init__(self, actor, critic, target_critic, network_settings, GPU=True, clip=None):
         super(SCV, self).__init__()
         self.__actor = actor
         self.__critic = critic
@@ -42,7 +42,6 @@ class SCV(nn.Module):
         self.__gamma = network_settings["gamma"]
         self.__tau = network_settings["tau"]
         self.__eps = network_settings["eps"]
-        self._hard_update(self.__target_actor, self.__actor)
         self._hard_update(self.__target_critic, self.__critic)
         self.__GPU = GPU
         self.__clip = clip
@@ -93,38 +92,34 @@ class SCV(nn.Module):
         opt.step()
         self._soft_update(self.__target_critic, self.__critic, self.__tau)
         
-    def offline_update(self, trajectory):
+    def offline_update(self, opt, trajectory):
         states = torch.stack(trajectory["states"]).float()
         actions = torch.stack(trajectory["actions"]).float()
         beta_log_probs = torch.stack(trajectory["log_probs"]).float()
         rewards = torch.stack(trajectory["rewards"]).float()
         masks = torch.stack(trajectory["dones"])
-
-        def get_policy_loss(flat_params):
-            act, _ = self.__actor(states)
-            q_vals = self.__critic(torch.cat([states, act], dim=1))
-            returns = self.__Tensor(rewards.size(0),1)
-            deltas = self.__Tensor(rewards.size(0),1)
-            prev_return = 0
-            prev_value = 0
-            for i in reversed(range(rewards.size(0))):
-                returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-                deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-q_vals.data[i]
-                prev_return = returns[i, 0]
-                prev_value = q_vals.data[i, 0]
-            deltas = (deltas-deltas.mean())/(deltas.std()+1e-10)
-            mu_pi, logvar_pi = self.__actor(states)
-            dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
-            pi_log_probs = dist_pi.log_prob(actions)
-            ratio = (pi_log_probs-beta_log_probs.detach()).sum(dim=1, keepdim=True).exp()
-            actor_loss = -torch.min(ratio*deltas, torch.clamp(ratio, 1-self.__eps, 1+self.__eps)*deltas).mean()
-            cv_loss = -q_vals.mean()
-            loss = actor_loss+cv_loss
-            loss.backward(retain_graph=True)
-            return (actor_loss.data.double().numpy(), get_flat_grad_from(self.__actor).data.double().numpy())
-
-        flat_params, _, opt_info = scipy.optimize.fmin_l_bfgs_b(get_policy_loss, get_flat_params_from(self.__actor).double().numpy(), maxiter=25)
-        set_flat_params_to(self.__actor, torch.Tensor(flat_params))
+        act, _ = self.__actor(states)
+        q_vals = self.__critic(torch.cat([states, act], dim=1))
+        returns = self.__Tensor(rewards.size(0),1)
+        deltas = self.__Tensor(rewards.size(0),1)
+        prev_return = 0
+        prev_value = 0
+        for i in reversed(range(rewards.size(0))):
+            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-q_vals.data[i]
+            prev_return = returns[i, 0]
+            prev_value = q_vals.data[i, 0]
+        deltas = (deltas-deltas.mean())/(deltas.std()+1e-10)
+        mu_pi, logvar_pi = self.__actor(states)
+        dist_pi = Normal(mu_pi, logvar_pi.exp().sqrt())
+        pi_log_probs = dist_pi.log_prob(actions)
+        ratio = (pi_log_probs-beta_log_probs.detach()).sum(dim=1, keepdim=True).exp()
+        actor_loss = -torch.min(ratio*deltas, torch.clamp(ratio, 1-self.__eps, 1+self.__eps)*deltas).mean()
+        cv_loss = -q_vals.mean()
+        loss = actor_loss+cv_loss
+        opt.zero_grad()
+        loss.backward(retain_graph=True)
+        opt.step()
 
 class Trainer:
     def __init__(self, env_name, params):
@@ -162,7 +157,7 @@ class Trainer:
                         network_settings,
                         GPU=cuda)
 
-        # intitialize ornstein-uhlenbeck noise for random action exploration
+        # intitialize memory
         self.__memory = ReplayMemory(self.__mem_len)
         self.__pol_opt = torch.optim.Adam(actor.parameters(), params["actor_lr"])
         self.__crit_opt = torch.optim.Adam(critic.parameters(),params["critic_lr"])
@@ -219,7 +214,7 @@ class Trainer:
                         for _ in range(self.__learning_updates):
                             transitions = self.__memory.sample(self.__batch_size)
                             batch = Transition(*zip(*transitions))
-                            self.__agent.online_update(batch)
+                            self.__agent.online_update(self.__crit_opt, batch)
                     s.append(state)
                     a.append(action)
                     lp.append(log_prob)
@@ -244,7 +239,7 @@ class Trainer:
                             "dones": d
                 }
                 for _ in range(self.__epochs):
-                    self.__agent.offline_update(trajectory)
+                    self.__agent.offline_update(self.__pol_opt, trajectory)
             interval_avg.append(batch_mean_rwd)
             avg = (avg*(ep-1)+batch_mean_rwd)/ep
             if ep % self.__log_interval == 0:

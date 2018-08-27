@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "RandomWaypoint-v0",
-        "algs": ["gae"]
+        "env": "Hover-v0",
+        "algs": ["trpo"]
         }
 
 cem = {
@@ -139,14 +139,12 @@ trpo = {
         "network_settings": {
                                 "gamma": 0.99,
                                 "tau": 0.97,
-                                "l2_reg": 1e-3,
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
         "hidden_dim": 128,
         "iterations": 5000,
-        "log_interval": 25,
-        "warmup": 50,
+        "log_interval": 10,
         "batch_size": 256,
         "seed": 343,
         "render": False,

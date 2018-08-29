@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
+from torch.distributions import Normal
 import gym
 import gym_aero
 import utils
@@ -17,46 +17,43 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         self.__affine1 = nn.Linear(state_dim, hidden_dim)
         self.__action_head = nn.Linear(hidden_dim, action_dim)
+        self.__logvar_head = nn.Linear(hidden_dim, action_dim)
         self.__action_head.weight.data.mul_(0.1)
         self.__action_head.bias.data.mul_(0.0)
 
     def forward(self, x):
         x = F.tanh(self.__affine1(x))
         mu = self.__action_head(x)
-        return mu
+        logvar = self.__logvar_head(x)
+        return mu, logvar
 
 class DDPG(nn.Module):
-    def __init__(self, actor, target_actor, critic, target_critic, network_settings, GPU=True, clip=None):
+    def __init__(self, actor, critic, target_critic, network_settings, GPU=True, clip=None):
         super(DDPG, self).__init__()
         self.__actor = actor
-        self.__target_actor = target_actor
         self.__critic = critic
         self.__target_critic = target_critic
         self.__gamma = network_settings["gamma"]
         self.__tau = network_settings["tau"]
-        self._hard_update(self.__target_actor, self.__actor)
         self._hard_update(self.__target_critic, self.__critic)
         self.__GPU = GPU
         self.__clip = clip
         if GPU:
             self.Tensor = torch.cuda.FloatTensor
             self.__actor = self.__actor.cuda()
-            self.__target_actor = self.__target_actor.cuda()
             self.__critic = self.__critic.cuda()
             self.__target_critic = self.__target_critic.cuda()
         else:
             self.Tensor = torch.FloatTensor
 
-    def select_action(self, state, noise=None):
-        self.__actor.eval()
-        with torch.no_grad():
-            mu = self.__actor((Variable(state)))
-        self.__actor.train()
-        if noise is not None:
-            sigma = self.Tensor(noise.noise())
-            return mu+sigma
-        else:
+    def select_action(self, state, deterministic=False):
+        mu, logvar = self.__actor(state)
+        if deterministic:
             return mu
+        else:
+            sigma = logvar.exp().sqrt()+1e-10
+            dist = Normal(mu, sigma)
+            return dist.sample()
 
     def random_action(self, noise):
         action = self.Tensor(noise.noise())
@@ -70,36 +67,38 @@ class DDPG(nn.Module):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
-    def update(self, batch, crit_opt, pol_opt):
-        state = Variable(torch.stack(batch.state))
-        action = Variable(torch.stack(batch.action))
+    def update_critic(self, opt, batch):
+        states = torch.stack(batch.state)
+        actions = torch.stack(batch.action)
         with torch.no_grad():
-            next_state = Variable(torch.stack(batch.next_state))
-            reward = Variable(torch.cat(batch.reward))
-            done = Variable(torch.cat(batch.done))
-        reward = torch.unsqueeze(reward, 1)
-        done = torch.unsqueeze(done, 1)
-        next_action = self.__target_actor(next_state)                                               # take off-policy action
-        next_state_action = torch.cat([next_state, next_action],dim=1)                              # next state-action batch
-        next_state_action_value = self.__target_critic(next_state_action)                           # target q-value
+            next_states = torch.stack(batch.next_state)
+            rewards = torch.cat(batch.reward)
+        rewards = torch.unsqueeze(rewards, 1)
+        next_actions = self.select_action(next_states)                               # take on-policy action
+        next_state_actions = torch.cat([next_states, next_actions],dim=1)                              # next state-action batch
+        next_state_action_values = self.__target_critic(next_state_actions)                           # target q-value
         with torch.no_grad():
-            expected_state_action_value = reward+self.__gamma*next_state_action_value*(1-done)      # value iteration
-        crit_opt.zero_grad()                                                                        # zero gradients in optimizer
-        state_action_value = self.__critic(torch.cat([state, action],dim=1))                        # zero gradients in optimizer
-        value_loss = F.smooth_l1_loss(state_action_value, expected_state_action_value)              # (critic-target) loss
-        value_loss.backward()                                                                       # backpropagate value loss
-        crit_opt.step()                                                                             # update value function
-        crit_opt.zero_grad()
-        pol_opt.zero_grad()                                                                         # zero gradients in optimizer
-        policy_loss = self.__critic(torch.cat([state, self.__actor(state)],1))                      # use critic to estimate pol gradient
+            expected_state_action_values = rewards+self.__gamma*next_state_action_values      # value iteration
+        opt.zero_grad()                                                                        # zero gradients in optimizer
+        state_action_values = self.__critic(torch.cat([states, actions],dim=1))                        # zero gradients in optimizer
+        value_loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)              # (critic-target) loss
+        value_loss.backward()
+        if self.__clip is not None:
+            torch.nn.utils.clip_grad_norm_(self.__critic.parameters(), self.__clip)                                                                        # backpropagate value loss
+        opt.step()
+        opt.zero_grad() 
+        self._soft_update(self.__target_critic, self.__critic, self.__tau)
+
+    def update_policy(self, opt, batch):
+        states = torch.stack(batch.state)                                                                     # update value function
+        opt.zero_grad()                                                                         # zero gradients in optimizer
+        policy_loss = self.__critic(torch.cat([states, self.select_action(states)], dim=1))                      # use critic to estimate pol gradient
         policy_loss = -policy_loss.mean()                                                           # sum losses
         policy_loss.backward()                                                                      # backpropagate policy loss
         if self.__clip is not None:
-            torch.nn.utils.clip_grad_norm_(self.__critic.parameters(), self.__clip)                 # clip gradient
-        pol_opt.step()                                                                              # update policy function
-        self._soft_update(self.__target_critic, self.__critic, self.__tau)                          # soft update of target networks
-        self._soft_update(self.__target_actor, self.__actor, self.__tau)                            # soft update of target networks
-
+            torch.nn.utils.clip_grad_norm_(self.__actor.parameters(), self.__clip)                 # clip gradient
+        opt.step()                                                                              # update policy function
+        
 
 class Trainer:
     def __init__(self, env_name, params):
@@ -125,11 +124,9 @@ class Trainer:
         cuda = params["cuda"]
         network_settings = params["network_settings"]
         actor = Actor(state_dim, hidden_dim, action_dim)
-        target_actor = Actor(state_dim, hidden_dim, action_dim)
         critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
         target_critic = utils.Critic(state_dim+action_dim, hidden_dim, 1)
         self.__agent = DDPG(actor,
-                        target_actor,
                         critic,
                         target_critic,
                         network_settings,
@@ -178,13 +175,14 @@ class Trainer:
             running_reward = 0
             if ep % self.__log_interval == 0 and self.__render:
                 self.__env.render()
-            for t in range(10000):
+            done = False
+            while not done:
 
                 # select an action using either random policy or trained policy
                 if ep < self.__warmup:
                     action = self.__agent.random_action(self.__noise).data
                 else:
-                    action = self.__agent.select_action(state, noise=self.__noise).data
+                    action = self.__agent.select_action(state).data
 
                 # step simulation forward
                 next_state, reward, done, _ = self.__env.step(action.cpu().numpy())
@@ -197,17 +195,20 @@ class Trainer:
                 # transform to tensors before storing in memory
                 next_state = self.__Tensor(next_state)
                 reward = self.__Tensor([reward])
-                done = self.__Tensor([done])
 
                 # push to replay memory
-                self.__memory.push(state, action, next_state, reward, done)
+                self.__memory.push(state, action, next_state, reward)
 
                 # online training if out of warmup phase
                 if ep >= self.__warmup:
-                    for i in range(self.__learning_updates):
+                    for i in range(5):
                         transitions = self.__memory.sample(self.__batch_size)
                         batch = Transition(*zip(*transitions))
-                        self.__agent.update(batch, self.__crit_opt, self.__pol_opt)
+                        self.__agent.update_critic(self.__crit_opt, batch)
+                    for i in range(3):
+                        transitions = self.__memory.sample(self.__batch_size)
+                        batch = Transition(*zip(*transitions))
+                        self.__agent.update_policy(self.__pol_opt, batch)
 
                 # check if terminate
                 if done:
@@ -238,7 +239,7 @@ class Trainer:
         utils.save(self.__agent, self.__directory + "/saved_policies/ddpg-"+self.__env_name+"-final.pth.tar")
 
 
-Transition = namedtuple("Transition", ["state", "action", "next_state", "reward", "done"])
+Transition = namedtuple("Transition", ["state", "action", "next_state", "reward"])
 class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity

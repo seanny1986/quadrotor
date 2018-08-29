@@ -1,7 +1,6 @@
 import torch
 import torch.autograd as autograd
 from torch.distributions import Normal
-from torch.distributions import kl
 import torch.nn as nn
 import torch.nn.functional as F
 import scipy.optimize
@@ -66,11 +65,10 @@ class TRPO(nn.Module):
     2. conduct trajectory rollouts under beta.
     3. compute empirical advantage estimate A_{beta}(s,a).
     4. find grad_{pi} A_{beta}(s,a). Remember, pi and beta are still the same here,
-       so this is equivalent to finding grad with respect to beta. Makes the code a bit
-       nicer later though (when conducting the line search).
+       so this is effectively the same as fi.
     5. use the conjugate gradient method to find Hx = g, where H is the FIM, and x
        is dtheta (since dtheta = H^{-1} g.
-    6. find the quadratic approximation to KL(theta_beta||theta_pi) using dtheta^{T} H dtheta.
+    6. find the quadratic approximation to (theta_beta||theta_pi) using dtheta^{T} H dtheta.
     7. set KL_max = 0.5 beta*dtheta^{T} H beta*dtheta, and solve for beta
     8. conduct a linesearch to ensure that the quadratic approximation to KL holds. Since
        the policy parameters theta have changed, it's necessary to use an importance
@@ -80,7 +78,6 @@ class TRPO(nn.Module):
     The reason I'm using two policies here is to make calculating the KL divergence
     much cleaner and easier to read. 
     """
-
     def __init__(self, pi, beta, critic, params, GPU=False):
         super(TRPO, self).__init__()
         self.__pi = pi
@@ -101,25 +98,25 @@ class TRPO(nn.Module):
     
     def conjugate_gradient(self, Avp, b, n_steps=10, residual_tol=1e-10):
         """
-        Conjugate gradient method. Here we want to approximately solve the equation
-        Ax = g, where A is the Fisher Information Matrix multiplied by some vector
-        x, and g is the policy gradient. We can do this, because a second order update
-        typically takes the form dtheta = A^{-1}g, meaning x is our dtheta.
+        Estimate the function Hx = g, where H is the Hessian, and g is the gradient.
+        Since dx = H^{-1}g, x is dx. The CG algorithm assumes the function is locally
+        quadratic. In order to ensure our step actually improves the policy, we need
+        to do a linesearch after this.
         """
         x = torch.zeros(b.size())
         r = b.clone()
         p = b.clone()
         rdotr = torch.dot(r, r)
         for i in range(n_steps):
-            fvp = Avp(p)
-            alpha = rdotr/torch.dot(p, fvp)
+            _Avp = Avp(p)
+            alpha = rdotr/torch.dot(p, _Avp)
             x += alpha*p
-            r -= alpha*fvp
+            r -= alpha*_Avp
             new_rdotr = torch.dot(r, r)
             beta = new_rdotr/rdotr
             p = r+beta*p
             rdotr = new_rdotr
-            if rdotr <= residual_tol:
+            if rdotr < residual_tol:
                 break
         return x
 
@@ -149,10 +146,17 @@ class TRPO(nn.Module):
             param.data.copy_(flat_params[prev_ind:prev_ind+flat_size].view(param.size()))
             prev_ind += flat_size
 
+    def get_flat_grad_from(self, model, grad_grad=False):
+        grads = []
+        for param in model.parameters():
+            if grad_grad:
+                grads.append(param.grad.grad.view(-1))
+            else:
+                grads.append(param.grad.view(-1))
+        flat_grad = torch.cat(grads)
+        return flat_grad
+
     def hard_update(self, target, source):
-        """
-        Copies parameters over from a source network to a target network.
-        """
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
@@ -180,7 +184,7 @@ class TRPO(nn.Module):
                 sigma_pi = logvar_pi.exp().sqrt()+1e-10
                 dist = Normal(mu_pi, sigma_pi)
                 log_probs = dist.log_prob(actions)
-                ratio = (log_probs-fixed_log_probs.data).sum(dim=1).exp()
+                ratio = (log_probs-fixed_log_probs.detach()).sum(dim=1, keepdim=True).exp()
                 action_loss = -ratio*advantages
                 return action_loss.mean()
             if params is None:
@@ -189,28 +193,28 @@ class TRPO(nn.Module):
                 self.set_flat_params_to(self.__pi, params)
                 return get_loss()
         
-        def fvp(vector):
+        def fvp(vec):
             """
-            Returns the product of the Hessian of the KL divergence and the given vector. This
-            is calculated using the identity:
+            Compute mean Fisher Vector Product (Schulman, 2015; see Appendix C.1). Returns the vector
+            product Hx = g. To do this, we compute:
 
-                H.v = grad_{theta} (grad_{theta} f_{theta}.v)
+                grad_{kl} pi_{theta}
+                grad_{kl} (grad_{kl} pi_{theta} * vec)
             
-            Where H is our Hessian (in this case, the FIM), and v is the estimate of dtheta
+            Which gives us H*vec
             """
             mu_pi, logvar_pi = self.__pi(states)
             mu_beta, logvar_beta = self.__beta(states)
-            sigma_pi = logvar_pi.exp().sqrt()+1e-10
-            sigma_beta = logvar_beta.exp().sqrt()+1e-10
-            dist_pi = Normal(mu_pi, sigma_pi)
-            dist_beta = Normal(mu_beta, sigma_beta)
-            kl = kl.kl_div(dist_beta, dist_pi).mean()
-            kl_grad = torch.autograd.grad(kl, self.__pi.parameters(), create_graph=True)
-            kl_grad_vector = torch.cat([grad.view(-1) for grad in kl_grad])
-            grad_vector_product = kl_grad_vector.dot(vector)
-            grad_grad = torch.autograd.grad(grad_vector_product, self.__pi.parameters())
-            fisher_vector_product = torch.cat([grad.contiguous().view(-1) for grad in grad_grad]).data
-            return fisher_vector_product+self.__damping*vector.data
+            var_pi = logvar_pi.exp()
+            var_beta = logvar_beta.exp()
+            kl = var_pi.sqrt().log()-var_beta.sqrt().log()+(var_beta+(mu_beta-mu_pi).pow(2))/(2.*var_pi)-0.5
+            kl = torch.sum(kl, dim=1).mean()
+            grads = torch.autograd.grad(kl, self.__pi.parameters(), create_graph=True)
+            flat_grad_kl = torch.cat([grad.view(-1) for grad in grads])
+            kl_v = (flat_grad_kl*vec).sum()
+            grads = torch.autograd.grad(kl_v, self.__pi.parameters())
+            flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).detach()
+            return flat_grad_grad_kl+vec*self.__damping
 
         # get trajectory batch data
         rewards = torch.stack(trajectory["rewards"])
@@ -240,19 +244,19 @@ class TRPO(nn.Module):
         # update critic using Adam
         crit_opt.zero_grad()
         crit_loss = F.smooth_l1_loss(values, returns)
-        crit_loss.backward()
+        crit_loss.backward(retain_graph=True)
         crit_opt.step()
         
         # trust region policy update. We update pi by maximizing it's advantage over beta,
         # and then set beta to the policy parameters of pi.
         pol_loss = policy_loss()
         grads = torch.autograd.grad(pol_loss, self.__pi.parameters())
-        flat_grads = torch.stack([grad.view(-1) for grad in grads]).data
-        stepdir = self.conjugate_gradient(fvp, -flat_grads)
+        loss_grad = torch.cat([grad.view(-1) for grad in grads]).detach()
+        stepdir = self.conjugate_gradient(fvp, -loss_grad)
         shs = 0.5*(stepdir.dot(fvp(stepdir)))
         lm = torch.sqrt(self.__max_kl/shs)
         fullstep = stepdir*lm
-        expected_improve = -flat_grads.dot(fullstep)
+        expected_improve = -loss_grad.dot(fullstep)
         old_params = self.get_flat_params_from(self.__pi)
         _, params = self.linesearch(self.__pi, policy_loss, old_params, fullstep, expected_improve)
         self.set_flat_params_to(self.__pi, params)
@@ -357,5 +361,5 @@ class Trainer:
                 print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))
                 interval_avg = []
                 if self.__logging:
-                    self.__writer.writerow([ep, reward_batch])
+                    self.__writer.writerow([ep, avg])
         utils.save(self.__agent, self.__directory + "/saved_policies/trpo-"+self.__env_name+"-final.pth.tar")

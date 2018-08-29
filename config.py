@@ -9,7 +9,7 @@
 """
 
 exp = {
-        "env": "Hover-v0",
+        "env": "RandomWaypoint-v0",
         "algs": ["trpo"]
         }
 
@@ -38,12 +38,12 @@ ddpg = {
         "iterations": 5000,
         "mem_len": 1000000,
         "actor_lr": 1e-4,
-        "critic_lr": 1e-3,
-        "learning_updates": 5,
+        "critic_lr": 1e-4,
+        "learning_updates": 1,
         "seed": 343,
-        "log_interval": 25,
+        "log_interval": 10,
         "warmup": 100,
-        "batch_size": 64,
+        "batch_size": 128,
         "ou_scale": 0.75,
         "ou_mu": 0.75,
         "ou_sigma": 0.15,
@@ -81,27 +81,6 @@ ppo = {
         "iterations": 5000,
         "batch_size": 256,
         "epochs": 4,
-        "lr": 1e-4,
-        "seed": 343,
-        "log_interval": 10,
-        "render": False,
-        "save": True,
-        "cuda": True,
-        "logging": True
-        }
-
-ppo_inf = {
-        "network_settings": {
-                                "gamma": 0.99,
-                                "lambda": 0.92,
-                                "eps": 0.1
-                                },
-        "hidden_dim": 128,
-        "iterations": 5000,
-        "batch_size": 256,
-        "mem_len": 1000000,
-        "epochs": 4,
-        "dyn_epochs": 32,
         "lr": 1e-4,
         "seed": 343,
         "log_interval": 10,

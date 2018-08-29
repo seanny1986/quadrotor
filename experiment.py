@@ -10,9 +10,6 @@ import multiprocessing as mp
     -- Sean Morrison, 2018
 """
 
-# TODO:
-# Check DDPG noise makes sense after warmup ends
-
 # grab experiment environment and list of algorithms
 env_name = cfg.exp["env"]
 algs = cfg.exp["algs"]
@@ -31,7 +28,7 @@ def main(env_name, algs):
 
     #Listens for ctrl+c input
     except KeyboardInterrupt:
-        print("---Terminating all processes---")
+        print("\n---Terminating all processes---")
         for p in processes:
             p.terminate()
 
@@ -62,16 +59,6 @@ def make(env_name, alg):
         import algs.ind.ppo as ppo
         print("---Initializing PPO in env: "+env_name+"---")
         return ppo.Trainer(env_name, params)
-    if alg == "ppo_one":
-        params = cfg.ppo
-        import algs.ind.ppo_one as ppo_one
-        print("---Initializing PPO_ONE in env: "+env_name+"---")
-        return ppo_one.Trainer(env_name, params)
-    if alg == "ppo_inf":
-        params = cfg.ppo_inf
-        import algs.ind.ppo_inf as ppo_inf
-        print("---Initializing PPO_INF in env: "+env_name+"---")
-        return ppo_inf.Trainer(env_name, params)
     if alg == "scv":
         params = cfg.scv
         import algs.ind.scv as scv

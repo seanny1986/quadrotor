@@ -162,7 +162,7 @@ def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
 
 def linesearch(model, f, x, fullstep, expected_improve_rate, max_backtracks=10, accept_ratio=.1):
     fval = f(True).data
-    print("fval before", fval.item())
+    #print("fval before", fval.item())
     for (_n_backtracks, stepfrac) in enumerate(.5**np.arange(max_backtracks)):
         xnew = x+stepfrac*fullstep
         set_flat_params_to(model, xnew)
@@ -170,9 +170,9 @@ def linesearch(model, f, x, fullstep, expected_improve_rate, max_backtracks=10, 
         actual_improve = fval-newfval
         expected_improve = expected_improve_rate*stepfrac
         ratio = actual_improve / expected_improve
-        print("actual: {:.4f}, expected: {:.4f}, ratio: {:.4f}".format(actual_improve.item(), expected_improve.item(), ratio.item()))
+        #print("actual: {:.4f}, expected: {:.4f}, ratio: {:.4f}".format(actual_improve.item(), expected_improve.item(), ratio.item()))
         if ratio.item() > accept_ratio and actual_improve.item() > 0:
-            print("fval after: {:.4f}\n".format(newfval.item()))
+            #print("fval after: {:.4f}\n".format(newfval.item()))
             return True, xnew
     return False, x
 

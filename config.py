@@ -10,7 +10,7 @@
 ##LandPara
 exp = {
         "env": "Land-v0",
-        "algs": ["ppo"]
+        "algs": ["trpo"]
         }
 
 cem = {
@@ -145,8 +145,8 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 64,
-        "iterations": 1000,
-        "log_interval": 100,
+        "iterations": 10000,
+        "log_interval": 500,
         "warmup": 50,
         "batch_size": 128,
         "seed": 343,

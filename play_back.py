@@ -105,7 +105,7 @@ def main():
     # initialize filepaths
     directory = os.getcwd()
 
-    fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0final.pth.tar"
+    fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
     video_path = directory + "/movies/"+args.pol+"-"+args.env
     print(fp)
 

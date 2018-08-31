@@ -74,13 +74,8 @@ class PPO(torch.nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
-            if masks[i] == 0:
-                _, _, v_inf = self.select_action(next_states[i])
-                v_inf = v_inf.detach()
-            else:
-                v_inf = 0
-            returns[i] = rewards[i]+self.__gamma*(prev_return*masks[i]+v_inf)
-            deltas[i] = rewards[i]+self.__gamma*(prev_value*masks[i]+v_inf)-values.data[i]
+            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
             advantages[i] = deltas[i]+self.__gamma*self.__lmbd*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
@@ -200,4 +195,4 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, avg])
-        utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"final.pth.tar")
+        utils.save(self.__agent, self.__directory + "/saved_policies/ppo-"+self.__env_name+"-final.pth.tar")

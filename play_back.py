@@ -21,7 +21,7 @@ from math import sin, cos, tan, pi
 parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
-parser.add_argument("-vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
+parser.add_argument("--vid", type=bool, default=False, metavar="V", help="determines whether to record video or not")
 parser.add_argument("--repeats", type=int, default=10, metavar="R", help="how many attempts we want to record")
 parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
 args = parser.parse_args()
@@ -135,11 +135,13 @@ def main():
     time = []
     for k in range(1, args.repeats+1):
         state = torch.Tensor(env.reset())
-        goal = env.get_goal()
+        if not args.vid:
+            env.render()
         done = False
         t = 0
         running_reward = 0
         while not done:
+            goal = env.get_goal()
             g.append(goal)
             time.append(t)
             t += 0.05
@@ -150,14 +152,16 @@ def main():
             state_data.append(state)
             running_reward += reward
             state = torch.Tensor(state)
+            if not args.vid:
+                env.render()
             if done:
                 break
         batch_rwd = (batch_rwd*(k-1)+running_reward)/k
     print("Mean reward: {:.3f}".format(batch_rwd))
-    ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, g, time), repeat=False, frames=len(state_data), interval=50)
-    #plt.show()
-    print("Saving video in: "+video_path+".mp4")
-    ani.save(video_path+".mp4", writer='ffmpeg', extra_args=['-loglevel', 'verbose'])
+    if args.vid:
+        ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, g, time), repeat=False, frames=len(state_data), interval=50)
+        print("Saving video in: "+video_path+".mp4")
+        ani.save(video_path+".mp4", writer='ffmpeg', extra_args=['-loglevel', 'verbose'])
     
     
 if __name__ == "__main__":

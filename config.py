@@ -9,7 +9,7 @@
 """
 
 exp = {
-        "env": "RandomWaypoint-v0",
+        "env": "Land-v0",
         "algs": ["trpo"]
         }
 

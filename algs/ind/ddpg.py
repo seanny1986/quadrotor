@@ -159,7 +159,7 @@ class Trainer:
             filename = self.__directory + "/data/ddpg-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.__writer = csv.writer(csvfile)
-                self.__writer.writerow(["episode", "reward"])
+                self.__writer.writerow(["episode", "interval", "reward"])
                 self._run_algo()
         else:
             self._run_algo()
@@ -235,7 +235,7 @@ class Trainer:
                 print("Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}".format(ep, interval, avg))
                 interval_avg = []
                 if self.__logging:
-                    self.__writer.writerow([ep, avg])
+                    self.__writer.writerow([ep, interval, avg])
         utils.save(self.__agent, self.__directory + "/saved_policies/ddpg-"+self.__env_name+"-final.pth.tar")
 
 

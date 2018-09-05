@@ -9,7 +9,7 @@
 """
 
 exp = {
-        "env": "Land-v0",
+        "env": "Hover-v0",
         "algs": ["trpo"]
         }
 

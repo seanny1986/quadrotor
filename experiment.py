@@ -59,11 +59,11 @@ def make(env_name, alg):
         import algs.ind.ppo as ppo
         print("---Initializing PPO in env: "+env_name+"---")
         return ppo.Trainer(env_name, params)
-    if alg == "scv":
-        params = cfg.scv
-        import algs.ind.scv as scv
-        print("---Initializing SCV in env: "+env_name+"---")
-        return scv.Trainer(env_name, params)
+    if alg == "opdpg":
+        params = cfg.opdpg
+        import algs.ind.opdpg as opdpg
+        print("---Initializing OPDPG in env: "+env_name+"---")
+        return opdpg.Trainer(env_name, params)
     if alg == "trpo":
         params = cfg.trpo
         import algs.ind.trpo as trpo

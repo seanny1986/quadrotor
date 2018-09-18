@@ -10,6 +10,8 @@ import argparse
 
     -- Sean Morrison, 2018
 """
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
 
 parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
 parser.add_argument('--env', type=str, default=None, metavar='E', help='environment to plot')
@@ -24,7 +26,7 @@ fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.set_title(args.env + "-v0 Policy Return")
 ax.set_xlabel("Episodes")
-ax.set_ylabel("Reward")
+ax.set_ylabel("Average Reward")
 fig.subplots_adjust(hspace=0.3)
 fig.subplots_adjust(wspace=0.3)
 

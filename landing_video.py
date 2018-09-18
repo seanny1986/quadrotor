@@ -20,7 +20,7 @@ from math import sin, cos, tan, pi
 
 # script arguments. E.g. python play_back.py --env="Hover" --pol="ppo"
 parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
-parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
+parser.add_argument("--env", type=str, default="Land", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("--vid", type=bool, default=True, metavar="V", help="determines whether to record video or not")
 parser.add_argument("--repeats", type=int, default=10, metavar="R", help="how many attempts we want to record")

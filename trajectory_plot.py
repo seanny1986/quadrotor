@@ -15,6 +15,8 @@ from math import sin, cos, tan, pi
 
     -- Sean Morrison, 2018
 """
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
 
 # script arguments. E.g. python play_back.py --env="Hover" --pol="ppo"
 parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
@@ -88,7 +90,7 @@ def plot_traj(P, A, state, ax, g):
     #ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[1,0], R[1,1], R[1,2], pivot='tail', color='green')
     #ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[2,0], R[2,1], R[2,2], pivot='tail', color='blue')
     ax.scatter(goal[0,0], goal[1,0], goal[2,0], color='green')
-    ax.set_xlim(0., 2.)
+    ax.set_xlim(-1., 1.)
     ax.set_ylim(-1., 1.)
     ax.set_zlim(-1., 1.)
     ax.set_xlabel('West/East [m]')

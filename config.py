@@ -9,7 +9,7 @@
 """
 
 exp = {
-        "env": "Hover-v0",
+        "env": "Trajectory-v0",
         "algs": ["trpo"]
         }
 
@@ -71,6 +71,30 @@ gae = {
         "logging": True
         }
 
+opdpg = {
+        "network_settings": {
+                                "gamma": 0.99,
+                                "tau": 0.01
+                                },
+        "hidden_dim": 128,
+        "iterations": 5000,
+        "mem_len": 1000000,
+        "actor_lr": 1e-4,
+        "critic_lr": 1e-4,
+        "learning_updates": 1,
+        "seed": 343,
+        "log_interval": 10,
+        "warmup": 100,
+        "batch_size": 256,
+        "ou_scale": 0.75,
+        "ou_mu": 0.75,
+        "ou_sigma": 0.15,
+        "render": False,
+        "save": True,
+        "cuda": True,
+        "logging": True
+        }
+
 ppo = {
         "network_settings": {
                                 "gamma": 0.99,
@@ -90,30 +114,6 @@ ppo = {
         "logging": True
         }
 
-scv = {
-        "network_settings": {
-                                "gamma": 0.99,
-                                "tau": 0.01,
-                                "eps": 0.1
-                                },
-        "mem_len": 1000000,
-        "actor_lr": 1e-5,
-        "critic_lr": 1e-4,
-        "learning_updates": 5,
-        "hidden_dim": 128,
-        "iterations": 5000,
-        "warmup": 50,
-        "batch_size": 128,
-        "policy_batch_size": 256,
-        "epochs":4,
-        "seed": 343,
-        "log_interval": 10,
-        "render": False,
-        "save": True,
-        "cuda": False,
-        "logging": True
-        }
-
 trpo = {
         "network_settings": {
                                 "gamma": 0.99,
@@ -122,7 +122,7 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 128,
-        "iterations": 5000,
+        "iterations": 10000,
         "log_interval": 10,
         "batch_size": 256,
         "seed": 343,

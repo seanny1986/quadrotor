@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Trajectory-v0",
-        "algs": ["trpo"]
+        "env": "Pendulum-v0",
+        "algs": ["opdpg"]
         }
 
 cem = {
@@ -85,7 +85,7 @@ opdpg = {
         "seed": 343,
         "log_interval": 10,
         "warmup": 100,
-        "batch_size": 256,
+        "batch_size": 128,
         "ou_scale": 0.75,
         "ou_mu": 0.75,
         "ou_sigma": 0.15,
@@ -122,7 +122,7 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 128,
-        "iterations": 10000,
+        "iterations": 5000,
         "log_interval": 10,
         "batch_size": 256,
         "seed": 343,

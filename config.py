@@ -104,7 +104,7 @@ trpo = {
         "log_interval": 10,
         "batch_size": 1024,
         "seed": 343,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": True,
         "logging": True,

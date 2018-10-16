@@ -16,13 +16,14 @@ from math import sin, cos, tan, pi
     -- Sean Morrison, 2018
 """
 plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
+#plt.rc('font', family='serif')
 
 # script arguments. E.g. python play_back.py --env="Hover" --pol="ppo"
 parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
 parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
-parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
+#parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
+parser.add_argument("--fname", type=str, default=None, metavar="F", help="load final policy? True/False")
 parser.add_argument('--name', type=str, default='fig', metavar='N', help='name to save figure as')
 args = parser.parse_args()
 
@@ -90,9 +91,9 @@ def plot_traj(P, A, state, ax, g):
     #ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[1,0], R[1,1], R[1,2], pivot='tail', color='green')
     #ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[2,0], R[2,1], R[2,2], pivot='tail', color='blue')
     ax.scatter(goal[0,0], goal[1,0], goal[2,0], color='green')
-    ax.set_xlim(-1., 1.)
-    ax.set_ylim(-1., 1.)
-    ax.set_zlim(-1., 1.)
+    ax.set_xlim(-1.5, 1.5)
+    ax.set_ylim(-1.5, 1.5)
+    ax.set_zlim(0., 3.)
     ax.set_xlabel('West/East [m]')
     ax.set_ylabel('South/North [m]')
     ax.set_zlabel('Down/Up [m]')
@@ -122,12 +123,8 @@ a4 = np.array([[0., l*(x/(n+1)), 0.] for x in range(n+1)])
 def main():
     # initialize filepaths
     directory = os.getcwd()
-    if args.final:
-        fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0-final.pth.tar"
-        fig_path = directory + "/movies/"+args.pol+"-"+args.env+"-final"
-    else:
-        fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
-        fig_path = directory + "/movies/"+args.pol+"-"+args.env
+    fp = directory + "/saved_policies/"+args.fname
+    fig_path = directory + "/movies/"+args.fname
 
     # create list to store state information over the flight. This is... doing it the hard way,
     # but the matplotlib animation class doesn't want to do this easily :/
@@ -157,7 +154,7 @@ def main():
     position = []
     while not done:
         position.append(state[0:3])
-        if count % 8 == 0:
+        if count % 5 == 0:
             plot_traj(P, A, state, ax, goal)
         action  = agent.select_action(state)
         if isinstance(action, tuple):

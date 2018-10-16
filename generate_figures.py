@@ -11,7 +11,7 @@ import argparse
     -- Sean Morrison, 2018
 """
 plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
+#plt.rc('font', family='serif')
 
 parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
 parser.add_argument('--env', type=str, default=None, metavar='E', help='environment to plot')
@@ -78,5 +78,5 @@ for i, d in enumerate(data):
     ax.fill_between(xs, neg_std, pos_std, alpha=0.3)
 plt.legend()         
 plt.show()
-fig.savefig(curr_dir + "/figures/"+args.name+".pdf", bbox_inches="tight")
+fig.savefig(curr_dir + "/figures/"+args.env+"-"+args.name+".pdf", bbox_inches="tight")
 print("Figure saved")

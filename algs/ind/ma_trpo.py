@@ -11,6 +11,7 @@ import gym
 import gym_aero
 import utils
 import numpy as np
+import random
 import csv
 import os
 
@@ -112,14 +113,27 @@ class Critic(nn.Module):
         state_values = self.__value(x)
         return state_values
 
-class REP(nn.Module):
-    def __init__(self, pi, beta, critic, target_critic, params, GPU=False):
+class Model(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(Model, self).__init__()
+        self.__fc1 = nn.Linear(input_dim, hidden_dim)
+        self.__pred = nn.Linear(hidden_dim, output_dim)
+        self.__pred.weight.data.mul_(0.1)
+        self.__pred.bias.data.mul_(0.)
+
+    def forward(self, x):
+        x = F.tanh(self.__fc1(x))
+        pred_next_state = self.__pred(x)
+        return pred_next_state
+
+class TRPO(nn.Module):
+    def __init__(self, pi, beta, critic, model, params, GPU=False):
         super(TRPO, self).__init__()
         self.__pi = pi
         self.__beta = beta
         self.hard_update(self.__beta, self.__pi)
         self.__critic = critic
-        self.__target_critic = target_critic
+        self.__model = model
         self.__gamma = params["gamma"]
         self.__tau = params["tau"]
         self.__max_kl = params["max_kl"]
@@ -155,6 +169,23 @@ class REP(nn.Module):
             if rdotr <= residual_tol:
                 break
         return x
+
+    def update_model(self, model_opt, batch):
+        """
+        Trains one step prediction model
+        """
+        states = torch.stack(batch.state)
+        actions = torch.stack(batch.action)
+        next_states = torch.stack(batch.next_state)
+        states_actions = torch.cat([states, actions], dim=1)
+        pred_next_states = self.__model(states_actions)
+        model_opt.zero_grad()
+        loss = F.mse_loss(pred_next_states, next_states)
+        if loss > 1e-5:
+            loss.backward()
+            model_opt.step()
+        else:
+            del loss
 
     def linesearch(self, model, func, x, fullstep, expected_improve_rate, max_backtracks=10, accept_ratio=.1):
         """
@@ -273,14 +304,17 @@ class REP(nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
-            if i-rewards.size(0) >= self.__step:
-                returns[i] = rewards[i:i+self.__steps].sum()+self.__gamma*prev_return*(masks[i].prod())
-                deltas[i] = rewards[i:i+self.__steps].sum()+self.__gamma*prev_value*(masks[i].prod())-values.data[i]
-                advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
+            if masks[i] == 0:
+                last_state = states[i]
+                last_action, _ = self.select_action(last_state)
+                last_state_action = torch.cat([last_state, last_action])
+                next_state = self.__model(last_state_action)
+                val = self.__critic(next_state)
             else:
-                returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-                deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-                advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]                
+                val = 0.
+            returns[i] = rewards[i]+self.__gamma*(prev_return*masks[i]+val)
+            deltas[i] = rewards[i]+self.__gamma*(prev_value*masks[i]+val)-values.data[i]
+            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
@@ -289,7 +323,7 @@ class REP(nn.Module):
         
         # update critic using Adam
         crit_opt.zero_grad()
-        crit_loss = F.smooth_l1_loss(values, returns)
+        crit_loss = F.smooth_l1_loss(values, returns.detach())
         crit_loss.backward(retain_graph=True)
         crit_opt.step()
         
@@ -326,10 +360,12 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         pi = Actor(state_dim, hidden_dim, action_dim)
         beta = Actor(state_dim, hidden_dim, action_dim)
-        critic = Critic(state_dim+1, hidden_dim, 1)
-        target_critic = Critic(state_dim+1, hidden_dim, 1)
-        self.__agent = REP(pi, beta, critic, target_critic, params["network_settings"], GPU=cuda)
+        critic = Critic(state_dim, hidden_dim, 1)
+        model = Model(state_dim+action_dim, hidden_dim, state_dim)
+        self.__agent = TRPO(pi, beta, critic, model, params["network_settings"], GPU=cuda)
         self.__crit_opt = torch.optim.Adam(critic.parameters())
+        self.__model_opt = torch.optim.Adam(model.parameters())
+        self.__memory = ReplayMemory(1000000)
         if cuda:
             self.__Tensor = torch.cuda.FloatTensor
             self.__agent = self.__agent.cuda()
@@ -341,7 +377,7 @@ class Trainer:
         self.__logging = params["logging"]
         self.__directory = os.getcwd()
         if self.__logging:
-            filename = self.__directory + "/data/trpo-"+self.__env_name+".csv"
+            filename = self.__directory + "/data/ma_trpo-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.__writer = csv.writer(csvfile)
                 self.__writer.writerow(["episode", "interval", "reward"])
@@ -378,6 +414,7 @@ class Trainer:
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
+                    self.__memory.push(state, action, next_state)
                     t += 1
                     if done:
                         break
@@ -390,9 +427,9 @@ class Trainer:
             avg = (avg*(ep-1)+reward_batch)/ep   
             
             if (self.__best is None or reward_batch > self.__best) and self.__save:
-                print("---Saving best TRPO policy---")
+                print("---Saving best MA_TRPO policy---")
                 self.__best = reward_batch
-                utils.save(self.__agent, self.__directory + "/saved_policies/trpo-"+self.__env_name+".pth.tar")
+                utils.save(self.__agent, self.__directory + "/saved_policies/ma_trpo-"+self.__env_name+".pth.tar")
             
             trajectory = {
                         "states": s_,
@@ -401,7 +438,10 @@ class Trainer:
                         "masks": masks,
                         "log_probs": lp_
                         }
-
+            for _ in range(5):
+                transitions = self.__memory.sample(256)
+                batch = Transition(*zip(*transitions))
+                self.__agent.update_model(self.__model_opt, batch)
             self.__agent.update(self.__crit_opt, trajectory)
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
@@ -409,4 +449,27 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, interval, avg])
-        utils.save(self.__agent, self.__directory + "/saved_policies/trpo-"+self.__env_name+"-final.pth.tar")
+        utils.save(self.__agent, self.__directory + "/saved_policies/ma_trpo-"+self.__env_name+"-final.pth.tar")
+
+
+Transition = namedtuple("Transition", ["state", "action", "next_state"])
+class ReplayMemory:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position+1)%self.capacity
+
+    def sample(self, batch_size):
+        if self.__len__() < batch_size:
+            return self.memory
+        else:
+            return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)

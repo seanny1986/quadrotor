@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Pendulum-v0",
-        "algs": ["opdpg"]
+        "env": "Trajectory-v0",
+        "algs": ["trpo"],
         }
 
 cem = {
@@ -71,39 +71,15 @@ gae = {
         "logging": True
         }
 
-opdpg = {
-        "network_settings": {
-                                "gamma": 0.99,
-                                "tau": 0.01
-                                },
-        "hidden_dim": 128,
-        "iterations": 5000,
-        "mem_len": 1000000,
-        "actor_lr": 1e-4,
-        "critic_lr": 1e-4,
-        "learning_updates": 1,
-        "seed": 343,
-        "log_interval": 10,
-        "warmup": 100,
-        "batch_size": 128,
-        "ou_scale": 0.75,
-        "ou_mu": 0.75,
-        "ou_sigma": 0.15,
-        "render": False,
-        "save": True,
-        "cuda": True,
-        "logging": True
-        }
-
 ppo = {
         "network_settings": {
                                 "gamma": 0.99,
                                 "lambda": 0.92,
                                 "eps": 0.1
                                 },
-        "hidden_dim": 128,
+        "hidden_dim": 256,
         "iterations": 5000,
-        "batch_size": 256,
+        "batch_size": 1024,
         "epochs": 4,
         "lr": 1e-4,
         "seed": 343,
@@ -111,7 +87,9 @@ ppo = {
         "render": False,
         "save": True,
         "cuda": True,
-        "logging": True
+        "logging": True,
+        "lazy_action": True,
+        "lazy_change": False
         }
 
 trpo = {
@@ -121,13 +99,15 @@ trpo = {
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
-        "hidden_dim": 128,
+        "hidden_dim": 256,
         "iterations": 5000,
         "log_interval": 10,
-        "batch_size": 256,
+        "batch_size": 1024,
         "seed": 343,
         "render": False,
         "save": True,
-        "cuda": False,
-        "logging": True
+        "cuda": True,
+        "logging": True,
+        "lazy_action": True,
+        "lazy_change": True
         }

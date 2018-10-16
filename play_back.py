@@ -20,10 +20,9 @@ from math import sin, cos, tan, pi
 # script arguments. E.g. python play_back.py --env="Hover" --pol="ppo"
 parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="Hover", metavar="E", help="environment to run")
-parser.add_argument("--pol", type=str, default="ppo", metavar="P", help="policy to run")
+parser.add_argument("--fname", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("--vid", type=bool, default=False, metavar="V", help="determines whether to record video or not")
 parser.add_argument("--repeats", type=int, default=10, metavar="R", help="how many attempts we want to record")
-parser.add_argument("--final", type=bool, default=False, metavar="F", help="load final policy? True/False")
 args = parser.parse_args()
 
 # animation callback function
@@ -75,6 +74,7 @@ def animate(i, P, state_data, ax, g, time):
     ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[1,0], R[1,1], R[1,2], pivot='tail', color='green')
     ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[2,0], R[2,1], R[2,2], pivot='tail', color='blue')
     ax.scatter(goal[0,0], goal[1,0], goal[2,0], color='green')
+    ax.plot(goal[0,:], goal[1,:], goal[2,:],c='b')
     ax.set_xlim(-3, 3)
     ax.set_ylim(-3, 3)
     ax.set_zlim(-3, 3)
@@ -104,13 +104,9 @@ p4 += np.array([[0.0, l, 0.0] for x in range(n+1)])
 def main():
     # initialize filepaths
     directory = os.getcwd()
-    if args.final:
-        fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0-final.pth.tar"
-        video_path = directory + "/movies/"+args.pol+"-"+args.env+"-final"
-    else:
-        fp = directory + "/saved_policies/"+args.pol+"-"+args.env+"-v0.pth.tar"
-        video_path = directory + "/movies/"+args.pol+"-"+args.env
-
+    fp = directory + "/saved_policies/"+args.fname
+    video_path = directory + "/movies/"+args.fname
+    
     # create list to store state information over the flight. This is... doing it the hard way,
     # but the matplotlib animation class doesn't want to do this easily :/
     state_data = []
@@ -160,7 +156,7 @@ def main():
     print("Mean reward: {:.3f}".format(batch_rwd))
     if args.vid:
         ani = animation.FuncAnimation(fig, animate, fargs=(P, state_data, ax, g, time), repeat=False, frames=len(state_data), interval=50)
-        print("Saving video in: "+video_path+".mp4")
+        print("Saving video in: "+video_path+"Climb.mp4")
         ani.save(video_path+".mp4", writer='ffmpeg', extra_args=['-loglevel', 'verbose'])
     
     

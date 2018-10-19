@@ -165,7 +165,7 @@ class TRPO(nn.Module):
         model. 
         """
         fval = func(x).data
-        steps = 0.5**torch.arange(max_backtracks)
+        steps = 0.5**torch.arange(max_backtracks).float()
         if self.__GPU: steps = steps.cuda()
         for (n, stepfrac) in enumerate(steps):
             xnew = x+stepfrac*fullstep
@@ -366,17 +366,13 @@ class Trainer:
                 state = self.__Tensor(state)
                 reward_sum = 0
                 t = 0
-                if ep % self.__log_interval == 0 and self.__render:
-                    self.__env.render()
                 done = False
                 while not done:
-                    #print()
-                    #print("Current Episode ", ep)
+                    if ep % self.__log_interval == 0 and self.__render:
+                        self.__env.render()
                     action, log_prob = self.__agent.select_action(state)
                     next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy())
                     reward_sum += reward
-                    if ep % self.__log_interval == 0 and self.__render:
-                        self.__env.render()
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
                     s_.append(state)
@@ -384,11 +380,11 @@ class Trainer:
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
-                    t += 1
                     if done:
                         break
                     state = next_state
-                num_steps += (t-1)
+                    t += 1
+                num_steps += t
                 num_episodes += 1
                 reward_batch += reward_sum
             reward_batch /= num_episodes

@@ -317,6 +317,8 @@ class Agent(torch.nn.Module):
         self.__tau = params["tau"]
         self.__GPU = GPU
 
+        self.states = []
+
         if GPU:
             self.__Tensor = torch.cuda.FloatTensor
             self.__pi = self.__pi.cuda()
@@ -336,7 +338,6 @@ class Agent(torch.nn.Module):
     
     def update(self, pol_opt, crit_opt, trajectory):
         rewards = torch.stack(trajectory["rewards"])
-        masks = torch.stack(trajectory["masks"])
         actions = torch.stack(trajectory["actions"])
         log_probs = torch.stack(trajectory["log_probs"])
         states = torch.stack(trajectory["states"])
@@ -350,9 +351,9 @@ class Agent(torch.nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
+            returns[i] = rewards[i]+self.__gamma*prev_return
+            deltas[i] = rewards[i]+self.__gamma*prev_value-values.data[i]
+            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
@@ -367,7 +368,7 @@ class Agent(torch.nn.Module):
 
         # update actor using REINFORCE
         pol_opt.zero_grad()
-        pol_loss = -log_probs*advantages
+        pol_loss = -torch.sum(log_probs*advantages)
         pol_loss.backward()
         pol_opt.step()
 
@@ -390,6 +391,8 @@ class Trainer:
         cuda = params["cuda"]
         state_dim = self.__env.observation_space.shape[0]
         action_dim = self.__env.action_space.shape[0]
+        planner_state_dim = self.__env.planner_observation_space.shape[0]
+        planner_action_dim = self.__env.planner_action_space.shape[0]
         hidden_dim = params["hidden_dim"]
 
         # low level policy
@@ -400,8 +403,8 @@ class Trainer:
         self.__crit_opt = torch.optim.Adam(critic.parameters())
         
         # high level policy
-        mu = Actor(state_dim, hidden_dim, 3)
-        phi = Critic(state_dim, hidden_dim, 1)
+        mu = Actor(planner_state_dim, hidden_dim, planner_action_dim)
+        phi = Critic(planner_state_dim, hidden_dim, 1)
         self.__brain = Agent(mu, phi, params["network_settings"], GPU=cuda)
         self.__brain_opt = torch.optim.Adam(mu.parameters())
         self.__crit_opt_2 = torch.optim.Adam(phi.parameters())
@@ -425,6 +428,51 @@ class Trainer:
         else:
             self.run_algo()
 
+    def run_planner(self, render=True):
+        # take high level action here (planning)
+        print("Planning moves")
+        if not self.__env.waypoint_list:
+            waypoints_len = 0
+            wp_state = self.__env.planner_reset()
+            wp_state = self.__Tensor(wp_state)
+            self.__brain.states.append(wp_state)
+        else:
+            waypoints_len = len(self.__env.waypoint_list)
+        if waypoints_len < self.__env.traj_len:
+            wp_state = self.__brain.states[-1]
+            wp_state = self.__Tensor(wp_state)
+            _wp_state, _wp, _wp_lp, _wp_rew, _next_wp_state, _term = [], [], [], [], [], []
+            if render:
+                self.__env.render()    
+            term = False
+            while not term:
+                wp, wp_lp  = self.__brain.select_action(wp_state)
+                next_wp_state, wp_rew, term, _ = self.__env.planner_step(wp_state[0:3].cpu().numpy(), wp.cpu().numpy())
+                self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
+                self.__brain.states.append(next_wp_state)
+                next_wp_state = self.__Tensor(next_wp_state)
+                wp_rew = self.__Tensor([wp_rew])
+                _wp_state.append(wp_state)
+                _wp.append(wp)
+                _wp_lp.append(wp_lp)
+                _wp_rew.append(wp_rew)
+                _next_wp_state.append(next_wp_state)
+                _term.append(term)
+                waypoints_len = len(self.__env.waypoint_list)
+                if render:
+                    self.__env.render()
+                if waypoints_len >= self.__env.traj_len:
+                    term = True
+                wp_state = next_wp_state
+            wp_traj = {"states": _wp_state,
+                    "actions": _wp,
+                    "log_probs": _wp_lp,
+                    "next_states": _next_wp_state,
+                    "rewards": _wp_rew}
+            print("Updating planner")
+            self.__brain.update(self.__brain_opt, self.__crit_opt_2, wp_traj)
+            self.__env.process_waypoints()
+
     def run_algo(self):
         interval_avg = []
         avg = 0
@@ -434,7 +482,8 @@ class Trainer:
             reward_batch = 0
             num_episodes = 0
             while num_steps < self.__batch_size+1:
-                state = self.__env.reset()
+                self.run_planner()
+                state = self.__env.policy_reset()
                 state = self.__Tensor(state)
                 reward_sum = 0
                 t = 0
@@ -442,45 +491,13 @@ class Trainer:
                     self.__env.render()
                 done = False
                 while not done:
-                    
-                    # take high level action here (planning)
-                    waypoints_len = len(self.__env.waypoints)
-                    if waypoints_len < self.__env.traj_len:
-                        if not self.__env.waypoints:
-                            wp_state = self.__env.planner_reset()
-                            wp_state = self.__Tensor(wp_state)
-                        else:
-                            wp_state = self.__env.get_waypoints()[-1]
-                        _wp_state, _wp, _wp_lp, _wp_rew, _next_wp_state, _term = [], [], [], [], [], []
-                        term = False
-                        while not term:
-                            wp, wp_lp  = self.__brain.select_action(wp_state)
-                            next_wp_state, wp_rew, term, _ = self.__env.planning_step(wp)
-                            self.__env.add_waypoint(next_wp_state)
-                            _wp_state.append(wp_state)
-                            _wp.append(wp)
-                            _wp_lp.append(wp_lp)
-                            _wp_rew.append(wp_rew)
-                            _next_wp_state.append(next_wp_state)
-                            _term.append(term)
-                            waypoints_len = len(self.__env.waypoints)
-                            if waypoints_len >= self.__env.traj_len:
-                                break
-                            wp_state = next_wp_state
-                        wp_traj = {"states": _wp_state,
-                                    "actions": _wp,
-                                    "logprobs": _wp_lp,
-                                    "next_states": _next_wp_state,
-                                    "rewards": _wp_rew}
-                        self.__brain.update(self.__brain_opt, self.__crit_opt_2, wp_traj)
-                        self.__env.process_waypoints()
+                    # update planner if necessary
+                    self.run_planner()
 
                     # take low level action here
                     action, log_prob = self.__agent.select_action(state)
                     next_state, reward, done, _ = self.__env.policy_step(action.cpu().data.numpy())
                     reward_sum += reward
-                    if ep % self.__log_interval == 0 and self.__render:
-                        self.__env.render()
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
                     s_.append(state)
@@ -489,6 +506,8 @@ class Trainer:
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
                     t += 1
+                    if ep % self.__log_interval == 0 and self.__render:
+                        self.__env.render()
                     if done:
                         break
                     state = next_state
@@ -505,6 +524,8 @@ class Trainer:
                 fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
                 utils.save(self.__agent, fname)
             
+            print("Updating policy")
+            del self.__brain.states[:]
             trajectory = {
                         "states": s_,
                         "actions": a_,

@@ -69,6 +69,11 @@ def make(env_name, alg):
         import algs.ind.trpo as trpo
         print("---Initializing TRPO in env: "+env_name+"---")
         return trpo.Trainer(env_name, params)
+    if alg == "trpo-h":
+        params = cfg.trpo
+        import algs.ind.trpo_h as trpo_h
+        print("---Initializing TRPO-H in env: "+env_name+"---")
+        return trpo_h.Trainer(env_name, params)
     
 
 if __name__ == "__main__":

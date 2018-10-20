@@ -557,7 +557,7 @@ class Trainer:
             wp_avg = (wp_avg*(ep-1)+wp_reward_batch)/ep
 
             if (self.__best is None or reward_batch > self.__best) and self.__save:
-                print("---Saving best TRPO policy---")
+                print("---Saving best TRPO-H policy---")
                 self.__best = reward_batch
                 fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
                 utils.save(self.__agent, fname)
@@ -565,6 +565,7 @@ class Trainer:
             wp_traj = {"states": self.__brain._wp_state,
                         "actions": self.__brain._wp,
                         "log_probs": self.__brain._wp_lp,
+                        "masks": self.__brain._wp_masks,
                         "rewards": self.__brain._wp_rew}
             
             print("Updating planner")

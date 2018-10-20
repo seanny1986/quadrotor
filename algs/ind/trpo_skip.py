@@ -125,7 +125,6 @@ class TRPO(nn.Module):
         self.__tau = params["tau"]
         self.__max_kl = params["max_kl"]
         self.__damping = params["damping"]
-        self.__skip_len = 2
         self.__GPU = GPU
         if GPU:
             self.__Tensor = torch.cuda.FloatTensor
@@ -134,6 +133,8 @@ class TRPO(nn.Module):
             self.__critic = self.__critic.cuda()
         else:
             self.__Tensor = torch.Tensor
+        self.__skip = 2
+        self.__skip_tens = self.__Tensor([self.__skip]).float()
     
     def conjugate_gradient(self, Avp, b, n_steps=10, residual_tol=1e-10):
         """
@@ -270,18 +271,20 @@ class TRPO(nn.Module):
         fixed_log_probs = torch.stack(trajectory["log_probs"])
         states = torch.stack(trajectory["states"])
 
+        length_scale = self.__skip_tens.expand(states.size()[0], 1)
+
         # calculate empirical advantage using trajectory rollouts
-        values = self.__critic(states)
+        values = self.__critic(torch.cat([states, length_scale],dim=1))
         returns = self.__Tensor(actions.size(0),1)
         deltas = self.__Tensor(actions.size(0),1)
         advantages = self.__Tensor(actions.size(0),1)
         prev_return = 0
         prev_value = 0
         prev_advantage = 0
-        for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
+        for i in reversed(range(rewards.size(0))-self.__skip+1):
+            returns[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_return*masks[i:i+self.__skip-1]
+            deltas[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_value*masks[i:i+self.__skip-1]-values.data[i:i+self.__skip-1]
+            advantages[i] = deltas[i:i+self.__skip-1]+self.__gamma*self.__tau*prev_advantage*masks[i:i+self.__skip-1]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
@@ -332,7 +335,7 @@ class Trainer:
         hidden_dim = params["hidden_dim"]
         pi = Actor(state_dim, hidden_dim, action_dim)
         beta = Actor(state_dim, hidden_dim, action_dim)
-        critic = Critic(state_dim, hidden_dim, 1)
+        critic = Critic(state_dim+1, hidden_dim, 1)
         self.__agent = TRPO(pi, beta, critic, params["network_settings"], GPU=cuda)
         self.__crit_opt = torch.optim.Adam(critic.parameters())
         if cuda:

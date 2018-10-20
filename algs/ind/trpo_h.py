@@ -469,7 +469,6 @@ class Trainer:
                 if waypoints_len >= self.__env.traj_len:
                     break
                 wp_state = next_wp_state
-                self.__brain._wp_state.append(wp_state)
             wp_traj = {"states": self.__brain._wp_state,
                         "actions": self.__brain._wp,
                         "log_probs": self.__brain._wp_lp,

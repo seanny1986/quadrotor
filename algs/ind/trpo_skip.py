@@ -282,12 +282,18 @@ class TRPO(nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))-self.__skip+1):
-            returns[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_return*masks[i:i+self.__skip-1]
-            deltas[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_value*masks[i:i+self.__skip-1]-values.data[i:i+self.__skip-1]
-            advantages[i] = deltas[i:i+self.__skip-1]+self.__gamma*self.__tau*prev_advantage*masks[i:i+self.__skip-1]
+            if masks[i] == 0:
+                counter = self.__skip-1
+                mask = torch.zeros(self.__skip)
+            returns[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_return*mask
+            deltas[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_value*mask-values.data[i]
+            advantages[i] = deltas[i:i+self.__skip-1]+self.__gamma*self.__tau*prev_advantage*mask
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
+            if counter < self.__skip-1:
+                mask[counter] = 1
+                counter += 1
         returns = (returns-returns.mean())/(returns.std()+1e-10)
         advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
         

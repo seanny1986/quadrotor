@@ -317,7 +317,7 @@ class Agent(torch.nn.Module):
         self.__tau = params["tau"]
         self.__GPU = GPU
 
-        self.states = []
+        self._wp_state, self._wp_next_state, self._wp, self._wp_lp, self._wp_rew = [], [], [], [], []
 
         if GPU:
             self.__Tensor = torch.cuda.FloatTensor
@@ -326,14 +326,21 @@ class Agent(torch.nn.Module):
         else:
             self.__Tensor = torch.Tensor
 
-    def select_action(self, x):
+    def plan(self, x):
+        #print("State: ", x)
         mu, logvar = self.__pi(x)
+        #print("Mu: ", mu)
+        #print("Logvar: ", logvar)
         sigma = logvar.exp().sqrt()
         dist = Normal(mu, sigma)
         action = dist.sample()
         logprob = dist.log_prob(action)
         mag = torch.norm(action)
-        vec = action/mag
+        if mag == 0:
+            vec = torch.zeros(action.size())
+        else:
+            vec = action/mag
+        #print("Action: ", torch.clamp(mag, 0., 1.5)*vec)
         return torch.clamp(mag, 0., 1.5)*vec, logprob
     
     def update(self, pol_opt, crit_opt, trajectory):
@@ -341,6 +348,12 @@ class Agent(torch.nn.Module):
         actions = torch.stack(trajectory["actions"])
         log_probs = torch.stack(trajectory["log_probs"])
         states = torch.stack(trajectory["states"])
+
+        #print(rewards.size())
+        #print(actions.size())
+        #print(log_probs.size())
+        #print(states.size())
+        #print("Actions: ", actions)
 
         # calculate empirical advantage using trajectory rollouts
         values = self.__critic(states)
@@ -363,13 +376,15 @@ class Agent(torch.nn.Module):
         # update critic using Adam
         crit_opt.zero_grad()
         crit_loss = F.smooth_l1_loss(values, returns)
-        crit_loss.backward()
+        crit_loss.backward(retain_graph=True)
+        #print("Crit Loss: ", crit_loss)
         crit_opt.step()
 
         # update actor using REINFORCE
         pol_opt.zero_grad()
         pol_loss = -torch.sum(log_probs*advantages)
-        pol_loss.backward()
+        #print("Pol Loss: ", pol_loss)
+        pol_loss.backward(retain_graph=True)
         pol_opt.step()
 
 class Trainer:
@@ -420,7 +435,7 @@ class Trainer:
         self.__logging = params["logging"]
         self.__directory = os.getcwd()
         if self.__logging:
-            filename = self.__directory + "/data/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".csv"
+            filename = self.__directory + "/data/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.__writer = csv.writer(csvfile)
                 self.__writer.writerow(["episode", "interval", "reward"])
@@ -428,50 +443,74 @@ class Trainer:
         else:
             self.run_algo()
 
-    def run_planner(self, render=True):
-        # take high level action here (planning)
-        print("Planning moves")
-        if not self.__env.waypoint_list:
-            waypoints_len = 0
-            wp_state = self.__env.planner_reset()
-            wp_state = self.__Tensor(wp_state)
-            self.__brain.states.append(wp_state)
-        else:
-            waypoints_len = len(self.__env.waypoint_list)
-        if waypoints_len < self.__env.traj_len:
-            wp_state = self.__brain.states[-1]
-            wp_state = self.__Tensor(wp_state)
-            _wp_state, _wp, _wp_lp, _wp_rew, _next_wp_state, _term = [], [], [], [], [], []
-            if render:
-                self.__env.render()    
-            term = False
-            while not term:
-                wp, wp_lp  = self.__brain.select_action(wp_state)
+    def update_plan(self):
+        #print("Checking plan")
+        waypoints = len(self.__env.waypoint_list)
+        #print(waypoints)
+        if waypoints < self.__env.traj_len:
+            wp_state = self.__brain._wp_next_state[-1]
+            #print("WP State: ", wp_state)
+            running = True
+            while running:
+                #print("tick")
+                wp, wp_lp  = self.__brain.plan(wp_state)
                 next_wp_state, wp_rew, term, _ = self.__env.planner_step(wp_state[0:3].cpu().numpy(), wp.cpu().numpy())
-                self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
-                self.__brain.states.append(next_wp_state)
+                if not term:
+                    self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
+                #print("Waypoint list: ", self.__env.waypoint_list)
                 next_wp_state = self.__Tensor(next_wp_state)
                 wp_rew = self.__Tensor([wp_rew])
-                _wp_state.append(wp_state)
-                _wp.append(wp)
-                _wp_lp.append(wp_lp)
-                _wp_rew.append(wp_rew)
-                _next_wp_state.append(next_wp_state)
-                _term.append(term)
+                self.__brain._wp_state.append(wp_state)
+                self.__brain._wp.append(wp)
+                self.__brain._wp_lp.append(wp_lp)
+                self.__brain._wp_rew.append(wp_rew)
+                self.__brain._wp_next_state.append(next_wp_state)
                 waypoints_len = len(self.__env.waypoint_list)
-                if render:
-                    self.__env.render()
                 if waypoints_len >= self.__env.traj_len:
-                    term = True
+                    break
                 wp_state = next_wp_state
-            wp_traj = {"states": _wp_state,
-                    "actions": _wp,
-                    "log_probs": _wp_lp,
-                    "next_states": _next_wp_state,
-                    "rewards": _wp_rew}
-            print("Updating planner")
+                self.__brain._wp_state.append(wp_state)
+            wp_traj = {"states": self.__brain._wp_state,
+                        "actions": self.__brain._wp,
+                        "log_probs": self.__brain._wp_lp,
+                        "rewards": self.__brain._wp_rew}
+            #print("Updating planner")
             self.__brain.update(self.__brain_opt, self.__crit_opt_2, wp_traj)
             self.__env.process_waypoints()
+            #print(self.__env.waypoint_list)
+
+    def run_planner(self, wp_state):
+        # check if waypoints list has entries in it
+        wp_state = self.__Tensor(wp_state)
+        self.__brain._wp_state.append(wp_state)
+        
+        # if waypoints list is smaller than expected, run planning loop
+        #print("Planning moves")         
+        running = True
+        while running:
+            wp, wp_lp  = self.__brain.plan(wp_state)
+            next_wp_state, wp_rew, term, _ = self.__env.planner_step(wp_state[0:3].cpu().numpy(), wp.cpu().numpy())
+            if not term:
+                self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
+            #print("Waypoint list: ", self.__env.waypoint_list)
+            next_wp_state = self.__Tensor(next_wp_state)
+            wp_rew = self.__Tensor([wp_rew])
+            self.__brain._wp.append(wp)
+            self.__brain._wp_lp.append(wp_lp)
+            self.__brain._wp_rew.append(wp_rew)
+            self.__brain._wp_next_state.append(next_wp_state)
+            waypoints_len = len(self.__env.waypoint_list)
+            if waypoints_len >= self.__env.traj_len:
+                break
+            wp_state = next_wp_state
+            self.__brain._wp_state.append(wp_state)
+        wp_traj = {"states": self.__brain._wp_state,
+                    "actions": self.__brain._wp,
+                    "log_probs": self.__brain._wp_lp,
+                    "rewards": self.__brain._wp_rew}
+        #print("Updating planner")
+        self.__brain.update(self.__brain_opt, self.__crit_opt_2, wp_traj)
+        self.__env.process_waypoints()
 
     def run_algo(self):
         interval_avg = []
@@ -482,7 +521,9 @@ class Trainer:
             reward_batch = 0
             num_episodes = 0
             while num_steps < self.__batch_size+1:
-                self.run_planner()
+                wp_state = self.__env.planner_reset()
+                self.run_planner(wp_state)
+                #print("waypoint list: ", self.__env.waypoint_list)
                 state = self.__env.policy_reset()
                 state = self.__Tensor(state)
                 reward_sum = 0
@@ -492,7 +533,7 @@ class Trainer:
                 done = False
                 while not done:
                     # update planner if necessary
-                    self.run_planner()
+                    self.update_plan()
 
                     # take low level action here
                     action, log_prob = self.__agent.select_action(state)
@@ -514,6 +555,10 @@ class Trainer:
                 num_steps += (t-1)
                 num_episodes += 1
                 reward_batch += reward_sum
+                del self.__brain._wp_state[:]
+                del self.__brain._wp[:]
+                del self.__brain._wp_lp[:]
+                del self.__brain._wp_rew[:]
             reward_batch /= num_episodes
             interval_avg.append(reward_batch)
             avg = (avg*(ep-1)+reward_batch)/ep   
@@ -521,11 +566,10 @@ class Trainer:
             if (self.__best is None or reward_batch > self.__best) and self.__save:
                 print("---Saving best TRPO policy---")
                 self.__best = reward_batch
-                fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
+                fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
                 utils.save(self.__agent, fname)
             
             print("Updating policy")
-            del self.__brain.states[:]
             trajectory = {
                         "states": s_,
                         "actions": a_,
@@ -541,5 +585,5 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, interval, avg])
-        fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+"-final.pth.tar"
+        fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+"-final.pth.tar"
         utils.save(self.__agent, fname)

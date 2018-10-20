@@ -4,7 +4,7 @@ from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
 import scipy.optimize
-from math import pi, log, sqrt
+from math import pi, log
 import numpy as np
 from collections import namedtuple
 import gym
@@ -125,6 +125,7 @@ class TRPO(nn.Module):
         self.__tau = params["tau"]
         self.__max_kl = params["max_kl"]
         self.__damping = params["damping"]
+        self.__skip_len = 2
         self.__GPU = GPU
         if GPU:
             self.__Tensor = torch.cuda.FloatTensor
@@ -165,7 +166,7 @@ class TRPO(nn.Module):
         model. 
         """
         fval = func(x).data
-        steps = 0.5**torch.arange(max_backtracks)
+        steps = 0.5**torch.arange(max_backtracks).float()
         if self.__GPU: steps = steps.cuda()
         for (n, stepfrac) in enumerate(steps):
             xnew = x+stepfrac*fullstep
@@ -308,76 +309,6 @@ class TRPO(nn.Module):
         self.set_flat_params_to(self.__pi, params)
         self.hard_update(self.__beta, self.__pi)
 
-class Agent(torch.nn.Module):
-    def __init__(self, pi, critic, params, GPU=False):
-        super(Agent, self).__init__()
-        self.__pi = pi
-        self.__critic = critic
-        self.__max_step = 1.5
-        self.__clip_val = sqrt((self.__max_step**2)/3.)
-        self.__gamma = params["gamma"]
-        self.__tau = params["tau"]
-        self.__GPU = GPU
-
-        self._wp_state, self._wp_next_state, self._wp, self._wp_lp, self._wp_rew, self._wp_masks = [], [], [], [], [], []
-
-        if GPU:
-            self.__Tensor = torch.cuda.FloatTensor
-            self.__pi = self.__pi.cuda()
-            self.__critic = self.__critic.cuda()
-        else:
-            self.__Tensor = torch.Tensor
-
-    def plan(self, x):
-        #print("State: ", x)
-        mu, logvar = self.__pi(x)
-        #print("Mu: ", mu)
-        #print("Logvar: ", logvar)
-        sigma = logvar.exp().sqrt()
-        dist = Normal(mu, sigma)
-        action = dist.sample()
-        logprob = dist.log_prob(action)
-        #print("Action: ", torch.clamp(mag, 0., 1.5)*vec)
-        return torch.clamp(action,-self.__clip_val, self.__clip_val), logprob
-    
-    def update(self, pol_opt, crit_opt, trajectory):
-        rewards = torch.stack(trajectory["rewards"])
-        masks = torch.stack(trajectory["masks"])
-        actions = torch.stack(trajectory["actions"])
-        log_probs = torch.stack(trajectory["log_probs"])
-        states = torch.stack(trajectory["states"])
-
-        # calculate empirical advantage using trajectory rollouts
-        values = self.__critic(states)
-        returns = self.__Tensor(actions.size(0),1)
-        deltas = self.__Tensor(actions.size(0),1)
-        advantages = self.__Tensor(actions.size(0),1)
-        prev_return = 0
-        prev_value = 0
-        prev_advantage = 0
-        for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
-            prev_return = returns[i, 0]
-            prev_value = values.data[i, 0]
-            prev_advantage = advantages[i, 0]
-        returns = (returns-returns.mean())/(returns.std()+1e-10)
-        advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
-        
-        # update critic using Adam
-        crit_opt.zero_grad()
-        crit_loss = F.smooth_l1_loss(values, returns)
-        crit_loss.backward()
-        #print("Crit Loss: ", crit_loss)
-        crit_opt.step()
-
-        # update actor using REINFORCE
-        pol_opt.zero_grad()
-        pol_loss = -torch.sum(log_probs*advantages)
-        #print("Pol Loss: ", pol_loss)
-        pol_loss.backward()
-        pol_opt.step()
 
 class Trainer:
     def __init__(self, env_name, params, ident=1):
@@ -398,24 +329,12 @@ class Trainer:
         cuda = params["cuda"]
         state_dim = self.__env.observation_space.shape[0]
         action_dim = self.__env.action_space.shape[0]
-        planner_state_dim = self.__env.planner_observation_space.shape[0]
-        planner_action_dim = self.__env.planner_action_space.shape[0]
         hidden_dim = params["hidden_dim"]
-
-        # low level policy
         pi = Actor(state_dim, hidden_dim, action_dim)
         beta = Actor(state_dim, hidden_dim, action_dim)
         critic = Critic(state_dim, hidden_dim, 1)
         self.__agent = TRPO(pi, beta, critic, params["network_settings"], GPU=cuda)
         self.__crit_opt = torch.optim.Adam(critic.parameters())
-        
-        # high level policy
-        mu = Actor(planner_state_dim, hidden_dim, planner_action_dim)
-        phi = Critic(planner_state_dim, hidden_dim, 1)
-        self.__brain = Agent(mu, phi, params["network_settings"], GPU=cuda)
-        self.__brain_opt = torch.optim.Adam(mu.parameters())
-        self.__crit_opt_2 = torch.optim.Adam(phi.parameters())
-
         if cuda:
             self.__Tensor = torch.cuda.FloatTensor
             self.__agent = self.__agent.cuda()
@@ -427,7 +346,7 @@ class Trainer:
         self.__logging = params["logging"]
         self.__directory = os.getcwd()
         if self.__logging:
-            filename = self.__directory + "/data/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".csv"
+            filename = self.__directory + "/data/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.__writer = csv.writer(csvfile)
                 self.__writer.writerow(["episode", "interval", "reward"])
@@ -435,103 +354,25 @@ class Trainer:
         else:
             self.run_algo()
 
-    def update_plan(self, render=True):
-        #print("Checking plan")
-        waypoints = len(self.__env.waypoint_list)
-        #print(waypoints)
-        if waypoints < self.__env.traj_len:
-            wp_state = self.__brain._wp_next_state[-1]
-            #print("WP State: ", wp_state)
-            wp_reward_sum = 0
-            running = True
-            while running:
-                #print("tick")
-                wp, wp_lp  = self.__brain.plan(wp_state)
-                next_wp_state, wp_rew, term, _ = self.__env.planner_step(wp_state[0:3].cpu().numpy(), wp.cpu().numpy())
-                wp_reward_sum += wp_rew
-                if not term:
-                    self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
-                    if render:
-                        self.__env.render()
-                #print("Waypoint list: ", self.__env.waypoint_list)
-                next_wp_state = self.__Tensor(next_wp_state)
-                wp_rew = self.__Tensor([wp_rew])
-                self.__brain._wp_state.append(wp_state)
-                self.__brain._wp.append(wp)
-                self.__brain._wp_lp.append(wp_lp)
-                self.__brain._wp_rew.append(wp_rew)
-                self.__brain._wp_next_state.append(next_wp_state)
-                self.__brain._wp_masks.append(self.__Tensor([not term]))
-                waypoints_len = len(self.__env.waypoint_list)
-                if waypoints_len >= self.__env.traj_len:
-                    break
-                wp_state = next_wp_state
-            self.__env.process_waypoints()
-            #print(self.__env.waypoint_list)
-            return wp_reward_sum
-        else:
-            return 0.
-
-    def run_planner(self, wp_state, render=True):
-        # check if waypoints list has entries in it
-        wp_state = self.__Tensor(wp_state)
-        self.__brain._wp_state.append(wp_state)
-        
-        # if waypoints list is smaller than expected, run planning loop
-        #print("Planning moves")
-        wp_reward_sum = 0         
-        running = True
-        while running:
-            wp, wp_lp  = self.__brain.plan(wp_state)
-            next_wp_state, wp_rew, term, _ = self.__env.planner_step(wp_state[0:3].cpu().numpy(), wp.cpu().numpy())
-            wp_reward_sum += wp_rew
-            if not term:
-                self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
-            #print("Waypoint list: ", self.__env.waypoint_list)
-            next_wp_state = self.__Tensor(next_wp_state)
-            wp_rew = self.__Tensor([wp_rew])
-            self.__brain._wp.append(wp)
-            self.__brain._wp_lp.append(wp_lp)
-            self.__brain._wp_rew.append(wp_rew)
-            self.__brain._wp_next_state.append(next_wp_state)
-            self.__brain._wp_masks.append(self.__Tensor([not term]))
-            waypoints_len = len(self.__env.waypoint_list)
-            if waypoints_len >= self.__env.traj_len:
-                break
-            wp_state = next_wp_state
-            self.__brain._wp_state.append(wp_state)
-        self.__env.process_waypoints()
-        return wp_reward_sum
-
     def run_algo(self):
         interval_avg = []
-        wp_interval_avg = []
         avg = 0
-        wp_avg = 0
         for ep in range(1, self.__iterations+1):
             s_, a_, r_, lp_, masks = [], [], [], [], []
             num_steps = 1
             reward_batch = 0
-            wp_reward_batch = 0
             num_episodes = 0
             while num_steps < self.__batch_size+1:
-                wp_state = self.__env.planner_reset()
-                wp_reward_sum = self.run_planner(wp_state, ep % self.__log_interval == 0 and self.__render)
-                #print("waypoint list: ", self.__env.waypoint_list)
-                state = self.__env.policy_reset()
+                state = self.__env.reset()
                 state = self.__Tensor(state)
                 reward_sum = 0
                 t = 0
-                if ep % self.__log_interval == 0 and self.__render:
-                    self.__env.render()
                 done = False
                 while not done:
-                    # update planner if necessary
-                    wp_reward_sum += self.update_plan(ep % self.__log_interval == 0 and self.__render)
-
-                    # take low level action here
+                    if ep % self.__log_interval == 0 and self.__render:
+                        self.__env.render()
                     action, log_prob = self.__agent.select_action(state)
-                    next_state, reward, done, _ = self.__env.policy_step(action.cpu().data.numpy())
+                    next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy())
                     reward_sum += reward
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
@@ -540,41 +381,23 @@ class Trainer:
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
-                    t += 1
-                    if ep % self.__log_interval == 0 and self.__render:
-                        self.__env.render()
                     if done:
                         break
                     state = next_state
-                num_steps += (t-1)
+                    t += 1
+                num_steps += t
                 num_episodes += 1
                 reward_batch += reward_sum
-                wp_reward_batch += wp_reward_sum
             reward_batch /= num_episodes
             interval_avg.append(reward_batch)
-            wp_interval_avg.append(wp_reward_batch)
             avg = (avg*(ep-1)+reward_batch)/ep   
-            wp_avg = (wp_avg*(ep-1)+wp_reward_batch)/ep
-
+            
             if (self.__best is None or reward_batch > self.__best) and self.__save:
                 print("---Saving best TRPO policy---")
                 self.__best = reward_batch
-                fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
+                fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
                 utils.save(self.__agent, fname)
             
-            wp_traj = {"states": self.__brain._wp_state,
-                        "actions": self.__brain._wp,
-                        "log_probs": self.__brain._wp_lp,
-                        "rewards": self.__brain._wp_rew}
-            
-            print("Updating planner")
-            self.__brain.update(self.__brain_opt, self.__crit_opt_2, wp_traj)
-            del self.__brain._wp_state[:]
-            del self.__brain._wp[:]
-            del self.__brain._wp_lp[:]
-            del self.__brain._wp_rew[:]
-
-            print("Updating policy")
             trajectory = {
                         "states": s_,
                         "actions": a_,
@@ -586,14 +409,9 @@ class Trainer:
             self.__agent.update(self.__crit_opt, trajectory)
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                wp_interval = float(sum(wp_interval_avg))/float(len(wp_interval_avg))
-                print("Planner Return:")
-                print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, wp_interval, wp_avg))
-                print("Policy Return:")
                 print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))
                 interval_avg = []
-                wp_interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, interval, avg])
-        fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+"-final.pth.tar"
+        fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+"-final.pth.tar"
         utils.save(self.__agent, fname)

@@ -251,6 +251,7 @@ class TRPO(nn.Module):
             
             Which gives us F*v
             """
+            
             mu_pi, logvar_pi = self.__pi(states)
             mu_beta, logvar_beta = self.__beta(states)
             var_pi = logvar_pi.exp()
@@ -285,8 +286,8 @@ class TRPO(nn.Module):
             if masks[i] == 0:
                 counter = self.__skip-1
                 mask = torch.zeros(self.__skip)
-            returns[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_return*mask
-            deltas[i] = rewards[i:i+self.__skip-1]+self.__gamma*prev_value*mask-values.data[i]
+            returns[i] = torch.sum(rewards[i:i+self.__skip-1])+self.__gamma*prev_return*mask
+            deltas[i] = torch.sum(rewards[i:i+self.__skip-1])+self.__gamma*prev_value*mask-values.data[i]
             advantages[i] = deltas[i:i+self.__skip-1]+self.__gamma*self.__tau*prev_advantage*mask
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]

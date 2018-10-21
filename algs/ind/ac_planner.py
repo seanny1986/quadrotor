@@ -9,11 +9,6 @@ import csv
 import os
 import numpy as np
 
-"""
-    Pytorch implementation of Generalized Advantage Estimation (Schulman, 2015). Uses independent
-    Gaussian actions (i.e. diagonal covariance matrix)
-"""
-
 class GAE(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, params, GPU=True):
         super(GAE,self).__init__()
@@ -119,15 +114,16 @@ class Trainer:
         avg = 0
         for ep in range(1, self.__iterations+1):
             r_, v_, lp_, dones = [], [], [], []
-            batch_mean_rwd, num_episodes, bsize = 0, 1, 1
+            batch_mean_rwd = 0
+            bsize = 1
+            num_episodes = 1
             while bsize<self.__batch_size+1:
                 state = self.__env.reset()
                 state = self.__Tensor(state)
                 if ep % self.__log_interval == 0 and self.__render:
                     self.__env.render()
-                t, running_reward = 0, 0
-                done = False
-                while not done:          
+                running_reward = 0
+                for t in range(10000):          
                     action, log_prob, value = self.__agent.select_action(state)
                     a = action.cpu().numpy()
                     next_state, reward, done, _ = self.__env.step(a)
@@ -143,7 +139,6 @@ class Trainer:
                     if done:
                         break
                     state = next_state
-                    t += 1
                 bsize += t
                 batch_mean_rwd = (running_reward*(num_episodes-1)+running_reward)/num_episodes
                 num_episodes += 1

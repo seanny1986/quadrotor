@@ -65,7 +65,7 @@ gae = {
         "lr": 1e-4,
         "seed": 343,
         "log_interval": 10,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": True,
         "logging": True
@@ -99,7 +99,7 @@ trpo = {
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
-        "hidden_dim": 256,
+        "hidden_dim": 512,
         "iterations": 15000,
         "log_interval": 10,
         "batch_size": 8192,

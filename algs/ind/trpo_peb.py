@@ -4,7 +4,7 @@ from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
 import scipy.optimize
-from math import pi, log, sqrt
+from math import pi, log
 import numpy as np
 from collections import namedtuple
 import gym
@@ -165,7 +165,7 @@ class TRPO(nn.Module):
         model. 
         """
         fval = func(x).data
-        steps = 0.5**torch.arange(max_backtracks)
+        steps = 0.5**torch.arange(max_backtracks).float()
         if self.__GPU: steps = steps.cuda()
         for (n, stepfrac) in enumerate(steps):
             xnew = x+stepfrac*fullstep
@@ -265,9 +265,11 @@ class TRPO(nn.Module):
         # get trajectory batch data
         rewards = torch.stack(trajectory["rewards"])
         masks = torch.stack(trajectory["masks"])
+        limits = torch.stack(trajectory["limits"])
         actions = torch.stack(trajectory["actions"])
         fixed_log_probs = torch.stack(trajectory["log_probs"])
         states = torch.stack(trajectory["states"])
+        next_states = torch.stack(trajectory["next_states"])
 
         # calculate empirical advantage using trajectory rollouts
         values = self.__critic(states)
@@ -278,6 +280,10 @@ class TRPO(nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
+            if masks[i] == 0:
+                next_val = self.__critic(next_states[i,:])
+                prev_return = next_val*limits[i]
+                prev_value = next_val*limits[i]
             returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
             deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
             advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
@@ -289,8 +295,8 @@ class TRPO(nn.Module):
         
         # update critic using Adam
         crit_opt.zero_grad()
-        crit_loss = F.smooth_l1_loss(values, returns)
-        crit_loss.backward()
+        crit_loss = F.smooth_l1_loss(values, returns.detach())
+        crit_loss.backward(retain_graph=True)
         crit_opt.step()
         
         # trust region policy update. We update pi by maximizing it's advantage over beta,
@@ -308,12 +314,17 @@ class TRPO(nn.Module):
         self.set_flat_params_to(self.__pi, params)
         self.hard_update(self.__beta, self.__pi)
 
+
 class Trainer:
     def __init__(self, env_name, params, ident=1):
         self.__id = str(ident)
         self.__env = gym.make(env_name)
         self.__env_name = env_name
         self.__params = params
+        self.__la = "not_la"
+        self.__lc = "not_lc"
+        if params["lazy_action"]: self.__env.set_lazy_action(True); self.__la = "la"
+        if params["lazy_change"]: self.__env.set_lazy_change(True); self.__lc = "lc"
         self.__iterations = params["iterations"]
         self.__seed = params["seed"]
         self.__batch_size = params["batch_size"]
@@ -323,167 +334,93 @@ class Trainer:
         cuda = params["cuda"]
         state_dim = self.__env.observation_space.shape[0]
         action_dim = self.__env.action_space.shape[0]
-        planner_state_dim = self.__env.planner_observation_space.shape[0]
-        planner_action_dim = self.__env.planner_action_space.shape[0]
         hidden_dim = params["hidden_dim"]
-
-        # low level policy
         pi = Actor(state_dim, hidden_dim, action_dim)
         beta = Actor(state_dim, hidden_dim, action_dim)
         critic = Critic(state_dim, hidden_dim, 1)
         self.__agent = TRPO(pi, beta, critic, params["network_settings"], GPU=cuda)
         self.__crit_opt = torch.optim.Adam(critic.parameters())
-        
-        # high level policy
-        pi_pl = Actor(planner_state_dim, hidden_dim, planner_action_dim)
-        beta_pl = Actor(planner_state_dim, hidden_dim, planner_action_dim)
-        critic_pl = Critic(planner_state_dim, hidden_dim, 1)
-        self.__agent_pl = TRPO(pi_pl, beta_pl, critic_pl, params["network_settings"], GPU=cuda)
-        self.__crit_opt_pl = torch.optim.Adam(critic_pl.parameters())
-
         if cuda:
             self.__Tensor = torch.cuda.FloatTensor
             self.__agent = self.__agent.cuda()
-            self.__agent_pl = self.__agent_pl.cuda()
         else:
             self.__Tensor = torch.Tensor
         self.__best = None
-        self.__best_planner = None
 
         # initialize experiment logging
         self.__logging = params["logging"]
         self.__directory = os.getcwd()
         if self.__logging:
-            filename = self.__directory + "/data/trpo-h-"+self.__id+"-"+"-"+self.__env_name+".csv"
+            filename = self.__directory + "/data/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.__writer = csv.writer(csvfile)
-                self.__writer.writerow(["episode", "interval", "reward", "planner_interval", "planner_reward"])
+                self.__writer.writerow(["episode", "interval", "reward"])
                 self.run_algo()
         else:
             self.run_algo()
 
-    def run_planner(self, wp_state, render=True):
-        _wp_state, _wp, _wp_lp, _wp_rew, _wp_masks = [], [], [], [], []
-        wp_state = self.__Tensor(wp_state)
-        wp_reward_sum = 0         
-        done = False
-        while not done:
-            wp, wp_lp  = self.__agent_pl.select_action(wp_state)
-            next_wp_state, wp_rew, done, _ = self.__env.planner_step(wp.cpu().numpy())
-            wp_reward_sum += wp_rew
-            self.__env.add_waypoint(np.array(next_wp_state)[0:3].reshape((3,1)))
-            next_wp_state = self.__Tensor(next_wp_state)
-            wp_rew = self.__Tensor([wp_rew])
-            _wp_state.append(wp_state)
-            _wp.append(wp)
-            _wp_lp.append(wp_lp)
-            _wp_rew.append(wp_rew)
-            _wp_masks.append(self.__Tensor([not done]))
-            wp_state = next_wp_state
-        return wp_reward_sum, {"states": _wp_state,
-                                "actions": _wp,
-                                "log_probs": _wp_lp,
-                                "masks": _wp_masks,
-                                "rewards": _wp_rew}
-
     def run_algo(self):
-        print("----STARTING TRAINING ALGORITHM---")
         interval_avg = []
-        wp_interval_avg = []
         avg = 0
-        wp_avg = 0
         for ep in range(1, self.__iterations+1):
-            s_, a_, r_, lp_, masks = [], [], [], [], []
-            wp_s_, wp_a_, wp_r_, wp_lp_, wp_masks = [], [], [], [], []
+            s_, a_, ns_, r_, lp_, masks, lim = [], [], [], [], [], [], []
             num_steps = 1
             reward_batch = 0
-            wp_reward_batch = 0
             num_episodes = 0
             while num_steps < self.__batch_size+1:
-                planner_state, aircraft_state = self.__env.planner_reset()
-                wp_reward_sum, wp_trajectory = self.run_planner(planner_state, ep % self.__log_interval == 0 and self.__render)
-                wp_s_.extend(wp_trajectory["states"])
-                wp_a_.extend(wp_trajectory["actions"])
-                wp_r_.extend(wp_trajectory["rewards"])
-                wp_lp_.extend(wp_trajectory["log_probs"])
-                wp_masks.extend(wp_trajectory["masks"])
-                self.__env.init_waypoints()
-                policy_state = self.__env.policy_reset(aircraft_state)
-                policy_state = self.__Tensor(policy_state)
+                state = self.__env.reset()
+                state = self.__Tensor(state)
                 reward_sum = 0
                 t = 0
-                if ep % self.__log_interval == 0 and self.__render:
-                    self.__env.render()
                 done = False
                 while not done:
-                    action, log_prob = self.__agent.select_action(policy_state)
-                    next_state, reward, done, _ = self.__env.policy_step(action.cpu().data.numpy())
+                    if ep % self.__log_interval == 0 and self.__render:
+                        self.__env.render()
+                    action, log_prob = self.__agent.select_action(state)
+                    next_state, reward, done, limit, _ = self.__env.step(action.cpu().data.numpy())
                     reward_sum += reward
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
-                    s_.append(policy_state)
+                    s_.append(state)
+                    ns_.append(next_state)
                     a_.append(action)
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
-                    t += 1
-                    if ep % self.__log_interval == 0 and self.__render:
-                        self.__env.render()
+                    lim.append(self.__Tensor([limit]))
                     if done:
                         break
-                    policy_state = next_state
-                num_steps += (t-1)
+                    state = next_state
+                    t += 1
+                num_steps += t
                 num_episodes += 1
                 reward_batch += reward_sum
-                wp_reward_batch += wp_reward_sum
             reward_batch /= num_episodes
-            wp_reward_batch /= num_episodes
             interval_avg.append(reward_batch)
-            wp_interval_avg.append(wp_reward_batch)
-            avg = (avg*(ep-1)+reward_batch)/ep
-            wp_avg = (wp_avg*(ep-1)+wp_reward_batch)/ep
-
-            if (self.__best is None or reward_batch > self.__best) and self.__save:
-                print("---Saving best TRPO-H policy---")
-                self.__best = reward_batch
-                fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+"-"+self.__env_name+".pth.tar"
-                utils.save(self.__agent, fname)
-            if (self.__best_planner is None or wp_reward_batch > self.__best_planner) and self.__save:
-                print("---Saving best TRPO-H planner---")
-                self.__best_planner = wp_reward_batch
-                fname = self.__directory + "/saved_policies/trpo-h-"+"planner-"+self.__id+"-"+"-"+self.__env_name+".pth.tar"
-                utils.save(self.__agent_pl, fname)
+            avg = (avg*(ep-1)+reward_batch)/ep   
             
-            print("Updating planner")
-            wp_trajectory = {
-                        "states": wp_s_,
-                        "actions": wp_a_,
-                        "rewards": wp_r_,
-                        "masks": wp_masks,
-                        "log_probs": wp_lp_
-                        }
-            self.__agent_pl.update(self.__crit_opt_pl, wp_trajectory)
-
-            print("Updating policy")
+            if (self.__best is None or reward_batch > self.__best) and self.__save:
+                print("---Saving best TRPO policy---")
+                self.__best = reward_batch
+                fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
+                utils.save(self.__agent, fname)
+            
             trajectory = {
                         "states": s_,
                         "actions": a_,
                         "rewards": r_,
+                        "next_states": ns_,
                         "masks": masks,
-                        "log_probs": lp_
+                        "log_probs": lp_,
+                        "limits": lim
                         }
 
             self.__agent.update(self.__crit_opt, trajectory)
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
-                wp_interval = float(sum(wp_interval_avg))/float(len(wp_interval_avg))
-                print("Planner Return:")
-                print("Episode {}:".format(ep)) 
-                print("Planner Interval average: {:.3f}\t Planner Average reward: {:.3f}".format(wp_interval, wp_avg))
-                print("Policy Interval average: {:.3f}\t Policy Average reward: {:.3f}".format(interval, avg))
+                print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))
                 interval_avg = []
-                wp_interval_avg = []
                 if self.__logging:
-                    self.__writer.writerow([ep, interval, avg, wp_interval, wp_avg])
-        fname = self.__directory + "/saved_policies/trpo-h-"+self.__id+"-"+"-"+self.__env_name+"-final.pth.tar"
+                    self.__writer.writerow([ep, interval, avg])
+        fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+"-final.pth.tar"
         utils.save(self.__agent, fname)

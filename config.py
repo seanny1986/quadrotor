@@ -102,7 +102,7 @@ trpo = {
         "hidden_dim": 512,
         "iterations": 15000,
         "log_interval": 10,
-        "batch_size": 8192,
+        "batch_size": 4096,
         "seed": 343,
         "render": True,
         "save": True,

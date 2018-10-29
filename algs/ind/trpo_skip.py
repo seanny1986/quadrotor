@@ -251,7 +251,7 @@ class TRPO(nn.Module):
             
             Which gives us F*v
             """
-            
+
             mu_pi, logvar_pi = self.__pi(states)
             mu_beta, logvar_beta = self.__beta(states)
             var_pi = logvar_pi.exp()
@@ -279,16 +279,25 @@ class TRPO(nn.Module):
         returns = self.__Tensor(actions.size(0),1)
         deltas = self.__Tensor(actions.size(0),1)
         advantages = self.__Tensor(actions.size(0),1)
-        prev_return = 0
-        prev_value = 0
-        prev_advantage = 0
-        for i in reversed(range(rewards.size(0))-self.__skip+1):
+        prev_return = torch.zeros(self.__skip)
+        prev_value = torch.zeros(self.__skip)
+        prev_advantage = torch.zeros(self.__skip)
+        mask = torch.zeros(self.__skip)
+        if self.__GPU:
+            prev_return = prev_return.cuda()
+            prev_value = prev_value.cuda()
+            prev_advantage = prev_advantage.cuda()
+            mask = mask.cuda()
+        counter = 0
+        for i in reversed(range(rewards.size(0))):
             if masks[i] == 0:
-                counter = self.__skip-1
+                counter = 0
                 mask = torch.zeros(self.__skip)
-            returns[i] = torch.sum(rewards[i:i+self.__skip-1])+self.__gamma*prev_return*mask
-            deltas[i] = torch.sum(rewards[i:i+self.__skip-1])+self.__gamma*prev_value*mask-values.data[i]
-            advantages[i] = deltas[i:i+self.__skip-1]+self.__gamma*self.__tau*prev_advantage*mask
+                if self.__GPU:
+                    mask = mask.cuda()
+            returns[i] = rewards[i]+self.__gamma*torch.sum(prev_return[i:i+counter]*mask[i:i+counter])
+            deltas[i] = rewards[i]+self.__gamma*torch.sum(prev_value[i:i+counter]*mask[i:i+counter])-values.data[i]
+            advantages[i] = deltas[i]+self.__gamma*self.__tau*torch.sum(prev_advantage[i:i+counter]*mask[i:i+counter])
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
@@ -365,6 +374,7 @@ class Trainer:
             self.run_algo()
 
     def run_algo(self):
+        print("---TRAINING AGENT---")
         interval_avg = []
         avg = 0
         for ep in range(1, self.__iterations+1):

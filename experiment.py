@@ -59,11 +59,6 @@ def make(env_name, alg):
         import algs.ind.ppo as ppo
         print("---Initializing PPO in env: "+env_name+"---")
         return ppo.Trainer(env_name, params)
-    if alg == "ma_trpo":
-        params = cfg.trpo
-        import algs.ind.ma_trpo as ma_trpo
-        print("---Initializing MA_TRPO in env: "+env_name+"---")
-        return ma_trpo.Trainer(env_name, params)
     if alg == "trpo":
         params = cfg.trpo
         import algs.ind.trpo as trpo

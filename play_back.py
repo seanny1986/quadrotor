@@ -141,7 +141,7 @@ def main():
             g.append(goal)
             time.append(t)
             t += 0.05
-            action  = agent.select_action(state)
+            action  = agent.select_action(state, True)
             if isinstance(action, tuple):
                 action = action[0]
             state, reward, done, _  = env.step(action.detach().cpu().numpy())

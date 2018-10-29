@@ -206,18 +206,21 @@ class TRPO(nn.Module):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
-    def select_action(self, state):
+    def select_action(self, state, deterministic=False):
         """
         Actions are taken under beta. Beta is the same as pi when doing trajectory rollouts,
         but when we optimize, we keep beta fixed, and maximize the advantage of pi over beta.
         From there, we set params of beta to be the same as those of pi.
         """
         mu, logvar = self.__beta(state)
-        sigma = logvar.exp().sqrt()+1e-10
-        dist = Normal(mu, sigma)
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
-        return action, log_prob
+        if deterministic:
+            return mu
+        else:
+            sigma = logvar.exp().sqrt()+1e-10
+            dist = Normal(mu, sigma)
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+            return action, log_prob
 
     def update(self, crit_opt, trajectory):
         def policy_loss(params=None):
@@ -265,7 +268,6 @@ class TRPO(nn.Module):
         # get trajectory batch data
         rewards = torch.stack(trajectory["rewards"])
         masks = torch.stack(trajectory["masks"])
-        limits = torch.stack(trajectory["limits"])
         actions = torch.stack(trajectory["actions"])
         fixed_log_probs = torch.stack(trajectory["log_probs"])
         states = torch.stack(trajectory["states"])
@@ -282,8 +284,8 @@ class TRPO(nn.Module):
         for i in reversed(range(rewards.size(0))):
             if masks[i] == 0:
                 next_val = self.__critic(next_states[i,:])
-                prev_return = next_val*limits[i]
-                prev_value = next_val*limits[i]
+                prev_return = next_val
+                prev_value = next_val
             returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
             deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
             advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
@@ -363,7 +365,7 @@ class Trainer:
         interval_avg = []
         avg = 0
         for ep in range(1, self.__iterations+1):
-            s_, a_, ns_, r_, lp_, masks, lim = [], [], [], [], [], [], []
+            s_, a_, ns_, r_, lp_, masks = [], [], [], [], [], []
             num_steps = 1
             reward_batch = 0
             num_episodes = 0
@@ -377,7 +379,7 @@ class Trainer:
                     if ep % self.__log_interval == 0 and self.__render:
                         self.__env.render()
                     action, log_prob = self.__agent.select_action(state)
-                    next_state, reward, done, limit, _ = self.__env.step(action.cpu().data.numpy())
+                    next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy())
                     reward_sum += reward
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
@@ -387,7 +389,6 @@ class Trainer:
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
-                    lim.append(self.__Tensor([limit]))
                     if done:
                         break
                     state = next_state
@@ -397,7 +398,7 @@ class Trainer:
                 reward_batch += reward_sum
             reward_batch /= num_episodes
             interval_avg.append(reward_batch)
-            avg = (avg*(ep-1)+reward_batch)/ep   
+            avg = (avg*(ep-1)+reward_batch)/ep
             
             if (self.__best is None or reward_batch > self.__best) and self.__save:
                 print("---Saving best TRPO policy---")
@@ -411,8 +412,7 @@ class Trainer:
                         "rewards": r_,
                         "next_states": ns_,
                         "masks": masks,
-                        "log_probs": lp_,
-                        "limits": lim
+                        "log_probs": lp_
                         }
 
             self.__agent.update(self.__crit_opt, trajectory)

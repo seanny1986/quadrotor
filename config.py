@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "BoxWorld-v0",
-        "algs": ["trpo-h"],
+        "env": "Trajectory-v0",
+        "algs": ["trpo-peb"],
         }
 
 cem = {
@@ -99,7 +99,7 @@ trpo = {
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
-        "hidden_dim": 512,
+        "hidden_dim": 64,
         "iterations": 15000,
         "log_interval": 10,
         "batch_size": 4096,

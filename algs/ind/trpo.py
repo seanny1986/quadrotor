@@ -206,18 +206,21 @@ class TRPO(nn.Module):
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
-    def select_action(self, state):
+    def select_action(self, state, deterministic=False):
         """
         Actions are taken under beta. Beta is the same as pi when doing trajectory rollouts,
         but when we optimize, we keep beta fixed, and maximize the advantage of pi over beta.
         From there, we set params of beta to be the same as those of pi.
         """
         mu, logvar = self.__beta(state)
-        sigma = logvar.exp().sqrt()+1e-10
-        dist = Normal(mu, sigma)
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
-        return action, log_prob
+        if deterministic:
+            return mu
+        else:
+            sigma = logvar.exp().sqrt()+1e-10
+            dist = Normal(mu, sigma)
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+            return action, log_prob
 
     def update(self, crit_opt, trajectory):
         def policy_loss(params=None):
@@ -380,8 +383,6 @@ class Trainer:
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
-                    if done:
-                        break
                     state = next_state
                     t += 1
                 num_steps += t

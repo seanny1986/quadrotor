@@ -3,7 +3,6 @@ import torch.autograd as autograd
 from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
-import scipy.optimize
 from math import pi, log, sqrt
 import numpy as np
 from collections import namedtuple
@@ -261,6 +260,19 @@ class TRPO(nn.Module):
             grads = torch.autograd.grad(kl_v, self.__pi.parameters())
             flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).data
             return flat_grad_grad_kl+vec*self.__damping
+        
+        def closure():
+            crit_opt.zero_grad()
+            values = self.__critic(states)
+            returns = self.__Tensor(actions.size(0),1)
+            prev_return = 0
+            for i in reversed(range(rewards.size(0))):
+                returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
+                prev_return = returns[i, 0]
+            returns = (returns-returns.mean())/(returns.std()+1e-10)
+            crit_loss = F.smooth_l1_loss(values, returns)
+            crit_loss.backward()
+            return crit_loss
 
         # get trajectory batch data
         rewards = torch.stack(trajectory["rewards"])
@@ -268,6 +280,22 @@ class TRPO(nn.Module):
         actions = torch.stack(trajectory["actions"])
         fixed_log_probs = torch.stack(trajectory["log_probs"])
         states = torch.stack(trajectory["states"])
+
+        # hacky line search for second order update of the critic
+        old_params = self.get_flat_params_from(self.__critic)
+        curr_loss = closure()
+        for lr in self.lr * .5**np.arange(10):
+            self.optimizer = torch.optim.LBFGS(self.__critic.parameters(), lr=lr)
+            self.optimizer.step(closure)
+            current_params = self.get_flat_params_from(self.__critic)
+            loss = closure()
+            if loss < curr_loss:
+                curr_loss = loss
+                old_params = current_params
+            if any(np.isnan(current_params.data.cpu().numpy())):
+                print("LBFGS optimization diverged. Rolling back update...")
+                self.set_flat_params_to(self.__critic, old_params)
+        self.set_flat_params_to(self.__critic, old_params)
 
         # calculate empirical advantage using trajectory rollouts
         values = self.__critic(states)
@@ -286,12 +314,6 @@ class TRPO(nn.Module):
             prev_advantage = advantages[i, 0]
         returns = (returns-returns.mean())/(returns.std()+1e-10)
         advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
-        
-        # update critic using Adam
-        crit_opt.zero_grad()
-        crit_loss = F.smooth_l1_loss(values, returns)
-        crit_loss.backward()
-        crit_opt.step()
         
         # trust region policy update. We update pi by maximizing it's advantage over beta,
         # and then set beta to the policy parameters of pi.
@@ -332,14 +354,14 @@ class Trainer:
         beta = Actor(state_dim, hidden_dim, action_dim)
         critic = Critic(state_dim, hidden_dim, 1)
         self.__agent = TRPO(pi, beta, critic, params["network_settings"], GPU=cuda)
-        self.__crit_opt = torch.optim.Adam(critic.parameters())
-        
+        self.__crit_opt = LBFGS(critic.parameters(), lr=1, history_size=10, line_search='Wolfe', debug=True)
+
         # high level policy
         pi_pl = Actor(planner_state_dim, hidden_dim, planner_action_dim)
         beta_pl = Actor(planner_state_dim, hidden_dim, planner_action_dim)
         critic_pl = Critic(planner_state_dim, hidden_dim, 1)
         self.__agent_pl = TRPO(pi_pl, beta_pl, critic_pl, params["network_settings"], GPU=cuda)
-        self.__crit_opt_pl = torch.optim.Adam(critic_pl.parameters())
+        self.__crit_opt_pl = LBFGS(critic_pl.parameters(), lr=1, history_size=10, line_search='Wolfe', debug=True)
 
         if cuda:
             self.__Tensor = torch.cuda.FloatTensor

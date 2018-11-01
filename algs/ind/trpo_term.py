@@ -84,6 +84,34 @@ import os
     a bit cleaner and easier to read. It's an extra step, but the clarity is worth it imo.
 """
 
+class Terminator(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(Terminator, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.__lstm = nn.LSTM(input_dim, hidden_dim, 1)
+        self.__score = nn.Linear(hidden_dim, output_dim)
+        self.__value = nn.Linear(hidden_dim, 1)
+    
+    def step(self, x, hidden=None):
+        hx, cx = self.__lstm(x.unsqueeze(1), hidden)
+        score = F.softmax(self.__score(hx.squeeze(1)), dim=-1)
+        value = self.__value(hx.squeeze(1))
+        return score, value, cx
+
+    def forward(self, x, hidden=None, force=True, steps=0):
+        if force or steps == 0: steps = len(x)
+        scores = torch.zeros(steps, 1, 1)
+        values = torch.zeros(steps, 1, 1)
+        for i in range(steps):
+            if force or i == 0:
+                input = x[i]
+            score, value, hidden = self.step(input, hidden)
+            scores[i] = score
+            values[i] = value
+        return scores, values, hidden
+
 class Actor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(Actor, self).__init__()
@@ -115,12 +143,13 @@ class Critic(nn.Module):
         return state_values
 
 class TRPO(nn.Module):
-    def __init__(self, pi, beta, critic, params, GPU=False):
+    def __init__(self, pi, beta, critic, terminator, params, GPU=False):
         super(TRPO, self).__init__()
         self.__pi = pi
         self.__beta = beta
         self.hard_update(self.__beta, self.__pi)
         self.__critic = critic
+        self.__terminator = terminator
         self.__gamma = params["gamma"]
         self.__tau = params["tau"]
         self.__max_kl = params["max_kl"]
@@ -221,6 +250,13 @@ class TRPO(nn.Module):
             action = dist.sample()
             log_prob = dist.log_prob(action)
             return action, log_prob
+    
+    def terminate(self, x, hidden=None):
+        score, value, hidden = self.__terminator.step(x.view(1,-1), hidden)
+        dist = Categorical(score)
+        term = dist.sample()
+        logprob = dist.log_prob(term)
+        return term, value, hidden, logprob
 
     def update(self, crit_opt, trajectory):
         def policy_loss(params=None):
@@ -315,6 +351,39 @@ class TRPO(nn.Module):
         _, params = self.linesearch(self.__pi, policy_loss, old_params, fullstep, expected_improve)
         self.set_flat_params_to(self.__pi, params)
         self.hard_update(self.__beta, self.__pi)
+    
+    def update_terminator(self, term_opt, trajectory):
+        rewards = torch.stack(trajectory["rewards"])
+        masks = torch.stack(trajectory["masks"])
+        actions = torch.stack(trajectory["terms"])
+        log_probs = torch.stack(trajectory["term_log_probs"])
+        next_states = torch.stack(trajectory["next_states"])
+        hs = [x[0] for x in trajectory["term_hiddens"]]
+        cs = [x[1] for x in trajectory["term_hiddens"]]
+        hxs = torch.stack(cs)
+        cxs = torch.stack(hs)
+        values = torch.stack(trajectory["term_values"])
+
+        # calculate empirical advantage using trajectory rollouts
+        returns = self.__Tensor(actions.size(0),1)
+        deltas = self.__Tensor(actions.size(0),1)
+        prev_return = 0
+        prev_value = 0
+        for i in reversed(range(rewards.size(0))):
+            if masks[i] == 0:
+                _, next_val, _ = self.__terminator.step(next_states[i].unsqueeze(0), (hxs[i,:], cxs[i,:]))
+                prev_return = next_val
+                prev_value = next_val
+            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
+            prev_return = returns[i, 0]
+            prev_value = values.data[i, 0]
+        returns = (returns-returns.mean())/(returns.std()+1e-10)
+        term_opt.zero_grad()
+        term_loss = -log_probs*returns
+        term_loss = term_loss.mean()
+        term_loss.backward()
+        term_opt.step()
 
 
 class Trainer:
@@ -334,19 +403,26 @@ class Trainer:
         self.__log_interval = params["log_interval"]
         self.__save = params["save"]
         cuda = params["cuda"]
-        state_dim = self.__env.observation_space.shape[0]
-        action_dim = self.__env.action_space.shape[0]
-        hidden_dim = params["hidden_dim"]
-        pi = Actor(state_dim, hidden_dim, action_dim)
-        beta = Actor(state_dim, hidden_dim, action_dim)
-        critic = Critic(state_dim, hidden_dim, 1)
-        self.__agent = TRPO(pi, beta, critic, params["network_settings"], GPU=cuda)
+        
+        self.state_dim = self.__env.observation_space.shape[0]
+        self.action_dim = self.__env.action_space.shape[0]
+        self.hidden_dim = params["hidden_dim"]
+        
+        pi = Actor(self.state_dim, self.hidden_dim, self.action_dim)
+        beta = Actor(self.state_dim, self.hidden_dim, self.action_dim)
+        critic = Critic(self.state_dim, self.hidden_dim, 1)
+        terminator = Terminator(self.state_dim, self.hidden_dim, 2)
+
+        self.__agent = TRPO(pi, beta, critic, terminator, params["network_settings"], GPU=cuda)
         self.__crit_opt = torch.optim.Adam(critic.parameters())
+        self.__term_opt = torch.optim.Adam(terminator.parameters())
         if cuda:
             self.__Tensor = torch.cuda.FloatTensor
             self.__agent = self.__agent.cuda()
+            self.device = "cuda:0"
         else:
             self.__Tensor = torch.Tensor
+            self.device = "cpu"
         self.__best = None
 
         # initialize experiment logging
@@ -366,6 +442,8 @@ class Trainer:
         avg = 0
         for ep in range(1, self.__iterations+1):
             s_, a_, ns_, r_, lp_, masks = [], [], [], [], [], []
+            t_, t_lp_, t_v_ = [], [], []
+            h_ = []
             num_steps = 1
             reward_batch = 0
             num_episodes = 0
@@ -375,20 +453,29 @@ class Trainer:
                 reward_sum = 0
                 t = 0
                 done = False
+                hidden = None
                 while not done:
                     if ep % self.__log_interval == 0 and self.__render:
                         self.__env.render()
                     action, log_prob = self.__agent.select_action(state)
-                    next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy())
+                    term, term_value, hidden, term_log_prob = self.__agent.terminate(state, hidden)
+                    next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy(), term.cpu().item())
                     reward_sum += reward
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
+
                     s_.append(state)
                     ns_.append(next_state)
                     a_.append(action)
                     r_.append(reward)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
+
+                    t_.append(term)
+                    t_lp_.append(term_log_prob)
+                    h_.append(hidden)
+                    t_v_.append(term_value)
+
                     if done:
                         break
                     state = next_state
@@ -412,10 +499,15 @@ class Trainer:
                         "rewards": r_,
                         "next_states": ns_,
                         "masks": masks,
-                        "log_probs": lp_
+                        "log_probs": lp_,
+                        "terms": t_, 
+                        "term_log_probs": t_lp_,
+                        "term_values": t_v_,
+                        "term_hiddens": h_
                         }
 
             self.__agent.update(self.__crit_opt, trajectory)
+            self.__agent.update_terminator(self.__term_opt, trajectory)
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))
                 print('Episode {}\t Interval average: {:.3f}\t Average reward: {:.3f}'.format(ep, interval, avg))

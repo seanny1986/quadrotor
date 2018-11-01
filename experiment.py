@@ -74,6 +74,11 @@ def make(env_name, alg):
         import algs.ind.trpo_peb as trpo_peb
         print("---Initializing TRPO-PEB in env: "+env_name+"---")
         return trpo_peb.Trainer(env_name, params)
+    if alg == "trpo-term":
+        params = cfg.trpo
+        import algs.ind.trpo_term as trpo_term
+        print("---Initializing TRPO-Term in env: "+env_name+"---")
+        return trpo_term.Trainer(env_name, params)
     if alg == "trpo-skip":
         params = cfg.trpo
         import algs.ind.trpo_skip as trpo_skip

@@ -379,8 +379,9 @@ class TRPO(nn.Module):
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
         returns = (returns-returns.mean())/(returns.std()+1e-10)
+        val_loss = F.smooth_l1_loss(values, returns.detach())
         term_opt.zero_grad()
-        term_loss = -log_probs*returns
+        term_loss = -log_probs*returns+val_loss
         term_loss = term_loss.mean()
         term_loss.backward()
         term_opt.step()

@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Trajectory-v0",
-        "algs": ["trpo-peb"],
+        "env": "TrajectoryTerm-v0",
+        "algs": ["trpo-term"],
         }
 
 cem = {
@@ -102,7 +102,7 @@ trpo = {
         "hidden_dim": 64,
         "iterations": 15000,
         "log_interval": 10,
-        "batch_size": 8192,
+        "batch_size": 4096,
         "seed": 343,
         "render": True,
         "save": True,

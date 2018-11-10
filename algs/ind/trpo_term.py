@@ -92,21 +92,25 @@ class Terminator(nn.Module):
         self.output_dim = output_dim
         self.__lstm = nn.LSTM(input_dim, hidden_dim, 1)
         self.__score = nn.Linear(hidden_dim, output_dim)
+        self.__value = nn.Linear(hidden_dim, 1)
     
     def step(self, x, hidden=None):
         hx, cx = self.__lstm(x.unsqueeze(1), hidden)
         score = F.softmax(self.__score(hx.squeeze(1)), dim=-1)
-        return score, cx
+        value = self.__value(hx.squeeze(1))
+        return score, value, cx
 
     def forward(self, x, hidden=None, force=True, steps=0):
         if force or steps == 0: steps = len(x)
         scores = torch.zeros(steps, 1, 1)
+        values = torch.zeros(steps, 1, 1)
         for i in range(steps):
             if force or i == 0:
                 input = x[i]
-            score, hidden = self.step(input, hidden)
+            score, value, hidden = self.step(input, hidden)
             scores[i] = score
-        return scores, hidden
+            values[i] = value
+        return scores, values, hidden
 
 class Actor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -248,11 +252,11 @@ class TRPO(nn.Module):
             return action, log_prob
     
     def terminate(self, x, hidden=None):
-        score, hidden = self.__terminator.step(x.view(1,-1), hidden)
+        score, value, hidden = self.__terminator.step(x.view(1,-1), hidden)
         dist = Categorical(score)
         term = dist.sample()
         logprob = dist.log_prob(term)
-        return term, hidden, logprob
+        return term, value, hidden, logprob
 
     def update(self, crit_opt, term_opt, trajectory):
         def policy_loss(params=None):
@@ -305,26 +309,56 @@ class TRPO(nn.Module):
         states = torch.stack(trajectory["states"])
         next_states = torch.stack(trajectory["next_states"])
         term_log_probs = torch.stack(trajectory["term_log_probs"])
+        term_rews = torch.stack(trajectory["term_rew"])
+        term_vals = torch.stack(trajectory["term_val"]).squeeze(1)
+        term_hiddens = trajectory["hiddens"]
+        hxs = torch.stack([x[0] for x in term_hiddens])
+        cxs = torch.stack([x[1] for x in term_hiddens])
 
         # calculate empirical advantage using trajectory rollouts
         values = self.__critic(states)
+        
         returns = self.__Tensor(actions.size(0),1)
         deltas = self.__Tensor(actions.size(0),1)
         advantages = self.__Tensor(actions.size(0),1)
+        
+        term_returns = self.__Tensor(actions.size(0),1)
+        term_deltas = self.__Tensor(actions.size(0),1)
+        term_advantages = self.__Tensor(actions.size(0),1)
+
         prev_return = 0
         prev_value = 0
         prev_advantage = 0
+        
+        term_prev_return = 0
+        term_prev_value = 0
+        term_prev_advantage = 0
+        
         for i in reversed(range(rewards.size(0))):
             if masks[i] == 0:
+                _, term_next_val, _, _ = self.terminate(next_states[i].unsqueeze(0), (hxs[i], cxs[i]))
+                term_prev_return = term_next_val.item()
+                term_prev_value = term_next_val.item()
+                
                 next_val = self.__critic(next_states[i,:])
                 prev_return = next_val
                 prev_value = next_val
+            
+            term_returns[i] = (rewards[i]+term_rews[i])+self.__gamma*term_prev_return*masks[i]
+            term_deltas[i] = (rewards[i]+term_rews[i])+self.__gamma*term_prev_value*masks[i]-term_vals.data[i]
+            term_advantages[i] = term_deltas[i]+self.__gamma*self.__tau*term_prev_advantage*masks[i]
+            term_prev_return = term_returns[i, 0]
+            term_prev_value = term_vals.data[i, 0]
+            term_prev_advantage = term_advantages[i, 0]
+
             returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
             deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
             advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
+        term_returns = (term_returns-term_returns.mean())/(term_returns.std()+1e-10)
+        term_advantages = (term_advantages-term_advantages.mean())/(term_advantages.std()+1e-10)
         returns = (returns-returns.mean())/(returns.std()+1e-10)
         advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
         
@@ -334,8 +368,11 @@ class TRPO(nn.Module):
         crit_loss.backward()
         crit_opt.step()
 
+        # update terminator
         term_opt.zero_grad()
-        term_loss = -term_log_probs*advantages
+        term_crit_loss = F.smooth_l1_loss(term_vals, term_returns)
+        term_pol_loss = -term_log_probs*term_advantages 
+        term_loss = term_pol_loss+term_crit_loss
         term_loss = term_loss.mean()
         term_loss.backward()
         term_opt.step()
@@ -412,6 +449,7 @@ class Trainer:
         avg = 0
         for ep in range(1, self.__iterations+1):
             s_, a_, ns_, r_, lp_, t_lp_, masks = [], [], [], [], [], [], []
+            t_r_, t_v_, t_h_ = [], [], []
             num_steps = 1
             reward_batch = 0
             num_episodes = 0
@@ -426,12 +464,13 @@ class Trainer:
                     if ep % self.__log_interval == 0 and self.__render:
                         self.__env.render()
                     action, log_prob = self.__agent.select_action(state)
-                    term, hidden, term_log_prob = self.__agent.terminate(state, hidden)
-                    next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy(), term.cpu().item())
+                    term, term_val, hidden, term_log_prob = self.__agent.terminate(state, hidden)
+                    next_state, reward, done, info = self.__env.step(action.cpu().data.numpy(), term.cpu().item())
+                    term_rew = info["term_rew"]
                     reward_sum += reward
                     next_state = self.__Tensor(next_state)
                     reward = self.__Tensor([reward])
-
+                    term_rew = self.__Tensor([term_rew])
                     s_.append(state)
                     ns_.append(next_state)
                     a_.append(action)
@@ -439,6 +478,9 @@ class Trainer:
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
                     t_lp_.append(term_log_prob)
+                    t_r_.append(term_rew)
+                    t_v_.append(term_val)
+                    t_h_.append(hidden)
 
                     if done:
                         break
@@ -464,7 +506,10 @@ class Trainer:
                         "next_states": ns_,
                         "masks": masks,
                         "log_probs": lp_,
-                        "term_log_probs": t_lp_
+                        "term_log_probs": t_lp_,
+                        "term_rew": t_r_,
+                        "term_val": t_v_,
+                        "hiddens": t_h_
                         }
 
             self.__agent.update(self.__crit_opt, self.__term_opt, trajectory)

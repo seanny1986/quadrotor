@@ -66,7 +66,7 @@ def make(env_name, alg):
         return trpo.Trainer(env_name, params)
     if alg == "trpo-h":
         params = cfg.trpo
-        import algs.ind.trpo_h as trpo_h
+        import algs.ind_h.trpo_h as trpo_h
         print("---Initializing TRPO-H in env: "+env_name+"---")
         return trpo_h.Trainer(env_name, params)
     if alg == "trpo-peb":
@@ -76,14 +76,9 @@ def make(env_name, alg):
         return trpo_peb.Trainer(env_name, params)
     if alg == "trpo-term":
         params = cfg.trpo
-        import algs.ind.trpo_term as trpo_term
+        import algs.ind_h.trpo_term as trpo_term
         print("---Initializing TRPO-Term in env: "+env_name+"---")
         return trpo_term.Trainer(env_name, params)
-    if alg == "trpo-skip":
-        params = cfg.trpo
-        import algs.ind.trpo_skip as trpo_skip
-        print("---Initializing TRPO-Skip in env: "+env_name+"---")
-        return trpo_skip.Trainer(env_name, params)
 
 if __name__ == "__main__":
     main(env_name, algs)

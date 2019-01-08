@@ -68,7 +68,7 @@ class GAE(torch.nn.Module):
         advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
         returns = (returns-returns.mean())/(returns.std()+1e-10)
         optim.zero_grad()
-        actor_loss = -(log_probs*advantages).mean()
+        actor_loss = -(log_probs.sum(dim=1, keepdim=True)*advantages).mean()
         critic_loss = F.smooth_l1_loss(values, returns)
         loss = actor_loss+critic_loss
         loss.backward(retain_graph=True)
@@ -140,8 +140,6 @@ class Trainer:
                     v_.append(value)
                     lp_.append(log_prob)
                     dones.append(self.__Tensor([not done]))
-                    if done:
-                        break
                     state = next_state
                     t += 1
                 bsize += t

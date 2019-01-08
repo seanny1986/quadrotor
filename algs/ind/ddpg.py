@@ -12,6 +12,13 @@ import numpy as np
 from collections import namedtuple
 import random
 
+"""
+Implementation of deterministic policy gradient. This implementation directly outputs both the mean and logvariance
+of the policy, rather than using exploratory noise (OU-process, as used in the paper). I've had trouble getting this
+working even for simple tasks like hover. It did -- at one stage -- work for Mujoco tasks, but seems to not learn
+any more, so it seems like it's very sensitive to the hyperparameters used.
+"""
+
 class Actor(nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
         super(Actor, self).__init__()
@@ -209,10 +216,6 @@ class Trainer:
                         transitions = self.__memory.sample(self.__batch_size)
                         batch = Transition(*zip(*transitions))
                         self.__agent.update_policy(self.__pol_opt, batch)
-
-                # check if terminate
-                if done:
-                    break
 
                 # step to next state
                 state = next_state

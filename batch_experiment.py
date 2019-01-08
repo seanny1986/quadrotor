@@ -43,32 +43,43 @@ def make(i, env_name, alg):
         params = cfg.cem
         import algs.ind.cem as cem
         print("---Initializing CEM in env: "+env_name+"---")
-        return cem.Trainer(env_name, params)
+        return cem.Trainer(env_name, params, i)
     if alg == "ddpg":
         params = cfg.ddpg
         import algs.ind.ddpg as ddpg
         print("---Initializing DDPG in env: "+env_name+"---")
-        return ddpg.Trainer(env_name, params)
+        return ddpg.Trainer(env_name, params, i)
     if alg == "gae":
         params = cfg.gae
         import algs.ind.gae as gae
         print("---Initializing GAE in env: "+env_name+"---")
-        return gae.Trainer(env_name, params)
+        return gae.Trainer(env_name, params, i)
     if alg == "ppo":
         params = cfg.ppo
         import algs.ind.ppo as ppo
         print("---Initializing PPO in env: "+env_name+"---")
         return ppo.Trainer(env_name, params, i)
-    if alg == "ma_trpo":
-        params = cfg.trpo
-        import algs.ind.ma_trpo as ma_trpo
-        print("---Initializing MA_TRPO in env: "+env_name+"---")
-        return ma_trpo.Trainer(env_name, params)
     if alg == "trpo":
         params = cfg.trpo
         import algs.ind.trpo as trpo
         print("---Initializing TRPO in env: "+env_name+"---")
         return trpo.Trainer(env_name, params, i)
+    if alg == "trpo-h":
+        params = cfg.trpo
+        import algs.ind_h.trpo_h as trpo_h
+        print("---Initializing TRPO-H in env: "+env_name+"---")
+        return trpo_h.Trainer(env_name, params, i)
+    if alg == "trpo-peb":
+        params = cfg.trpo
+        import algs.ind.trpo_peb as trpo_peb
+        print("---Initializing TRPO-PEB in env: "+env_name+"---")
+        return trpo_peb.Trainer(env_name, params, str(i))
+    if alg == "trpo-term":
+        params = cfg.trpo
+        import algs.ind_h.trpo_term as trpo_term
+        print("---Initializing TRPO-Term in env: "+env_name+"---")
+        return trpo_term.Trainer(env_name, params, i)
+
     
 
 if __name__ == "__main__":

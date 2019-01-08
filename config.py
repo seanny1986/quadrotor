@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "TrajectoryTerm-v0",
-        "algs": ["trpo-term"],
+        "env": "TrajectoryTwo-v0",
+        "algs": ["trpo-peb"],
         }
 
 cem = {
@@ -67,7 +67,7 @@ gae = {
         "log_interval": 10,
         "render": True,
         "save": True,
-        "cuda": True,
+        "cuda": False,
         "logging": True
         }
 
@@ -87,9 +87,7 @@ ppo = {
         "render": False,
         "save": True,
         "cuda": True,
-        "logging": True,
-        "lazy_action": True,
-        "lazy_change": False
+        "logging": True
         }
 
 trpo = {
@@ -99,15 +97,13 @@ trpo = {
                                 "max_kl": 1e-2,
                                 "damping": 1e-1
                                 },
-        "hidden_dim": 64,
-        "iterations": 15000,
+        "hidden_dim": 128,
+        "iterations": 500,
         "log_interval": 10,
-        "batch_size": 4096,
+        "batch_size": 2048,
         "seed": 343,
         "render": True,
         "save": True,
         "cuda": True,
-        "logging": True,
-        "lazy_action": True,
-        "lazy_change": True
+        "logging": True
         }

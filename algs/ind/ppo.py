@@ -186,10 +186,6 @@ class Trainer:
         self.__env = gym.make(env_name)
         self.__env_name = env_name
         self.__params = params
-        self.__la = "not_la"
-        self.__lc = "not_lc"
-        if params["lazy_action"]: self.__env.set_lazy_action(True); self.__la = "la"
-        if params["lazy_change"]: self.__env.set_lazy_change(True); self.__lc = "lc"
         self.__iterations = params["iterations"]
         self.__batch_size = params["batch_size"]
         self.__epochs = params["epochs"]
@@ -218,7 +214,7 @@ class Trainer:
         self.__logging = params["logging"]
         self.__directory = os.getcwd()
         if self.__logging:
-            filename = self.__directory + "/data/ppo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".csv"
+            filename = self.__directory + "/data/ppo-"+self.__id+"-"+self.__env_name+".csv"
             with open(filename, "w") as csvfile:
                 self.__writer = csv.writer(csvfile)
                 self.__writer.writerow(["episode", "interval", "reward"])
@@ -267,7 +263,7 @@ class Trainer:
             if (self.__best is None or batch_mean_rwd > self.__best) and self.__save:
                 print("---Saving best PPO policy---")
                 self.__best = batch_mean_rwd
-                fname = self.__directory + "/saved_policies/ppo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+".pth.tar"
+                fname = self.__directory + "/saved_policies/ppo-"+self.__id+"-"+self.__env_name+".pth.tar"
                 utils.save(self.__agent, fname)
             trajectory = {"states": s_,
                         "actions": a_,
@@ -287,7 +283,7 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, interval, avg])
-        fname = self.__directory + "/saved_policies/ppo-"+self.__id+"-"+self.__la+"-"+self.__lc+"-"+self.__env_name+"-final.pth.tar"
+        fname = self.__directory + "/saved_policies/ppo-"+self.__id+"-"+self.__env_name+"-final.pth.tar"
         utils.save(self.__agent, fname)
 
         

@@ -100,7 +100,6 @@ class Trainer:
         else:
             self.train()
         
-
     def train(self):
         def evaluate(weights, rend):
             self.agent.set_weights(weights)

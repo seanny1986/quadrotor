@@ -69,8 +69,8 @@ class PID_Controller:
     
     def compute_ang_pid(self, target, state):
         """
-            Computes pids in zeta. We are using a deterministic simulation with a discrete timestep,
-            so taking finite differences should in this case give us the exact dv that was output
+            Rate controller. We are using a deterministic simulation with a discrete timestep,
+            so taking finite differences should (in this case) give us the exact dv that was output
             by the sim.
         """
         

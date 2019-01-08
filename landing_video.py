@@ -158,8 +158,6 @@ def main():
             state_data.append(state)
             running_reward += reward
             state = torch.Tensor(state)
-            if done:
-                break
         batch_rwd = (batch_rwd*(k-1)+running_reward)/k
     print("Mean reward: {:.3f}".format(batch_rwd))
     if args.vid:

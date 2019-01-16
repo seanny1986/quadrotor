@@ -73,12 +73,12 @@ def make(i, env_name, alg):
         params = cfg.trpo
         import algs.ind.trpo_peb as trpo_peb
         print("---Initializing TRPO-PEB in env: "+env_name+"---")
-        return trpo_peb.Trainer(env_name, params, str(i))
+        return trpo_peb.Trainer(env_name, params, "full-spectrum-"+"0.05-"+str(i))
     if alg == "trpo-term":
         params = cfg.trpo
         import algs.ind_h.trpo_term as trpo_term
         print("---Initializing TRPO-Term in env: "+env_name+"---")
-        return trpo_term.Trainer(env_name, params, i)
+        return trpo_term.Trainer(env_name, params, "full-spectrum-"+str(i))
 
     
 

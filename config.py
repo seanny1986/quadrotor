@@ -9,7 +9,7 @@
 """
 
 exp = {
-        "env": "TrajectoryTwo-v0",
+        "env": "Trajectory-v0",
         "algs": ["trpo-peb"],
         }
 
@@ -102,7 +102,7 @@ trpo = {
         "log_interval": 10,
         "batch_size": 2048,
         "seed": 343,
-        "render": True,
+        "render": False,
         "save": True,
         "cuda": True,
         "logging": True

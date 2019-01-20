@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Trajectory-v0",
-        "algs": ["trpo-peb"],
+        "env": "TrajectoryTermTwo-v0",
+        "algs": ["trpo-term"],
         }
 
 cem = {

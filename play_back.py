@@ -35,7 +35,6 @@ def main():
         state = torch.Tensor(env.reset())
         env.render()
         done = False
-        t = 0
         running_reward = 0
         while not done:
             action, _ = agent.select_action(state)

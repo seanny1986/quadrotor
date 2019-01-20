@@ -123,7 +123,7 @@ a4 = np.array([[0., l*(x/(n+1)), 0.] for x in range(n+1)])
 def main():
     # initialize filepaths
     directory = os.getcwd()
-    fp = directory + "/saved_policies/"+args.fname
+    fp = directory + "/saved_policies/"+"trpo-full-spectrum-0.01-0-Trajectory-v0.pth.tar"
     fig_path = directory + "/movies/"+args.fname
 
     # create list to store state information over the flight. This is... doing it the hard way,
@@ -135,15 +135,15 @@ def main():
     # create figure for animation function
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d", aspect="equal", autoscale_on=False)
-    ax.set_xlim(0., 2.)
-    ax.set_ylim(-1., 1.)
-    ax.set_zlim(-1., 1.)
+    ax.set_xlim(0., 4.)
+    ax.set_ylim(-2., 2.)
+    ax.set_zlim(-2., 2.)
     ax.set_xlabel("West/East [m]")
     ax.set_ylabel("South/North [m]")
     ax.set_zlabel("Down/Up [m]")
     ax.set_title(args.env + "-" + args.pol + " Trajectory Plot")
 
-    env_name = args.env+"-v0"
+    env_name = "TrajectoryLine-v0"
     env = gym.make(env_name)
     agent = utils.load(fp)
     state = torch.Tensor(env.reset())
@@ -153,8 +153,9 @@ def main():
     count = 0
     position = []
     while not done:
-        position.append(state[0:3])
-        if count % 5 == 0:
+        env.render()
+        position.append(np.array(state[0:3]).reshape((3,1))+env.get_datum())
+        if count % 10 == 0:
             plot_traj(P, A, state, ax, goal)
         action  = agent.select_action(state)
         if isinstance(action, tuple):
@@ -167,11 +168,11 @@ def main():
             break
         count += 1
     print("Reward: {:.3f}".format(running_reward))
-    xs = [x[0] for x in position]
-    ys = [x[1] for x in position]
-    zs = [x[2] for x in position]
+    xs = [x[0,0] for x in position]
+    ys = [x[1,0] for x in position]
+    zs = [x[2,0] for x in position]
     ax.plot(xs, ys, zs, "r")
-    ax.set_xticklabels([])
+    #ax.set_xticklabels([])
     ax.set_yticklabels([])
     ax.set_zticklabels([])
     plt.show()

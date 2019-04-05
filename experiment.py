@@ -79,6 +79,11 @@ def make(env_name, alg):
         import algs.ind_h.trpo_term as trpo_term
         print("---Initializing TRPO-Term in env: "+env_name+"---")
         return trpo_term.Trainer(env_name, params)
+    if alg == "trpo-peb-lstm":
+        params = cfg.trpo
+        import algs.ind.trpo_peb_lstm as trpo_peb_lstm
+        print("---Initializing TRPO-PEB-LSTM in env: "+env_name+"---")
+        return trpo_peb_lstm.Trainer(env_name, params)
 
 if __name__ == "__main__":
     main(env_name, algs)

@@ -42,7 +42,7 @@ def main():
             running_reward += reward
             state = torch.Tensor(state)
             env.render()
-            env.record()
+            #env.record()
         batch_rwd = (batch_rwd*(k-1)+running_reward)/k
     print("Mean reward: {:.3f}".format(batch_rwd))
     

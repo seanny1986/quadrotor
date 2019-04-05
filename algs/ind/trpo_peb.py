@@ -97,7 +97,7 @@ class Actor(nn.Module):
     def forward(self, x):
         x = F.tanh(self.__fc1(x.float()))
         x = F.tanh(self.__fc2(x))
-        mu = self.__mu(x)
+        mu = F.sigmoid(self.__mu(x))**0.5
         logvar = self.__logvar(x)
         return mu, logvar
 
@@ -117,10 +117,10 @@ class Critic(nn.Module):
 class TRPO(nn.Module):
     def __init__(self, pi, beta, critic, params, GPU=False):
         super(TRPO, self).__init__()
-        self.__pi = pi
-        self.__beta = beta
-        self.hard_update(self.__beta, self.__pi)
-        self.__critic = critic
+        self.pi = pi
+        self.beta = beta
+        self.hard_update(self.beta, self.pi)
+        self.critic = critic
         self.__gamma = params["gamma"]
         self.__tau = params["tau"]
         self.__max_kl = params["max_kl"]
@@ -128,9 +128,9 @@ class TRPO(nn.Module):
         self.__GPU = GPU
         if GPU:
             self.__Tensor = torch.cuda.FloatTensor
-            self.__pi = self.__pi.cuda()
-            self.__beta = self.__beta.cuda()
-            self.__critic = self.__critic.cuda()
+            self.pi = self.pi.cuda()
+            self.beta = self.beta.cuda()
+            self.critic = self.critic.cuda()
         else:
             self.__Tensor = torch.Tensor
     
@@ -212,7 +212,7 @@ class TRPO(nn.Module):
         but when we optimize, we keep beta fixed, and maximize the advantage of pi over beta.
         From there, we set params of beta to be the same as those of pi.
         """
-        mu, logvar = self.__beta(state)
+        mu, logvar = self.beta(state)
         if deterministic:
             return mu
         else:
@@ -229,7 +229,7 @@ class TRPO(nn.Module):
             Schulman, 2015, Eqns. 1-4, 12-14.
             """
             def get_loss():
-                mu_pi, logvar_pi = self.__pi(states)
+                mu_pi, logvar_pi = self.pi(states)
                 sigma_pi = logvar_pi.exp().sqrt()+1e-10
                 dist = Normal(mu_pi, sigma_pi)
                 log_probs = dist.log_prob(actions)
@@ -239,7 +239,7 @@ class TRPO(nn.Module):
             if params is None:
                 return get_loss()
             else:
-                self.set_flat_params_to(self.__pi, params)
+                self.set_flat_params_to(self.pi, params)
                 return get_loss()
         
         def fvp(vec):
@@ -252,16 +252,16 @@ class TRPO(nn.Module):
             
             Which gives us F*v
             """
-            mu_pi, logvar_pi = self.__pi(states)
-            mu_beta, logvar_beta = self.__beta(states)
+            mu_pi, logvar_pi = self.pi(states)
+            mu_beta, logvar_beta = self.beta(states)
             var_pi = logvar_pi.exp()
             var_beta = logvar_beta.exp()
             kl = var_pi.sqrt().log()-var_beta.sqrt().log()+(var_beta+(mu_beta-mu_pi).pow(2))/(2.*var_pi)-0.5
             kl = torch.sum(kl, dim=1).mean()
-            grads = torch.autograd.grad(kl, self.__pi.parameters(), create_graph=True)
+            grads = torch.autograd.grad(kl, self.pi.parameters(), create_graph=True)
             flat_grad_kl = torch.cat([grad.view(-1) for grad in grads])
             kl_v = flat_grad_kl.dot(vec)
-            grads = torch.autograd.grad(kl_v, self.__pi.parameters())
+            grads = torch.autograd.grad(kl_v, self.pi.parameters())
             flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).data
             return flat_grad_grad_kl+vec*self.__damping
 
@@ -274,7 +274,7 @@ class TRPO(nn.Module):
         next_states = torch.stack(trajectory["next_states"])
 
         # calculate empirical advantage using trajectory rollouts
-        values = self.__critic(states)
+        values = self.critic(states)
         returns = self.__Tensor(actions.size(0),1)
         deltas = self.__Tensor(actions.size(0),1)
         advantages = self.__Tensor(actions.size(0),1)
@@ -283,7 +283,7 @@ class TRPO(nn.Module):
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
             if masks[i] == 0:
-                next_val = self.__critic(next_states[i,:])
+                next_val = self.critic(next_states[i,:])
                 prev_return = next_val
                 prev_value = next_val
             returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
@@ -304,17 +304,17 @@ class TRPO(nn.Module):
         # trust region policy update. We update pi by maximizing it's advantage over beta,
         # and then set beta to the policy parameters of pi.
         pol_loss = policy_loss()
-        grads = torch.autograd.grad(pol_loss, self.__pi.parameters())
+        grads = torch.autograd.grad(pol_loss, self.pi.parameters())
         loss_grad = torch.cat([grad.view(-1) for grad in grads]).detach()
         stepdir = self.conjugate_gradient(fvp, -loss_grad)
         shs = 0.5*(stepdir.dot(fvp(stepdir)))
         lm = torch.sqrt(self.__max_kl/shs)
         fullstep = stepdir*lm
         expected_improve = -loss_grad.dot(fullstep)
-        old_params = self.get_flat_params_from(self.__pi)
-        _, params = self.linesearch(self.__pi, policy_loss, old_params, fullstep, expected_improve)
-        self.set_flat_params_to(self.__pi, params)
-        self.hard_update(self.__beta, self.__pi)
+        old_params = self.get_flat_params_from(self.pi)
+        _, params = self.linesearch(self.pi, policy_loss, old_params, fullstep, expected_improve)
+        self.set_flat_params_to(self.pi, params)
+        self.hard_update(self.beta, self.pi)
 
 
 class Trainer:
@@ -365,6 +365,7 @@ class Trainer:
             num_steps = 1
             reward_batch = 0
             num_episodes = 0
+            action_mags = []
             while num_steps < self.__batch_size+1:
                 state = self.__env.reset()
                 state = self.__Tensor(state)
@@ -384,6 +385,9 @@ class Trainer:
                     a_.append(action)
                     r_.append(reward)
                     lp_.append(log_prob)
+
+                    action_mags.append(action)
+
                     masks.append(self.__Tensor([not done]))
                     state = next_state
                     t += 1
@@ -408,7 +412,6 @@ class Trainer:
                         "masks": masks,
                         "log_probs": lp_
                         }
-
             self.__agent.update(self.__crit_opt, trajectory)
             if ep % self.__log_interval == 0:
                 interval = float(sum(interval_avg))/float(len(interval_avg))

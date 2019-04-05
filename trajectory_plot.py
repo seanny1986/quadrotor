@@ -28,7 +28,7 @@ parser.add_argument('--name', type=str, default='fig', metavar='N', help='name t
 args = parser.parse_args()
 
 # animation callback function
-def plot_traj(P, A, state, ax, g):
+def plot_traj(P, A, xyz, zeta, ax, g):
     
     # rotation matrix. Only used for plotting, has no effect on simulation calcs.
     def R1(zeta):
@@ -50,8 +50,6 @@ def plot_traj(P, A, state, ax, g):
     p1, p2, p3, p4 = P
     m1, m2, m3, m4 = A
     goal = g
-    xyz, zeta, uvw, pqr = state[0:3], state[3:6], state[6:9], state[9:12]
-    xyz, zeta, uvw, pqr = np.array(xyz).reshape(-1,1), np.array(zeta).reshape(-1,1), np.array(uvw).reshape(-1,1), np.array(pqr).reshape(-1,1)
     R = R1(zeta)
        
     # rotate to aircraft attitude
@@ -91,9 +89,6 @@ def plot_traj(P, A, state, ax, g):
     #ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[1,0], R[1,1], R[1,2], pivot='tail', color='green')
     #ax.quiver(xyz[0,0], xyz[1,0], xyz[2,0], R[2,0], R[2,1], R[2,2], pivot='tail', color='blue')
     ax.scatter(goal[0,0], goal[1,0], goal[2,0], color='green')
-    ax.set_xlim(-1.5, 1.5)
-    ax.set_ylim(-1.5, 1.5)
-    ax.set_zlim(0., 3.)
     ax.set_xlabel('West/East [m]')
     ax.set_ylabel('South/North [m]')
     ax.set_zlabel('Down/Up [m]')
@@ -123,7 +118,7 @@ a4 = np.array([[0., l*(x/(n+1)), 0.] for x in range(n+1)])
 def main():
     # initialize filepaths
     directory = os.getcwd()
-    fp = directory + "/saved_policies/"+"trpo-full-spectrum-0.01-0-Trajectory-v0.pth.tar"
+    fp = directory + "/saved_policies/"+"trpo-1-TrajectoryLine-v0.pth.tar"
     fig_path = directory + "/movies/"+args.fname
 
     # create list to store state information over the flight. This is... doing it the hard way,
@@ -141,7 +136,7 @@ def main():
     ax.set_xlabel("West/East [m]")
     ax.set_ylabel("South/North [m]")
     ax.set_zlabel("Down/Up [m]")
-    ax.set_title(args.env + "-" + args.pol + " Trajectory Plot")
+    #ax.set_title(args.env + "-" + args.pol + " Trajectory Plot")
 
     env_name = "TrajectoryLine-v0"
     env = gym.make(env_name)
@@ -154,9 +149,11 @@ def main():
     position = []
     while not done:
         env.render()
-        position.append(np.array(state[0:3]).reshape((3,1))+env.get_datum())
         if count % 10 == 0:
-            plot_traj(P, A, state, ax, goal)
+            curr_pos = np.array(state[0:3]).reshape((3,1))+env.get_datum()
+            curr_zeta = np.arcsin(np.array(state[3:6]).reshape((3,1)))
+            position.append(curr_pos)
+            plot_traj(P, A, curr_pos, curr_zeta, ax, goal)
         action  = agent.select_action(state)
         if isinstance(action, tuple):
             action = action[0]
@@ -164,15 +161,15 @@ def main():
         state_data.append(state)
         running_reward += reward
         state = torch.Tensor(state)
-        if done:
-            break
         count += 1
     print("Reward: {:.3f}".format(running_reward))
     xs = [x[0,0] for x in position]
     ys = [x[1,0] for x in position]
     zs = [x[2,0] for x in position]
     ax.plot(xs, ys, zs, "r")
-    #ax.set_xticklabels([])
+    ax.scatter(2., 0., 0., color='green')
+    ax.scatter(3., 0., 0., color='green')
+    ax.set_xticklabels([])
     ax.set_yticklabels([])
     ax.set_zticklabels([])
     plt.show()

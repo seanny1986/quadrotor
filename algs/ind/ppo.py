@@ -148,7 +148,6 @@ class PPO(torch.nn.Module):
 
         states = torch.stack(trajectory["states"]).float()
         actions = torch.stack(trajectory["actions"]).float()
-        next_states = torch.stack(trajectory["next_states"]).float()
         beta_log_probs = torch.stack(trajectory["log_probs"]).float()
         rewards = torch.stack(trajectory["rewards"]).float()
         values = torch.stack(trajectory["values"]).float()

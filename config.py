@@ -9,7 +9,7 @@
 """
 
 exp = {
-        "env": "Loop-v0",
+        "env": "GeneralSpline-v0",
         "algs": ["trpo-peb"],
         }
 

@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 parser.add_argument("--env", type=str, default="TrajectoryTerm-v0", metavar="E", help="environment to run")
 parser.add_argument("--fname", type=str, default="ppo", metavar="P", help="policy to run")
 parser.add_argument("--vid", type=bool, default=False, metavar="V", help="determines whether to record video or not")
-parser.add_argument("--repeats", type=int, default=1, metavar="R", help="how many attempts we want to record")
+parser.add_argument("--repeats", type=int, default=10, metavar="R", help="how many attempts we want to record")
 args = parser.parse_args()
 
 def main():
@@ -35,6 +35,7 @@ def main():
     env = gym.make(args.env)
     agent = utils.load(fp)
     batch_rwd = 0
+    n = 1
     for k in range(1, args.repeats+1):
         state = torch.Tensor(env.reset())
         env.render()
@@ -50,6 +51,9 @@ def main():
             reward_sum += reward
             next_state = torch.Tensor(next_state)
             state = next_state
+        batch_rwd = (batch_rwd*(n-1)+reward_sum)/n
+        n += 1
+        print("Reward sum: {:.3f}".format(reward_sum))
     print("Mean reward: {:.3f}".format(batch_rwd))    
      
 if __name__ == "__main__":

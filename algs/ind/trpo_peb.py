@@ -95,9 +95,9 @@ class Actor(nn.Module):
         self.__mu.bias.data.mul_(0.)
 
     def forward(self, x):
-        x = F.tanh(self.__fc1(x.float()))
-        x = F.tanh(self.__fc2(x))
-        mu = F.sigmoid(self.__mu(x))**0.5
+        x = F.elu(self.__fc1(x.float()))
+        x = F.elu(self.__fc2(x))
+        mu = self.__mu(x)
         logvar = self.__logvar(x)
         return mu, logvar
 

@@ -24,7 +24,7 @@ class MDN(torch.nn.Module):
         self.fc2 = torch.nn.Linear(hidden_dim, hidden_dim)
         self.mu = torch.nn.Linear(hidden_dim, output_dim)
         self.logvar = torch.nn.Linear(hidden_dim, output_dim)
-        self.pi = torch.nn.Linear(hidden_dim, int(len(skills)+1))
+        self.phi = torch.nn.Linear(hidden_dim, int(len(skills)+1))
         self.value = torch.nn.Linear(hidden_dim, 1)
 
         self.mu.weight.data.mul_(0.1)
@@ -35,9 +35,9 @@ class MDN(torch.nn.Module):
         x = F.tanh(self.fc2(x))
         mus = self.mu(x)
         logvars = self.logvar(x)
-        pi = F.softmax(self.pi(x), dim=-1)
+        phi = F.softmax(self.phi(x), dim=-1)
         value = self.value(x)
-        return mus, logvars, pi, value
+        return mus, logvars, phi, value
     
     """
     def forward(self, x):
@@ -70,7 +70,8 @@ class MDN(torch.nn.Module):
                 prev_value = values.data[i, 0]
                 prev_advantage = advantages[i, 0]
             advantages = (advantages-advantages.mean())/(advantages.std())
-            returns = (returns-returns.mean())/(returns.std())
+            deltas = (deltas-deltas.mean())/deltas.std()
+            returns = (returns-returns.mean())/returns.std()
 
             # get action probabilities under current policy
             mus = []

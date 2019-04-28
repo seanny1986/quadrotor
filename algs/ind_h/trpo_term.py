@@ -110,7 +110,7 @@ class Terminator(nn.Module):
             score, value, hidden = self.step(input, hidden)
             scores[i] = score
             values[i] = value
-        return scores, values, hidden
+        return scores, value, hidden
 
 class Actor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -162,6 +162,8 @@ class TRPO(nn.Module):
             #self.__critic = self.__critic.cuda()
         else:
             self.__Tensor = torch.Tensor
+        
+        self.hard_update(self.__beta, self.__pi)
     
     def conjugate_gradient(self, Avp, b, n_steps=10, residual_tol=1e-10):
         """
@@ -333,7 +335,6 @@ class TRPO(nn.Module):
         term_prev_return = 0
         term_prev_value = 0
         term_prev_advantage = 0
-        
         for i in reversed(range(rewards.size(0))):
             if masks[i] == 0:
                 _, term_next_val, _, _ = self.terminate(next_states[i].unsqueeze(0), (hxs[i], cxs[i]))
@@ -362,6 +363,7 @@ class TRPO(nn.Module):
         term_returns = (term_returns-term_returns.mean())/(term_returns.std()+1e-10)
         term_advantages = (term_advantages-term_advantages.mean())/(term_advantages.std()+1e-10)
         returns = (returns-returns.mean())/(returns.std()+1e-10)
+        deltas = (deltas-deltas.mean())/(deltas.std()+1e-10)
         advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
         
         # update critic using Adam
@@ -372,11 +374,10 @@ class TRPO(nn.Module):
 
         # update terminator
         term_opt.zero_grad()
-        term_crit_loss = F.smooth_l1_loss(term_vals, term_returns)
-        term_pol_loss = -term_log_probs*term_advantages 
-        term_loss = term_pol_loss+term_crit_loss
+        term_loss = -term_log_probs*term_advantages.detach()+F.smooth_l1_loss(term_vals, term_returns.detach()) 
         term_loss = term_loss.mean()
         term_loss.backward()
+        #torch.nn.utils.clip_grad_norm_(self.__terminator.parameters(), 0.1)
         term_opt.step()
         
         # trust region policy update. We update pi by maximizing it's advantage over beta,
@@ -469,6 +470,8 @@ class Trainer:
                     action, log_prob = self.__agent.select_action(state)
                     term, term_val, hidden, term_log_prob = self.__agent.terminate(state, hidden)
                     next_state, reward, done, info = self.__env.step(action.cpu().data.numpy(), term.cpu().item())
+                    entropy = -torch.mean(log_prob.exp()*log_prob)
+                    term_entropy = -torch.sum(term_log_prob.exp()*term_log_prob)
                     term_rew = info["term_rew"]
                     reward_sum += reward
                     next_state = self.__Tensor(next_state)
@@ -477,11 +480,11 @@ class Trainer:
                     s_.append(state)
                     ns_.append(next_state)
                     a_.append(action)
-                    r_.append(reward)
+                    r_.append(reward-entropy)
                     lp_.append(log_prob)
                     masks.append(self.__Tensor([not done]))
                     t_lp_.append(term_log_prob)
-                    t_r_.append(term_rew)
+                    t_r_.append(term_rew-term_entropy)
                     t_v_.append(term_val)
                     t_h_.append(hidden)
                     if done:

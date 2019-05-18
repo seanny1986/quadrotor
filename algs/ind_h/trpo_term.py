@@ -348,8 +348,8 @@ class TRPO(nn.Module):
             deltas[i] = rewards[i]+self.__gamma*prev_value-values.data[i]
             advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
 
-            term_returns[i] = rewards[i]+term_rews[i]+self.__gamma*term_prev_return*masks[i]
-            term_deltas[i] = rewards[i]+term_rews[i]+self.__gamma*term_prev_value*masks[i]-term_vals.data[i]
+            term_returns[i] = term_rews[i]+self.__gamma*term_prev_return*masks[i]
+            term_deltas[i] = term_rews[i]+self.__gamma*term_prev_value*masks[i]-term_vals.data[i]
             term_advantages[i] = term_deltas[i]+self.__gamma*self.__tau*term_prev_advantage*masks[i]
             
             term_prev_return = term_returns[i, 0]

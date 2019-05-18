@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "GeneralSpline-v0",
-        "algs": ["trpo-peb"],
+        "env": "TrajectoryTerm-v0",
+        "algs": ["trpo-term"],
         }
 
 cem = {

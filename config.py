@@ -98,9 +98,9 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 256,
-        "iterations": 5000,
+        "iterations": 500,
         "log_interval": 10,
-        "batch_size": 8192,
+        "batch_size": 1024,
         "seed": 343,
         "render": False,
         "save": True,

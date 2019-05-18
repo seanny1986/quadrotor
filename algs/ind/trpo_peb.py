@@ -115,25 +115,23 @@ class Critic(nn.Module):
         return state_values
 
 class TRPO(nn.Module):
-    def __init__(self, pi, beta, critic, params, GPU=False):
+    def __init__(self, pi, beta, critic, params):
         super(TRPO, self).__init__()
-        self.pi = pi
-        self.beta = beta
+        self.input_dim = pi.input_dim
+        self.hidden_dim = pi.hidden_dim
+        self.output_dim = pi.output_dim
+        
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.pi = pi.to(self.device)
+        self.beta = beta.to(self.device)
         self.hard_update(self.beta, self.pi)
-        self.critic = critic
-        self.__gamma = params["gamma"]
-        self.__tau = params["tau"]
-        self.__max_kl = params["max_kl"]
-        self.__damping = params["damping"]
-        self.__GPU = GPU
-        if GPU:
-            self.__Tensor = torch.cuda.FloatTensor
-            self.pi = self.pi.cuda()
-            self.beta = self.beta.cuda()
-            self.critic = self.critic.cuda()
-        else:
-            self.__Tensor = torch.Tensor
-    
+        self.critic = critic.to(self.device)
+        self.gamma = params["gamma"]
+        self.tau = params["tau"]
+        self.max_kl = params["max_kl"]
+        self.damping = params["damping"]
+            
     def conjugate_gradient(self, Avp, b, n_steps=10, residual_tol=1e-10):
         """
         Estimate the function Fv = g, where F is the FIM, and g is the gradient.
@@ -141,8 +139,7 @@ class TRPO(nn.Module):
         assumes the function is locally quadratic. In order to ensure our step 
         actually improves the policy, we need to do a linesearch after this.
         """
-        x = torch.zeros(b.size())
-        if self.__GPU: x = x.cuda()
+        x = torch.zeros(b.size()).to(self.device)
         r = b.clone()
         p = b.clone()
         rdotr = torch.dot(r, r)
@@ -165,8 +162,7 @@ class TRPO(nn.Module):
         model. 
         """
         fval = func(x).data
-        steps = 0.5**torch.arange(max_backtracks).float()
-        if self.__GPU: steps = steps.cuda()
+        steps = 0.5**torch.arange(max_backtracks).to(self.device).float()
         for (n, stepfrac) in enumerate(steps):
             xnew = x+stepfrac*fullstep
             newfval = func(xnew).data
@@ -214,13 +210,13 @@ class TRPO(nn.Module):
         """
         mu, logvar = self.beta(state)
         if deterministic:
-            return mu
+            return mu, self.critic(state), None
         else:
             sigma = logvar.exp().sqrt()+1e-10
             dist = Normal(mu, sigma)
             action = dist.sample()
             log_prob = dist.log_prob(action)
-            return action, log_prob
+            return action, self.critic(state), log_prob
 
     def update(self, crit_opt, trajectory):
         def policy_loss(params=None):
@@ -263,7 +259,7 @@ class TRPO(nn.Module):
             kl_v = flat_grad_kl.dot(vec)
             grads = torch.autograd.grad(kl_v, self.pi.parameters())
             flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).data
-            return flat_grad_grad_kl+vec*self.__damping
+            return flat_grad_grad_kl+vec*self.damping
 
         # get trajectory batch data
         rewards = torch.stack(trajectory["rewards"])
@@ -275,9 +271,9 @@ class TRPO(nn.Module):
 
         # calculate empirical advantage using trajectory rollouts
         values = self.critic(states)
-        returns = self.__Tensor(actions.size(0),1)
-        deltas = self.__Tensor(actions.size(0),1)
-        advantages = self.__Tensor(actions.size(0),1)
+        returns = torch.Tensor(actions.size(0),1).to(self.device)
+        deltas = torch.Tensor(actions.size(0),1).to(self.device)
+        advantages = torch.Tensor(actions.size(0),1).to(self.device)
         prev_return = 0
         prev_value = 0
         prev_advantage = 0
@@ -286,9 +282,9 @@ class TRPO(nn.Module):
                 next_val = self.critic(next_states[i,:])
                 prev_return = next_val
                 prev_value = next_val
-            returns[i] = rewards[i]+self.__gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.__gamma*prev_value*masks[i]-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
+            returns[i] = rewards[i]+self.gamma*prev_return*masks[i]
+            deltas[i] = rewards[i]+self.gamma*prev_value*masks[i]-values.data[i]
+            advantages[i] = deltas[i]+self.gamma*self.tau*prev_advantage*masks[i]
             prev_return = returns[i, 0]
             prev_value = values.data[i, 0]
             prev_advantage = advantages[i, 0]
@@ -308,7 +304,7 @@ class TRPO(nn.Module):
         loss_grad = torch.cat([grad.view(-1) for grad in grads]).detach()
         stepdir = self.conjugate_gradient(fvp, -loss_grad)
         shs = 0.5*(stepdir.dot(fvp(stepdir)))
-        lm = torch.sqrt(self.__max_kl/shs)
+        lm = torch.sqrt(self.max_kl/shs)
         fullstep = stepdir*lm
         expected_improve = -loss_grad.dot(fullstep)
         old_params = self.get_flat_params_from(self.pi)
@@ -329,21 +325,17 @@ class Trainer:
         self.__render = params["render"]
         self.__log_interval = params["log_interval"]
         self.__save = params["save"]
-        cuda = params["cuda"]
         state_dim = self.__env.observation_space.shape[0]
         action_dim = self.__env.action_space.shape[0]
         hidden_dim = params["hidden_dim"]
         pi = Actor(state_dim, hidden_dim, action_dim)
         beta = Actor(state_dim, hidden_dim, action_dim)
         critic = Critic(state_dim, hidden_dim, 1)
-        self.__agent = TRPO(pi, beta, critic, params["network_settings"], GPU=cuda)
+        self.__agent = TRPO(pi, beta, critic, params["network_settings"])
         self.__crit_opt = torch.optim.Adam(critic.parameters())
-        if cuda:
-            self.__Tensor = torch.cuda.FloatTensor
-            self.__agent = self.__agent.cuda()
-        else:
-            self.__Tensor = torch.Tensor
         self.__best = None
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # initialize experiment logging
         self.__logging = params["logging"]
@@ -368,7 +360,7 @@ class Trainer:
             action_mags = []
             while num_steps < self.__batch_size+1:
                 state = self.__env.reset()
-                state = self.__Tensor(state)
+                state = torch.Tensor(state).to(self.device)
                 reward_sum = 0
                 t = 0
                 done = False
@@ -378,8 +370,8 @@ class Trainer:
                     action, log_prob = self.__agent.select_action(state)
                     next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy())
                     reward_sum += reward
-                    next_state = self.__Tensor(next_state)
-                    reward = self.__Tensor([reward])
+                    next_state = torch.Tensor(next_state).to(self.device)
+                    reward = torch.Tensor([reward]).to(self.device)
                     s_.append(state)
                     ns_.append(next_state)
                     a_.append(action)
@@ -388,7 +380,7 @@ class Trainer:
 
                     action_mags.append(action)
 
-                    masks.append(self.__Tensor([not done]))
+                    masks.append(torch.Tensor([not done]).to(self.device))
                     state = next_state
                     t += 1
                 num_steps += t
@@ -401,8 +393,8 @@ class Trainer:
             if (self.__best is None or reward_batch > self.__best) and self.__save:
                 print("---Saving best TRPO policy---")
                 self.__best = reward_batch
-                fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__env_name+".pth.tar"
-                utils.save(self.__agent, fname)
+                #fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__env_name+".pth.tar"
+                #utils.save(self.__agent, fname)
             
             trajectory = {
                         "states": s_,
@@ -419,5 +411,5 @@ class Trainer:
                 interval_avg = []
                 if self.__logging:
                     self.__writer.writerow([ep, interval, avg])
-        fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__env_name+"-final.pth.tar"
-        utils.save(self.__agent, fname)
+        #fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__env_name+"-final.pth.tar"
+        #utils.save(self.__agent, fname)

@@ -115,6 +115,9 @@ class Terminator(nn.Module):
 class Actor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(Actor, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
         self.__fc1 = nn.Linear(input_dim, hidden_dim)
         self.__fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.__mu = nn.Linear(hidden_dim, output_dim)
@@ -145,23 +148,21 @@ class Critic(nn.Module):
 class TRPO(nn.Module):
     def __init__(self, pi, beta, critic, terminator, params, GPU=False):
         super(TRPO, self).__init__()
-        self.__pi = pi
-        self.__beta = beta
-        self.hard_update(self.__beta, self.__pi)
-        self.__critic = critic
-        self.__terminator = terminator
-        self.__gamma = params["gamma"]
-        self.__tau = params["tau"]
-        self.__max_kl = params["max_kl"]
-        self.__damping = params["damping"]
-        self.__GPU = GPU
-        if GPU:
-            self.__Tensor = torch.cuda.FloatTensor
-            #self.__pi = self.__pi.cuda()
-            #self.__beta = self.__beta.cuda()
-            #self.__critic = self.__critic.cuda()
-        else:
-            self.__Tensor = torch.Tensor
+        self.input_dim = pi.input_dim
+        self.hidden_dim = pi.hidden_dim
+        self.output_dim = pi.output_dim
+        
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.pi = pi.to(self.device)
+        self.beta = beta.to(self.device)
+        self.hard_update(self.beta, self.pi)
+        self.critic = critic.to(self.device)
+        self.terminator = terminator.to(self.device)
+        self.gamma = params["gamma"]
+        self.tau = params["tau"]
+        self.max_kl = params["max_kl"]
+        self.damping = params["damping"]
     
     def conjugate_gradient(self, Avp, b, n_steps=10, residual_tol=1e-10):
         """
@@ -170,8 +171,7 @@ class TRPO(nn.Module):
         assumes the function is locally quadratic. In order to ensure our step 
         actually improves the policy, we need to do a linesearch after this.
         """
-        x = torch.zeros(b.size())
-        if self.__GPU: x = x.cuda()
+        x = torch.zeros(b.size()).to(self.device)
         r = b.clone()
         p = b.clone()
         rdotr = torch.dot(r, r)
@@ -194,8 +194,7 @@ class TRPO(nn.Module):
         model. 
         """
         fval = func(x).data
-        steps = 0.5**torch.arange(max_backtracks).float()
-        if self.__GPU: steps = steps.cuda()
+        steps = 0.5**torch.arange(max_backtracks).to(self.device).float()
         for (n, stepfrac) in enumerate(steps):
             xnew = x+stepfrac*fullstep
             newfval = func(xnew).data
@@ -241,7 +240,7 @@ class TRPO(nn.Module):
         but when we optimize, we keep beta fixed, and maximize the advantage of pi over beta.
         From there, we set params of beta to be the same as those of pi.
         """
-        mu, logvar = self.__beta(state)
+        mu, logvar = self.beta(state)
         if deterministic:
             return mu
         else:
@@ -252,7 +251,7 @@ class TRPO(nn.Module):
             return action, log_prob
     
     def terminate(self, x, hidden=None):
-        score, value, hidden = self.__terminator.step(x.view(1,-1), hidden)
+        score, value, hidden = self.terminator.step(x.view(1,-1), hidden)
         dist = Categorical(score)
         term = dist.sample()
         logprob = dist.log_prob(term)
@@ -265,7 +264,7 @@ class TRPO(nn.Module):
             Schulman, 2015, Eqns. 1-4, 12-14.
             """
             def get_loss():
-                mu_pi, logvar_pi = self.__pi(states)
+                mu_pi, logvar_pi = self.pi(states)
                 sigma_pi = logvar_pi.exp().sqrt()+1e-10
                 dist = Normal(mu_pi, sigma_pi)
                 log_probs = dist.log_prob(actions)
@@ -275,7 +274,7 @@ class TRPO(nn.Module):
             if params is None:
                 return get_loss()
             else:
-                self.set_flat_params_to(self.__pi, params)
+                self.set_flat_params_to(self.pi, params)
                 return get_loss()
         
         def fvp(vec):
@@ -288,18 +287,18 @@ class TRPO(nn.Module):
             
             Which gives us F*v
             """
-            mu_pi, logvar_pi = self.__pi(states)
-            mu_beta, logvar_beta = self.__beta(states)
+            mu_pi, logvar_pi = self.pi(states)
+            mu_beta, logvar_beta = self.beta(states)
             var_pi = logvar_pi.exp()
             var_beta = logvar_beta.exp()
             kl = var_pi.sqrt().log()-var_beta.sqrt().log()+(var_beta+(mu_beta-mu_pi).pow(2))/(2.*var_pi)-0.5
             kl = torch.sum(kl, dim=1).mean()
-            grads = torch.autograd.grad(kl, self.__pi.parameters(), create_graph=True)
+            grads = torch.autograd.grad(kl, self.pi.parameters(), create_graph=True)
             flat_grad_kl = torch.cat([grad.view(-1) for grad in grads])
             kl_v = flat_grad_kl.dot(vec)
-            grads = torch.autograd.grad(kl_v, self.__pi.parameters())
+            grads = torch.autograd.grad(kl_v, self.pi.parameters())
             flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).data
-            return flat_grad_grad_kl+vec*self.__damping
+            return flat_grad_grad_kl+vec*self.damping
 
         # get trajectory batch data
         rewards = torch.stack(trajectory["rewards"])
@@ -316,15 +315,14 @@ class TRPO(nn.Module):
         cxs = torch.stack([x[1] for x in term_hiddens])
 
         # calculate empirical advantage using trajectory rollouts
-        values = self.__critic(states)
+        values = self.critic(states)
+        returns = torch.Tensor(actions.size(0),1).to(self.device)
+        deltas = torch.Tensor(actions.size(0),1).to(self.device)
+        advantages = torch.Tensor(actions.size(0),1).to(self.device)
         
-        returns = self.__Tensor(actions.size(0),1)
-        deltas = self.__Tensor(actions.size(0),1)
-        advantages = self.__Tensor(actions.size(0),1)
-        
-        term_returns = self.__Tensor(actions.size(0),1)
-        term_deltas = self.__Tensor(actions.size(0),1)
-        term_advantages = self.__Tensor(actions.size(0),1)
+        term_returns = torch.Tensor(actions.size(0),1).to(self.device)
+        term_deltas = torch.Tensor(actions.size(0),1).to(self.device)
+        term_advantages = torch.Tensor(actions.size(0),1).to(self.device)
 
         prev_return = 0
         prev_value = 0
@@ -339,17 +337,17 @@ class TRPO(nn.Module):
                 _, term_next_val, _, _ = self.terminate(next_states[i].unsqueeze(0), (hxs[i], cxs[i]))
                 term_prev_return = term_next_val.item()
                 term_prev_value = term_next_val.item()
-                next_val = self.__critic(next_states[i,:])
+                next_val = self.critic(next_states[i,:])
                 prev_return = next_val
                 prev_value = next_val
             
-            returns[i] = rewards[i]+self.__gamma*prev_return
-            deltas[i] = rewards[i]+self.__gamma*prev_value-values.data[i]
-            advantages[i] = deltas[i]+self.__gamma*self.__tau*prev_advantage*masks[i]
+            returns[i] = rewards[i]+self.gamma*prev_return
+            deltas[i] = rewards[i]+self.gamma*prev_value-values.data[i]
+            advantages[i] = deltas[i]+self.gamma*self.tau*prev_advantage*masks[i]
 
-            term_returns[i] = rewards[i]+term_rews[i]+self.__gamma*term_prev_return*masks[i]
-            term_deltas[i] = rewards[i]+term_rews[i]+self.__gamma*term_prev_value*masks[i]-term_vals.data[i]
-            term_advantages[i] = term_deltas[i]+self.__gamma*self.__tau*term_prev_advantage*masks[i]
+            term_returns[i] = rewards[i]+term_rews[i]+self.gamma*term_prev_return*masks[i]
+            term_deltas[i] = rewards[i]+term_rews[i]+self.gamma*term_prev_value*masks[i]-term_vals.data[i]
+            term_advantages[i] = term_deltas[i]+self.gamma*self.tau*term_prev_advantage*masks[i]
             
             term_prev_return = term_returns[i, 0]
             term_prev_value = term_vals.data[i, 0]
@@ -382,17 +380,17 @@ class TRPO(nn.Module):
         # trust region policy update. We update pi by maximizing it's advantage over beta,
         # and then set beta to the policy parameters of pi.
         pol_loss = policy_loss()
-        grads = torch.autograd.grad(pol_loss, self.__pi.parameters())
+        grads = torch.autograd.grad(pol_loss, self.pi.parameters())
         loss_grad = torch.cat([grad.view(-1) for grad in grads]).detach()
         stepdir = self.conjugate_gradient(fvp, -loss_grad)
         shs = 0.5*(stepdir.dot(fvp(stepdir)))
-        lm = torch.sqrt(self.__max_kl/shs)
+        lm = torch.sqrt(self.max_kl/shs)
         fullstep = stepdir*lm
         expected_improve = -loss_grad.dot(fullstep)
-        old_params = self.get_flat_params_from(self.__pi)
-        _, params = self.linesearch(self.__pi, policy_loss, old_params, fullstep, expected_improve)
-        self.set_flat_params_to(self.__pi, params)
-        self.hard_update(self.__beta, self.__pi)
+        old_params = self.get_flat_params_from(self.pi)
+        _, params = self.linesearch(self.pi, policy_loss, old_params, fullstep, expected_improve)
+        self.set_flat_params_to(self.pi, params)
+        self.hard_update(self.beta, self.pi)
 
 
 class Trainer:
@@ -424,14 +422,10 @@ class Trainer:
         self.__term_opt = torch.optim.Adam(terminator.parameters())
         self.scheduler_crit = torch.optim.lr_scheduler.MultiStepLR(self.__crit_opt, milestones=mls, gamma=0.4)
         self.scheduler_term = torch.optim.lr_scheduler.MultiStepLR(self.__term_opt, milestones=mls, gamma=0.4)
-        if cuda:
-            self.__Tensor = torch.cuda.FloatTensor
-            self.__agent = self.__agent.cuda()
-            self.device = "cuda:0"
-        else:
-            self.__Tensor = torch.Tensor
-            self.device = "cpu"
+        
         self.__best = None
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # initialize experiment logging
         self.__logging = params["logging"]
@@ -458,7 +452,7 @@ class Trainer:
             num_episodes = 0
             while num_steps < self.__batch_size+1:
                 state = self.__env.reset()
-                state = self.__Tensor(state)
+                state = torch.Tensor(state).to(self.device)
                 reward_sum = 0
                 t = 0
                 done = False
@@ -471,15 +465,15 @@ class Trainer:
                     next_state, reward, done, info = self.__env.step(action.cpu().data.numpy(), term.cpu().item())
                     term_rew = info["term_rew"]
                     reward_sum += reward
-                    next_state = self.__Tensor(next_state)
-                    reward = self.__Tensor([reward])
-                    term_rew = self.__Tensor([term_rew])
+                    next_state = torch.Tensor(next_state).to(self.device)
+                    reward = torch.Tensor([reward]).to(self.device)
+                    term_rew = torch.Tensor([term_rew]).to(self.device)
                     s_.append(state)
                     ns_.append(next_state)
                     a_.append(action)
                     r_.append(reward)
                     lp_.append(log_prob)
-                    masks.append(self.__Tensor([not done]))
+                    masks.append(torch.Tensor([not done]).to(self.device))
                     t_lp_.append(term_log_prob)
                     t_r_.append(term_rew)
                     t_v_.append(term_val)
@@ -498,8 +492,8 @@ class Trainer:
             if (self.__best is None or reward_batch > self.__best) and self.__save:
                 print("---Saving best TRPO policy---")
                 self.__best = reward_batch
-                fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__env_name+".pth.tar"
-                utils.save(self.__agent, fname)
+                #fname = self.__directory + "/saved_policies/trpo-"+self.__id+"-"+self.__env_name+".pth.tar"
+                #utils.save(self.__agent, fname)
             
             trajectory = {
                         "states": s_,

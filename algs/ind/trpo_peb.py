@@ -87,6 +87,9 @@ import os
 class Actor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(Actor, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
         self.__fc1 = nn.Linear(input_dim, hidden_dim)
         self.__fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.__mu = nn.Linear(hidden_dim, output_dim)
@@ -97,13 +100,16 @@ class Actor(nn.Module):
     def forward(self, x):
         x = F.tanh(self.__fc1(x.float()))
         x = F.tanh(self.__fc2(x))
-        mu = F.sigmoid(self.__mu(x))**0.5
+        mu = self.__mu(x)
         logvar = self.__logvar(x)
         return mu, logvar
 
 class Critic(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(Critic, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
         self.__fc1 = nn.Linear(input_dim, hidden_dim)
         self.__value = nn.Linear(hidden_dim, output_dim)
         self.__value.weight.data.mul_(0.1)
@@ -367,7 +373,7 @@ class Trainer:
                 while not done:
                     if ep % self.__log_interval == 0 and self.__render:
                         self.__env.render()
-                    action, log_prob = self.__agent.select_action(state)
+                    action, _, log_prob = self.__agent.select_action(state)
                     next_state, reward, done, _ = self.__env.step(action.cpu().data.numpy())
                     reward_sum += reward
                     next_state = torch.Tensor(next_state).to(self.device)

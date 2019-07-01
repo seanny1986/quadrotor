@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "Loop-v0",
-        "algs": ["trpo-peb"],
+        "env": "TrajectoryTerm-v0",
+        "algs": ["trpo-term"],
         }
 
 cem = {
@@ -47,7 +47,7 @@ ddpg = {
         "ou_scale": 0.75,
         "ou_mu": 0.75,
         "ou_sigma": 0.15,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": True,
         "logging": True
@@ -98,11 +98,11 @@ trpo = {
                                 "damping": 1e-1
                                 },
         "hidden_dim": 256,
-        "iterations": 500,
+        "iterations": 5000,
         "log_interval": 10,
-        "batch_size": 1024,
+        "batch_size": 4096,
         "seed": 343,
-        "render": False,
+        "render": True,
         "save": True,
         "cuda": True,
         "logging": True

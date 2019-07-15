@@ -9,8 +9,8 @@
 """
 
 exp = {
-        "env": "TrajectoryTerm-v0",
-        "algs": ["trpo-term"],
+        "env": "TargetFollow-v0",
+        "algs": ["trpo-peb"],
         }
 
 cem = {
@@ -99,7 +99,7 @@ trpo = {
                                 },
         "hidden_dim": 256,
         "iterations": 5000,
-        "log_interval": 10,
+        "log_interval": 1,
         "batch_size": 4096,
         "seed": 343,
         "render": True,

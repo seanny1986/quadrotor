@@ -9,7 +9,7 @@ import numpy as np
 from collections import namedtuple
 import gym
 import gym_aero
-import utils
+#import utils
 import numpy as np
 import csv
 import os
@@ -216,13 +216,14 @@ class TRPO(nn.Module):
         """
         mu, logvar = self.beta(state)
         if deterministic:
-            return mu, self.critic(state), None
+            return mu, self.critic(state), None, None
         else:
             sigma = logvar.exp().sqrt()+1e-10
             dist = Normal(mu, sigma)
             action = dist.sample()
             log_prob = dist.log_prob(action)
-            return action, self.critic(state), log_prob
+            entropy = dist.entropy()
+            return action, self.critic(state), log_prob, entropy
 
     def update(self, crit_opt, trajectory):
         def policy_loss(params=None):
@@ -284,18 +285,19 @@ class TRPO(nn.Module):
         prev_value = 0
         prev_advantage = 0
         for i in reversed(range(rewards.size(0))):
-            if masks[i] == 0:
-                next_val = self.critic(next_states[i,:])
-                prev_return = next_val
-                prev_value = next_val
-            returns[i] = rewards[i]+self.gamma*prev_return*masks[i]
-            deltas[i] = rewards[i]+self.gamma*prev_value*masks[i]-values.data[i]
+            next_val = self.critic(next_states[i])
+            if i == rewards.size(0)-1:
+                bootstrap = next_val.squeeze(1)
+            else:
+                bootstrap = (next_val.squeeze(1)*(1.-masks[i].squeeze(0))).unsqueeze(0)
+            returns[i] = rewards[i]+self.gamma*(prev_return*masks[i]+bootstrap)
+            deltas[i] = rewards[i]+self.gamma*(prev_value*masks[i]+bootstrap)-values.data[i]
             advantages[i] = deltas[i]+self.gamma*self.tau*prev_advantage*masks[i]
-            prev_return = returns[i, 0]
-            prev_value = values.data[i, 0]
-            prev_advantage = advantages[i, 0]
-        returns = (returns-returns.mean())/(returns.std()+1e-10)
-        advantages = (advantages-advantages.mean())/(advantages.std()+1e-10)
+            prev_return = returns[i]
+            prev_value = values.data[i]
+            prev_advantage = advantages[i]
+        returns = (returns-returns.mean())/returns.std()
+        advantages = (advantages-advantages.mean())/advantages.std()
         
         # update critic using Adam
         crit_opt.zero_grad()
